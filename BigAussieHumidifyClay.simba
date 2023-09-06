@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.2'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.2.1'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -267,7 +267,6 @@ begin
   OpenGrandExchange();
   if not GrandExchange.Open() then
   begin
-    WriteLn('Failed to open the Grand Exchange');
     exit;
   end;
 
@@ -275,27 +274,23 @@ begin
 
   if slotNumber = -1 then
   begin
-    WriteLn('All slots are full');
     exit;
   end;
 
   buyButton := GrandExchange.GetOfferCreateButton(ERSGEOfferCreateButton.BUY, slotNumber);
   if not buyButton.Click() then
   begin
-    WriteLn('Failed to click the Buy button');
     exit;
   end;
 
   if not GrandExchange.Search(itemName, True) then
   begin
-    WriteLn('Failed to search for ' + itemName);
     exit;
   end;
 
   quantityButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.QUANTITY_ENTER);
   if not quantityButton.Click() then
   begin
-    WriteLn('Failed to click the Enter Quantity button');
     exit;
   end;
 
@@ -313,7 +308,6 @@ begin
   begin
     if not increaseButton.Click() then
     begin
-      WriteLn('Failed to click the Increase Price button');
       exit;
     end;
     Wait(500);
@@ -322,7 +316,6 @@ begin
   confirmButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.CONFIRM);
   if not confirmButton.Click() then
   begin
-    WriteLn('Failed to click the Confirm button');
     exit;
   end;
 
@@ -359,7 +352,6 @@ begin
   OpenGrandExchange();
   if not GrandExchange.Open() then
   begin
-    WriteLn('Failed to open the Grand Exchange');
     exit;
   end;
 
@@ -374,13 +366,11 @@ begin
   sellButton := GrandExchange.GetOfferCreateButton(ERSGEOfferCreateButton.SELL, slotNumber);
   if not sellButton.Click() then
   begin
-    WriteLn('Failed to click the Sell button');
     exit;
   end;
 
   if not Inventory.ClickItem('noted Soft clay') then
   begin
-    WriteLn('Failed to click noted soft clay');
     exit;
   end;
 
@@ -389,7 +379,6 @@ begin
   begin
     if not decreaseButton.Click() then
     begin
-      WriteLn('Failed to click the Decrease Price button');
       exit;
     end;
     Wait(Random(500, 800));
@@ -398,14 +387,12 @@ begin
   quantityButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.QUANTITY_ALL);
   if not quantityButton.Click() then
   begin
-    WriteLn('Failed to click ALL button');
     exit;
   end;
 
   confirmButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.CONFIRM);
   if not confirmButton.Click() then
   begin
-    WriteLn('Failed to click the Confirm button');
     exit;
   end;
 
@@ -520,11 +507,13 @@ begin
         begin
           if SELLSOFTCLAYCHECK then
           begin
+            WriteLn('Going to sell Soft Clay');
             SellSoftClayIfRequired();
           end;
 
           if BUYCLAYCHECK then
           begin
+            WriteLn('No Clay found, Going to purchase.');
             OpenGrandExchange();
             BuyItem('Clay', QuantityInput, ClayValue);
             CollectAll();
@@ -549,6 +538,7 @@ begin
             if BUYASTRALSCHECK then
             begin
               astralQuantity := (QuantityInput + 26) div 27;
+              WriteLn('Out of Astral runes, going to purchase ' + IntToStr(astralQuantity));
               OpenGrandExchange();
               BuyItem('Astral rune', astralQuantity, AstralRuneValue);
               CollectAll();
@@ -576,12 +566,12 @@ begin
         CastCount += 1;
         TotalActions += 1;
 
-        if GetTimeRunning() >= Antiban.Breaks[0].NextAtTime then
+        if (Length(Antiban.Breaks) > 0) and (GetTimeRunning() >= Antiban.Breaks[0].NextAtTime) then
         begin
           Antiban.TakeBreak(Antiban.Breaks[0]);
         end;
 
-        if GetTimeRunning() >= Antiban.Sleeps[0].NextAtTime then
+        if (Length(Antiban.Sleeps) > 0) and (GetTimeRunning() >= Antiban.Sleeps[0].NextAtTime) then
         begin
           Antiban.TakeSleep(Antiban.Sleeps[0]);
         end;
