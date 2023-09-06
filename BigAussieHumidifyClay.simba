@@ -505,7 +505,6 @@ procedure HumidifyClay.doAction();
 var
   astralQuantity: Int32;
   attempts: Int32;
-  bank: TRSBank;
 begin
   Self.State := Self.getState();
   case Self.State of
