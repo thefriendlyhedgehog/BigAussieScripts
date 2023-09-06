@@ -103,7 +103,6 @@ begin
   Antiban.Skills := [ERSSkill.TOTAL, ERSSKILL.MAGIC];
   Antiban.MinZoom := 62;
   Antiban.MaxZoom := 80;
-
 end;
 
 procedure HumidifyClay.Init(MaxActions: Int32; MaxTime: Int64); override;
