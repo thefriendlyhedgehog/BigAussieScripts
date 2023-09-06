@@ -9,7 +9,6 @@
 // Huge thanks to 3Garrett3 and all his grand exchange work and flipper, I found the includes a bit late so some of the methods I use a crude...
 // Thanks to Torwent and everyone contributing to this amazing project!
 
-// Define script speed types
 type
   ScriptSpeedTypes = (
     SLOW,
@@ -32,18 +31,15 @@ var
   PRICESAPICHECK: Boolean                     = True; // If you are having issues with the prices API no loading this will disable prices, [ALL GRAND EXCHANGE FEATURES WILL BE DISABLED, ALSO YOU WILL NOT GET A PROFIT REPORT]
 //===========================================
 
-// Initialize player index
 begin
   Login.PlayerIndex := 0;
 end;
 
-// Define script states
 Type
   EState = (
   HUMIDIFY
   );
 
-// Define script record
   HumidifyClay = record (TBaseBankScript)
     State : EState;
 
