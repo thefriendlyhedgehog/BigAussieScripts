@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.1'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.2'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -22,7 +22,6 @@ type
 var
 
   // You ONLY need to edit these if you are not going to use the GUI //
-
   ENABLE_GUI: Boolean                         = True; // Enable or Disable the use of a GUI - NOTE: Some settings can only be changed in the GUI
   STOP_AT_LEVEL: Integer                      = 99; // Script will Logout and stop when this level is reached.
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
@@ -347,11 +346,13 @@ begin
   begin
     WriteLn('The buy offer for ' + itemName + ' has been fulfilled');
   end;
+
   if itemName = 'Clay' then
     ClayPurchased += quantity
   else if itemName = 'Astral rune' then
     AstralRunesPurchased += quantity;
 end;
+
 procedure HumidifyClay.SellSoftClay(quantity: Int32; price: Int32);
 var
   slotNumber: Int32;
@@ -580,6 +581,16 @@ begin
         CastCount += 1;
         TotalActions += 1;
 
+        if GetTimeRunning() >= Antiban.Breaks[0].NextAtTime then
+        begin
+          Antiban.TakeBreak(Antiban.Breaks[0]);
+        end;
+
+        if GetTimeRunning() >= Antiban.Sleeps[0].NextAtTime then
+        begin
+          Antiban.TakeSleep(Antiban.Sleeps[0]);
+        end;
+
         case SCRIPTSPEED of // Thanks Slacky for SkewedRand tip
           SLOW: waitTimeCasting := TSRL.SkewedRand(1400, 1500, 2500);
           NORMAL: waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500);
@@ -678,6 +689,7 @@ begin
 
   WriteLn('========================================');
   WriteLn('     BigAussies Humidify Clay      ');
+  WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
   WriteLn('========================================');
   WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short));
   WriteLn('   Total Casts: ' + IntToStr(CastCount));
