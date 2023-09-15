@@ -949,7 +949,7 @@ begin
   Magic.CastSpell(spell);
 
   if (Chat.FindLastMessage('not', [CHAT_COLOR_BLACK])) or 
-     ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('convert', [CHAT_COLOR_BLACK])) then
+     ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) then
   begin
     TakeScreenshot('BlackTextError');
     Logout.ClickLogout;
