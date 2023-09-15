@@ -937,14 +937,14 @@ begin
     RECHARGE_DRAGONSTONE: spell := ERSSpell.RECHARGE_DRAGONSTONE;
   end;
 
-  if not Magic.CanActivate(spell) then
-  begin
-    TakeScreenshot('NoSpellLogout');
-    WriteLn('Cannot cast the spell. Screenshot saved, Logout and terminated.');
-    Logout.ClickLogout();
-    TerminateScript();
-  end
-  else
+  //if not Magic.CanActivate(spell) then
+  //begin
+  //  TakeScreenshot('NoSpellLogout');
+  //  WriteLn('Cannot cast the spell. Screenshot saved, Logout and terminated.');
+  //  Logout.ClickLogout();
+  //  TerminateScript();
+  //end
+  //else
   begin
     if CHOSENSPELL = BAKE_PIE then
     begin
