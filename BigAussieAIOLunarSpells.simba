@@ -16,11 +16,11 @@ var
   STAFFCHECK: Boolean                         = True; // Set to "False" to disable the checking of required staff.
   STOP_AT_LEVEL: Integer                      = 99; // Script will Logout and stop when this level is reached.
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
-  SELECTEDITEM: string;                       = Berry Pie
+  SELECTEDITEM: string;                       //= Berry Pie
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
-  BUYRUNESCHECK: Boolean                      = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
-  BUYRAWMATERIALS: Boolean                    = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
-  SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
+  BUYRUNESCHECK: Boolean                    = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
+  BUYRAWMATERIALS: Boolean                       = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
+  SELLNOTEDITEMCHECK: Boolean                  = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
   QUANTITYINPUT: Integer                      = 10000;// When you run out of Clay this is how many the script should buy.
   PRICESAPICHECK: Boolean                     = True; // If you are having issues with the prices API no loading this will disable prices, [ALL GRAND EXCHANGE FEATURES WILL BE DISABLED, ALSO YOU WILL NOT GET A PROFIT REPORT]
 //===========================================
@@ -187,10 +187,17 @@ begin
     Exit;
   end;
 
+  // Ensure we are on the "All" tab, sometimes had issues.
+  if Bank.GetCurrentTab() <> 0 then
+  begin
+    Bank.OpenTab(0);
+    Wait(Random(1000, 1300));
+  end;
+
   // If we can't see it we scroll till we find it
   if not Bank.FindItem(Item, ItemBox) then
   begin
-    WriteLn(Item + ' not found in top of bank, attempting to move item.');
+    WriteLn(Item + ' not found in top of bank, attempting to find/move item.');
 
     // If item is not visible, scroll down until item is found
     while not Bank.FindItem(Item, ItemBox) do
@@ -221,7 +228,7 @@ begin
       begin
         Bank.SetScrollPosition(0);
         Mouse.Release(MOUSE_LEFT);
-        Wait(Random(900, 1200));
+        Wait(Random(100, 1200));
       end;
     end;
   end;
@@ -378,6 +385,7 @@ begin
   begin
     RawItemQuantity := 25;
     ProcessedItemQuantity := 25;
+    ItemArray5Quantity := Bank.QUANTITY_ALL;
   end
   else if CHOSENSPELL = TAN_LEATHER then // This just stops it uses ALL because it spams the chat
   begin
@@ -1275,7 +1283,7 @@ begin
   end
   else if SCRIPTSPEED = NORMAL then
   begin
-    if SRL.Dice(70) then
+    if SRL.Dice(80) then
     begin
       for i := 1 to RawItemCount do
       begin
@@ -1284,7 +1292,7 @@ begin
         Inventory.ClickItem(RawItem, '>');
         if not Inventory.ContainsItem(RawItem) then
           break;
-        Wait(RandomRange(600, 700));
+        Wait(RandomRange(650, 750));
         WaitUntil(Magic.IsOpen(), 375, 2150);
       end;
     end
@@ -1298,7 +1306,7 @@ begin
   end
   else if SCRIPTSPEED = FAST then
   begin
-    if SRL.Dice(80) then
+    if SRL.Dice(90) then
     begin
       for i := 1 to RawItemCount do
       begin
@@ -1321,7 +1329,7 @@ begin
   end
   else if SCRIPTSPEED = TURBO then
   begin
-    if SRL.Dice(95) then
+    if SRL.Dice(99) then
     begin
       for i := 1 to RawItemCount do
       begin
@@ -1343,6 +1351,7 @@ begin
     end;
   end;
   CastCount += Inventory.CountItem(ProcessedItem);
+  ProcessedTotal += Inventory.CountItem(ProcessedItem);
   Self.Report();
   CheckBreakSleepLevel();
   bank.Hover();
@@ -1434,9 +1443,11 @@ begin
         begin
           WriteLn('Found ' + StaffName + '.');
           MainScreen.CloseInterface(True);
+          WaitUntil(not Mainscreen.HasInterface(), 100, 2000);
           WriteLn('Equipping ' + StaffName + '.');
           Inventory.ClickItem(StaffName);
           ItemFinder.Similarity := 0.999;
+          Wait(Random(200, 500));
           Exit;
         end;
       end;
@@ -1499,16 +1510,23 @@ begin
 end;
 
 function AIOLunarSpells.CalculateProfit(): Integer;
+var
+  CoinCostPerCast: Integer;
 begin
+  case RawItem of
+    'Logs': CoinCostPerCast := 70;
+    'Oak logs': CoinCostPerCast := 175;
+    'Teak logs': CoinCostPerCast := 350;
+    'Mahogany logs': CoinCostPerCast := 1050;
+  end;
   case ChosenSpell of
     BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;
     HUMIDIFY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;        // TESTED Reports correct Profit+XP
     SPIN_FLAX: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
     TAN_LEATHER: Result := RawTotal div 5 * (ProcessedItemValue - RawItemValue) - Round(RawTotal / 5.0) * (RuneValue * 2 + ItemArray5Value);
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue * 2;
-    PLANK_MAKE: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 26.0)) * RuneValue * 2 + ItemArray5Value;
-    RECHARGE_DRAGONSTONE: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 26.0)) * RuneValue + ItemArray5Value;
-    SUPERGLASS_MAKE:
+    PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal)) * (RuneValue * 2 + ItemArray5Value) - RawTotal * CoinCostPerCast;
+    RECHARGE_DRAGONSTONE: Result := Trunc(((ProcessedItemValue * 25) - (RawItemValue * 25) - ItemArray5Value - RuneValue) * (RawTotal / 25));    SUPERGLASS_MAKE:
     begin
       if RawItem = 'Giant seaweed' then
       begin
@@ -1534,6 +1552,16 @@ begin
   end;
 end;
 
+function ScriptSpeedToString(speed: ScriptSpeedTypes): String;
+begin
+  case speed of
+    SLOW: Result := 'Slow';
+    NORMAL: Result := 'Normal';
+    FAST: Result := 'Fast';
+    TURBO: Result := 'Turbo';
+  end;
+end;
+
 procedure AIOLunarSpells.Report();
 var
   CurrentXP, GainedXP, XP, Profit: Integer;
@@ -1551,7 +1579,7 @@ begin
   WriteLn('========================================');
   WriteLn('     BigAussies AIO Lunar Spells      ');
   WriteLn('========================================');
-  WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short));
+  WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short) + '   Script Speed: ' + ScriptSpeedToString(SCRIPTSPEED));
   WriteLn('   Total Casts: ' + IntToStr(CastCount) + ' ' + SpellToString(ChosenSpell) + ' on ' + RawItem);
   WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
   if Profit = 0 then
