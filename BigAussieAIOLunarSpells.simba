@@ -84,6 +84,7 @@ var
   StartXP,
   CastCount,
   RawTotal,
+  NotedTotal,
   RawTotalSand,
   Processedtotal,
   RunesPurchased,
@@ -113,6 +114,7 @@ var
   Timer: TStopWatch;
 
   CoinsChecked: Boolean;
+
 
 procedure PauseTimer(Task: PBreakTask);
 var
@@ -195,6 +197,13 @@ begin
     Wait(Random(1000, 1300));
   end;
 
+  // Failsafe to make sure we are at the top of the bank when starting.
+  if Bank.GetScrollPosition() > 0 then
+  begin
+    Bank.SetScrollPosition(0);
+    Wait(Random(1000, 1300));
+  end;
+
   // If we can't see it we scroll till we find it
   if not Bank.FindItem(Item, ItemBox) then
   begin
@@ -234,16 +243,15 @@ begin
     end
     else
     begin
-      // Scroll up using mousewheel
       while Bank.GetScrollPosition() > 0 do
       begin
         Bank.SetScrollPosition(0);
         Mouse.Release(MOUSE_LEFT);
         Wait(Random(100, 1200));
+        end;
       end;
     end;
   end;
-end;
 
 procedure AIOLunarSpells.Init(MaxActions: Int32; MaxTime: Int64); override;
 var
@@ -260,7 +268,7 @@ begin
     Exit;
   end;
 
-  SetLength(Items, 59);
+  SetLength(Items, 59);          // Rawitem, ProcessedItem, NotedItem, AstralRune, ItemArray5(Nature Rune/Sand), Coins(6th array only used on MAKE PLANK)
   Items[0].Name := 'Berry Pie';
   Items[0].AssociatedItems := ['Uncooked berry pie', 'Redberry pie', 'noted Redberry pie', 'Astral rune'];
   Items[1].Name := 'Meat Pie';
@@ -642,6 +650,7 @@ begin
           Bank.WithdrawItem(ProcessedItemBankNoted, true);
           WaitUntil(Inventory.ContainsItem(NotedProcessed), 375, Random(500, 1000));
           WithdrawnCount := Inventory.CountItem(NotedProcessed);
+          NotedTotal += WithdrawnCount;
         end;
         if Inventory.ContainsItem(NotedProcessed) then
         begin
@@ -921,11 +930,11 @@ begin
   SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
 end;
 
+
 procedure AIOLunarSpells.CastSpell();
 var
   spell: ERSSpell;
 begin
-  // Crude workaround because I didn't use ERSSpell from the start and at this point whatever
   case CHOSENSPELL of
     BAKE_PIE: spell := ERSSpell.BAKE_PIE;
     HUMIDIFY: spell := ERSSpell.HUMIDIFY;
@@ -937,53 +946,15 @@ begin
     RECHARGE_DRAGONSTONE: spell := ERSSpell.RECHARGE_DRAGONSTONE;
   end;
 
-  //if not Magic.CanActivate(spell) then
-  //begin
-  //  TakeScreenshot('NoSpellLogout');
-  //  WriteLn('Cannot cast the spell. Screenshot saved, Logout and terminated.');
-  //  Logout.ClickLogout();
-  //  TerminateScript();
-  //end
-  //else
+  Magic.CastSpell(spell);
+
+  if (Chat.FindLastMessage('not', [CHAT_COLOR_BLACK])) or 
+     ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('convert', [CHAT_COLOR_BLACK])) then
   begin
-    if CHOSENSPELL = BAKE_PIE then
-    begin
-      Magic.CastSpell(ERSSpell.BAKE_PIE);
-    end  
-    else if CHOSENSPELL = STRING_JEWELLERY then
-    begin
-      Magic.CastSpell(ERSSpell.STRING_JEWELLERY);
-    end
-    else if CHOSENSPELL = SUPERGLASS_MAKE then
-    begin
-      Magic.CastSpell(ERSSpell.SUPERGLASS_MAKE);
-    end
-    else if CHOSENSPELL = SPIN_FLAX then
-    begin
-      Magic.CastSpell(ERSSpell.SPIN_FLAX);
-    end
-    else if CHOSENSPELL = TAN_LEATHER then
-    begin
-      Magic.CastSpell(ERSSpell.TAN_LEATHER);
-    end
-    else if CHOSENSPELL = HUMIDIFY then
-    begin
-      Magic.CastSpell(ERSSpell.HUMIDIFY);
-    end
-    else if CHOSENSPELL = PLANK_MAKE then
-    begin
-      Magic.CastSpell(ERSSpell.PLANK_MAKE);
-      if Chat.FindLastMessage('convert', [CHAT_COLOR_BLACK]) then
-      begin
-        Logout.ClickLogout;
-        WriteLn('We are out of coins, logging out and terminating.');
-        TerminateScript();
-      end;
-    end
-    else if CHOSENSPELL = RECHARGE_DRAGONSTONE then
-    begin
-      Magic.CastSpell(ERSSpell.RECHARGE_DRAGONSTONE);
-    end;
+    TakeScreenshot('BlackTextError');
+    Logout.ClickLogout;
+    WriteLn('Got black text error, screenshot taken and logged out.');
+    TerminateScript();
   end;
 end;
 
@@ -1627,7 +1598,7 @@ begin
 if SELLNOTEDITEMCHECK then
 begin
   if TotalItemSold > 0 then
-    WriteLn('   Total ' + ProcessedItem + ' Sold: ' + IntToStr(TotalItemSold))
+    WriteLn('   Total ' + ProcessedItem + ' Sold: ' + IntToStr(NotedTotal))
   else
     WriteLn('   Sell Finished item is Enabled.');
 end;
