@@ -380,6 +380,7 @@ begin
   begin
     RawItemQuantity := 25;
     ProcessedItemQuantity := 25;
+    ItemArray5Quantity := Bank.QUANTITY_ALL;
   end
   else if CHOSENSPELL = PLANK_MAKE then // This just stops it uses ALL because it spams the chat
   begin
@@ -391,6 +392,7 @@ begin
   begin
     RawItemQuantity := 25;
     ProcessedItemQuantity := 25;
+    ItemArray5Quantity := Bank.QUANTITY_ALL;
   end
   else
   begin
@@ -444,7 +446,7 @@ begin
   end;
   Bank.WalkOpen();
   WaitUntil(Bank.IsOpen(), 375, 2150);
-//  MoveItemToTop(RawItem);
+  MoveItemToTop(RawItem);
   if CHOSENSPELL = SUPERGLASS_MAKE then
     MoveItemToTop(ItemArray5);
   if Bank.IsOpen() then
@@ -924,6 +926,14 @@ begin
     RECHARGE_DRAGONSTONE: spell := ERSSpell.RECHARGE_DRAGONSTONE;
   end;
 
+  if not Magic.CanActivate(spell) then
+  begin
+    TakeScreenshot('NoSpellLogout');
+    WriteLn('Cannot cast the spell. Screenshot saved, Logout and terminated.');
+    Logout.ClickLogout();
+    TerminateScript();
+  end
+  else
   begin
     if CHOSENSPELL = BAKE_PIE then
     begin
