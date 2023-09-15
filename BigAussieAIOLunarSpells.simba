@@ -18,9 +18,9 @@ var
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
   SELECTEDITEM: string;                       //= Berry Pie
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
-  BUYRUNESCHECK: Boolean                    = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
-  BUYRAWMATERIALS: Boolean                       = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
-  SELLNOTEDITEMCHECK: Boolean                  = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
+  BUYRUNESCHECK: Boolean                      = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
+  BUYRAWMATERIALS: Boolean                    = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
+  SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
   QUANTITYINPUT: Integer                      = 10000;// When you run out of Clay this is how many the script should buy.
   PRICESAPICHECK: Boolean                     = True; // If you are having issues with the prices API no loading this will disable prices, [ALL GRAND EXCHANGE FEATURES WILL BE DISABLED, ALSO YOU WILL NOT GET A PROFIT REPORT]
 //===========================================
@@ -172,7 +172,7 @@ begin
   end;
 end;
 
-procedure MoveItemToTop(Item: TRSItem);
+procedure MoveItemToTop(Item: TRSItem);  // This needs improving for clay.
 var
   ItemBox: TBox;
   BankBox: TBox;
@@ -435,7 +435,6 @@ begin
   SetRequiredItemsForSpell(CHOSENSPELL, AstralRunesRequired, RequiredItemArray5);
   Timer.Start();
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
-//  Options.SetZoomLevel(RandomRange(62, 80));
   ClearDebug();
   if STAFFCHECK then
   begin
@@ -445,7 +444,7 @@ begin
   end;
   Bank.WalkOpen();
   WaitUntil(Bank.IsOpen(), 375, 2150);
-  MoveItemToTop(RawItem);
+//  MoveItemToTop(RawItem);
   if CHOSENSPELL = SUPERGLASS_MAKE then
     MoveItemToTop(ItemArray5);
   if Bank.IsOpen() then
@@ -925,16 +924,6 @@ begin
     RECHARGE_DRAGONSTONE: spell := ERSSpell.RECHARGE_DRAGONSTONE;
   end;
 
-  if not Magic.CanActivate(spell) then
-  begin
-    Inventory.Open();
-    WaitUntil(Inventory.IsOpen(), 375, 2150);
-    TakeScreenshot('NoSpellLogout');
-    WriteLn('Cannot cast the spell. Screenshot saved, Logout and terminated.');
-    Logout.ClickLogout();
-    TerminateScript();
-  end
-  else
   begin
     if CHOSENSPELL = BAKE_PIE then
     begin
