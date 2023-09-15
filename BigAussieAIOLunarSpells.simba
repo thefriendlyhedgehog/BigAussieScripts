@@ -16,11 +16,11 @@ var
   STAFFCHECK: Boolean                         = True; // Set to "False" to disable the checking of required staff.
   STOP_AT_LEVEL: Integer                      = 99; // Script will Logout and stop when this level is reached.
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
-  SELECTEDITEM: string;                       //= Berry Pie
+  SELECTEDITEM: string;                       = Berry Pie
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
-  BUYRUNESCHECK: Boolean                    = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
-  BUYRAWMATERIALS: Boolean                       = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
-  SELLNOTEDITEMCHECK: Boolean                  = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
+  BUYRUNESCHECK: Boolean                      = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
+  BUYRAWMATERIALS: Boolean                    = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
+  SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
   QUANTITYINPUT: Integer                      = 10000;// When you run out of Clay this is how many the script should buy.
   PRICESAPICHECK: Boolean                     = True; // If you are having issues with the prices API no loading this will disable prices, [ALL GRAND EXCHANGE FEATURES WILL BE DISABLED, ALSO YOU WILL NOT GET A PROFIT REPORT]
 //===========================================
