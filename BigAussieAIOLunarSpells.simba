@@ -177,6 +177,7 @@ var
   ItemBox: TBox;
   BankBox: TBox;
   xOffset, yOffset: Integer;
+  ScrollStart, ScrollLimit: Int32;
 begin
   xOffset := SRL.TruncatedGauss(-40, 40);
   yOffset := SRL.TruncatedGauss(-5, 5);
@@ -199,9 +200,19 @@ begin
   begin
     WriteLn(Item + ' not found in top of bank, attempting to find/move item.');
 
-    // If item is not visible, scroll down until item is found
+    // Set a random scroll limit between 3-5 seconds
+    ScrollLimit := Random(3000, 5000);
+    ScrollStart := GetTickCount;
+
+    // If item is not visible, scroll down until item is found or time limit is reached
     while not Bank.FindItem(Item, ItemBox) do
     begin
+      if GetTickCount - ScrollStart >= ScrollLimit then
+      begin
+        WriteLn('Item not found after scrolling for ' + IntToStr(ScrollLimit) + ' ms.');
+        Exit;
+      end;
+
       Bank.FindItemScroll(Item);
     end;
 
