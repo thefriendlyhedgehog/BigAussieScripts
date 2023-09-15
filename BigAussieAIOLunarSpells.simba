@@ -440,7 +440,7 @@ begin
   ClearDebug();
   if STAFFCHECK then
   begin
-    ItemFinder.Similarity := 0.986; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
+    ItemFinder.Similarity := 0.989; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
     Self.EquipmentCheck();
     ItemFinder.Similarity := 0.999;
   end;
@@ -1193,7 +1193,7 @@ begin
   SetWaitTime();
   Wait(waitTimeCasting);
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
-  ItemFinder.Similarity := 0.985; // Molten glass needs this
+  ItemFinder.Similarity := 0.989; // Molten glass needs this
   OpenBankDepositItem(ProcessedItemBank);
   ItemFinder.Similarity := 0.999; // Revert back or runes fail
   ProcessedTotal += Inventory.CountItem(ProcessedItem);
@@ -1427,7 +1427,7 @@ begin
 
   if Bank.IsOpen() then
   begin
-    ItemFinder.Similarity := 0.986;
+    ItemFinder.Similarity := 0.989;
     WaitUntil(Bank.IsOpen, 375, 2150);
     for StaffName in StaffNames do
     begin
