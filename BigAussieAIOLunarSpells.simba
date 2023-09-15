@@ -752,6 +752,16 @@ begin
   end;
 end;
 
+// Thank you flight for this TakeScreenshot procedure 
+procedure AIOLunarSpells.TakeScreenshot(Name: String);
+var
+  i: Int32;
+begin
+  CreateDirectory('Screenshots/');
+  i := Length(GetFiles('Screenshots/', 'png'));
+  SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
+end;
+
 procedure CheckBreakSleepLevel();
 var
   currentLevel: Integer;
@@ -774,17 +784,17 @@ begin
   end;
 end;
 
-procedure OpenBankDepositItem(item: TRSBankItem);
+procedure AIOLunarSpells.OpenBankDepositItem(item: TRSBankItem);
 var
   attempts: Int32;
 begin
   attempts := 0;
-  while (attempts < 4) and (not Bank.IsOpen()) do
+  while (attempts < 5) and (not Bank.IsOpen()) do
   begin
     Bank.WalkOpen();
     WaitUntil(Bank.IsOpen(), 375, 2150);
     Inc(attempts);
-    if (not Bank.IsOpen()) and (attempts mod 2 = 0) then
+    if not Bank.IsOpen() then
     begin
       Antiban.RandomRotate;
       Wait(RandomRange(1000, 2000));
@@ -793,6 +803,7 @@ begin
 
   if Bank.IsOpen() then
   begin
+    ProcessedTotal += Inventory.CountItem(ProcessedItem);
     if Inventory.ContainsItem(item.Item) then
     begin
       Bank.DepositItem(item, True);
@@ -801,6 +812,7 @@ begin
   end
   else
   begin
+    TakeScreenshot('Bankfailed');
     WriteLn('Failed to open the bank after multiple attempts');
     Logout.ClickLogout;
     TerminateScript();
@@ -919,17 +931,6 @@ begin
     Exit(True);    
   Exit(False);
 end;
-
-// Thank you flight for this TakeScreenshot procedure 
-procedure AIOLunarSpells.TakeScreenshot(Name: String);
-var
-  i: Int32;
-begin
-  CreateDirectory('Screenshots/');
-  i := Length(GetFiles('Screenshots/', 'png'));
-  SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
-end;
-
 
 procedure AIOLunarSpells.CastSpell();
 var
@@ -1178,7 +1179,6 @@ begin
   ItemFinder.Similarity := 0.989; // Molten glass needs this
   OpenBankDepositItem(ProcessedItemBank);
   ItemFinder.Similarity := 0.999; // Revert back or runes fail
-  ProcessedTotal += Inventory.CountItem(ProcessedItem);
 end;     
 
 procedure AIOLunarSpells.doPlankMake();
@@ -1332,7 +1332,6 @@ begin
     end;
   end;
   CastCount += Inventory.CountItem(ProcessedItem);
-  ProcessedTotal += Inventory.CountItem(ProcessedItem);
   Self.Report();
   CheckBreakSleepLevel();
   bank.Hover();
