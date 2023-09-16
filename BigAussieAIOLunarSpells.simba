@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.02 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.03 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -457,6 +457,16 @@ begin
   if Length(Items[i].AssociatedItems) > 4 then
   begin
     ItemArray5Value := ItemData.GetAverage(ItemArray5);
+  end;
+
+  WriteLn('Current brightness level: ' + IntToStr(Options.GetBrightnessLevel));
+  if Options.GetBrightnessLevel < 100 then
+    Options.SetMaxBrightness;
+    
+  if RSClient.DetectClientMode() <> ERSClientMode.FIXED then
+  begin
+    WriteLn('The client must be running in FIXED mode. Please change the mode and restart the script.');
+    TerminateScript();
   end;
 
   Self.RSW.SetupNamedRegion();
