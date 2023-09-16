@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -174,7 +174,27 @@ begin
   end;
 end;
 
-procedure MoveItemToTop(Item: TRSItem);  // This needs improving for clay.
+function GetRandomRangeShort(ScriptSpeed: ScriptSpeedTypes): Integer;
+begin
+  case ScriptSpeed of
+    SLOW: Result := RandomRange(385, 485);
+    NORMAL: Result := RandomRange(300, 385);
+    FAST: Result := RandomRange(200, 300);
+    TURBO: Result := RandomRange(100, 200);
+  end;
+end;
+
+function GetRandomRangeLong(ScriptSpeed: ScriptSpeedTypes): Integer;
+begin
+  case ScriptSpeed of
+    SLOW: Result := RandomRange(1000, 1500);
+    NORMAL: Result := RandomRange(900, 1200);
+    FAST: Result := RandomRange(600, 700);
+    TURBO: Result := RandomRange(500, 600);
+  end;
+end;
+
+procedure MoveItemToTop(Item: TRSItem);
 var
   ItemBox: TBox;
   BankBox: TBox;
@@ -218,7 +238,7 @@ begin
     begin
       if GetTickCount - ScrollStart >= ScrollLimit then
       begin
-        WriteLn('Item not found after scrolling for ' + IntToStr(ScrollLimit) + ' ms.');
+        WriteLn('Item not found after scrolling');
         Exit;
       end;
 
@@ -538,8 +558,8 @@ begin
     exit();
   end;
 
-  if not WaitUntil(not CollectButton.Visible(), 250, 5000) then
-    WriteLn('Clicked collect button but items did not collect');
+//  if not WaitUntil(not CollectButton.Visible(), 250, , RandomRange(800, 1200)) then
+//    WriteLn('Clicked collect button but items did not collect');
 end;
 
 function FindEmptySlot(): Int32;
@@ -625,8 +645,8 @@ begin
   end
   else
   begin
+    NotedTotal += WithdrawnCount;
     WriteLn('The sell offer for ' + ProcessedItem + ' has been fulfilled');
-    TotalItemSold += WithdrawnCount;
   end;
 end;
 
@@ -648,9 +668,8 @@ begin
         if not Inventory.ContainsItem(NotedProcessed) then
         begin
           Bank.WithdrawItem(ProcessedItemBankNoted, true);
-          WaitUntil(Inventory.ContainsItem(NotedProcessed), 375, Random(500, 1000));
-          WithdrawnCount := Inventory.CountItem(NotedProcessed);
-          NotedTotal += WithdrawnCount;
+          WaitUntil(Inventory.ContainsItem(NotedProcessed), 375, RandomRange(800, 1500));
+          WithdrawnCount := Inventory.CountItemStack(NotedProcessed);
         end;
         if Inventory.ContainsItem(NotedProcessed) then
         begin
@@ -663,6 +682,16 @@ begin
     CollectAll();
     Wait(RandomRange(900, 1300));
   end;
+end;
+
+// Thank you flight for this TakeScreenshot procedure 
+procedure AIOLunarSpells.TakeScreenshot(Name: String);
+var
+  i: Int32;
+begin
+  CreateDirectory('Screenshots/');
+  i := Length(GetFiles('Screenshots/', 'png'));
+  SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
 end;
 
 procedure AIOLunarSpells.BuyItem(itemName: String; quantity: Int32; price: Int32);
@@ -728,6 +757,16 @@ begin
     exit;
   end;
 
+  Wait(RandomRange(1000, 2000)); // Wait for the chat to possibly update
+
+  if Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK]) then
+  begin
+    WriteLn('Not enough coins to buy from GE, logging out and terminating script.');
+    TakeScreenshot('GESellCoins');
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
+
   startTime := GetTimeRunning();
   repeat
     Wait(Random(3000, 5000));
@@ -750,16 +789,6 @@ begin
     'RawItem': RawPurchased += quantity;
     'AstralRune': RunesPurchased += quantity;
   end;
-end;
-
-// Thank you flight for this TakeScreenshot procedure 
-procedure AIOLunarSpells.TakeScreenshot(Name: String);
-var
-  i: Int32;
-begin
-  CreateDirectory('Screenshots/');
-  i := Length(GetFiles('Screenshots/', 'png'));
-  SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
 end;
 
 procedure CheckBreakSleepLevel();
@@ -807,7 +836,7 @@ begin
     if Inventory.ContainsItem(item.Item) then
     begin
       Bank.DepositItem(item, True);
-      WaitUntil(not Inventory.ContainsItem(item.Item), 385, 2100);
+      WaitUntil(not Inventory.ContainsItem(item.Item), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
   else
@@ -825,7 +854,7 @@ begin
   begin
     WriteLn('Looking for ' + AstralRune);
     Bank.WithdrawItem(AstralRuneBank, True);
-    WaitUntil(Inventory.ContainsItem(AstralRune), 375, 2150);
+    WaitUntil(Inventory.ContainsItem(AstralRune), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
 
     if BUYRUNESCHECK and (Inventory.CountItemStack(AstralRune) < AstralRunesRequired) then
     begin
@@ -852,9 +881,9 @@ begin
   Bank.WithdrawItem(RawItemBank, True);
   
   if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
-    WaitUntil(Inventory.CountItem(RawItem) >= 5, 385, 3100)
+    WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
   else
-    WaitUntil(Inventory.ContainsItem(RawItem), 385, 3100);
+    WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
 
   if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
   begin
@@ -899,7 +928,7 @@ begin
   begin
     WriteLn('Looking for ' + ItemArray5);
     Bank.WithdrawItem(ItemArray5Bank, True);
-    WaitUntil(Inventory.ContainsItem(ItemArray5), 375, 2150);
+    WaitUntil(Inventory.ContainsItem(ItemArray5), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     if Inventory.CountItemStack(ItemArray5) < (RequiredItemArray5) then
     begin
       if BUYRUNESCHECK then
@@ -1207,7 +1236,7 @@ begin
   if not CoinsChecked and (Inventory.CountItem('Coins') < CoinsCount) then
   begin
     Bank.WithdrawItem(CoinsBank, True);
-    WaitUntil(Inventory.ContainsItem('Coins'), 385, 2100);
+    WaitUntil(Inventory.ContainsItem('Coins'), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     if Inventory.CountItemStack('Coins') < CoinsCount then
     begin
       WriteLn('ItemArray5 Count: ' + IntToStr(Inventory.CountItemStack(ItemArray5)));
@@ -1259,7 +1288,7 @@ begin
       Magic.CastSpell(ERSSpell.PLANK_MAKE);
       WaitUntil(Inventory.IsOpen(), 375, 2150);
       Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), 385, 120000);
+      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
     end;
   end
   else if SCRIPTSPEED = NORMAL then
@@ -1269,12 +1298,12 @@ begin
       for i := 1 to RawItemCount do
       begin
         CastSpell();
-        WaitUntil(Inventory.IsOpen(), 375, 2150);
+        WaitUntil(Inventory.IsOpen(), 280, 2150);
         Inventory.ClickItem(RawItem, '>');
         if not Inventory.ContainsItem(RawItem) then
           break;
         Wait(RandomRange(650, 750));
-        WaitUntil(Magic.IsOpen(), 375, 2150);
+        WaitUntil(Magic.IsOpen(), 280, 2150);
       end;
     end
     else
@@ -1282,7 +1311,7 @@ begin
       Magic.CastSpell(ERSSpell.PLANK_MAKE);
       WaitUntil(Inventory.IsOpen(), 375, 2150);
       Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), 385, 120000);
+      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
     end;
   end
   else if SCRIPTSPEED = FAST then
@@ -1305,7 +1334,7 @@ begin
       Magic.CastSpell(ERSSpell.PLANK_MAKE);
       WaitUntil(Inventory.IsOpen(), 375, 2150);
       Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), 385, 120000);
+      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
     end;
   end
   else if SCRIPTSPEED = TURBO then
@@ -1328,7 +1357,7 @@ begin
       Magic.CastSpell(ERSSpell.PLANK_MAKE);
       WaitUntil(Inventory.IsOpen(), 375, 2150);
       Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), 385, 120000);
+      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
     end;
   end;
   CastCount += Inventory.CountItem(ProcessedItem);
@@ -1418,7 +1447,7 @@ begin
       if Bank.ContainsItem(StaffBankItem) then
       begin
         Bank.WithdrawItem(StaffBankItem, True);
-        WaitUntil(Inventory.ContainsItem(StaffName), 385, 1200);
+        WaitUntil(Inventory.ContainsItem(StaffName), 385, RandomRange(800, 1200));
         if Inventory.ContainsItem(StaffName) then    
         begin
           WriteLn('Found ' + StaffName + '.');
@@ -1503,7 +1532,7 @@ begin
     BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;
     HUMIDIFY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;        // TESTED Reports correct Profit+XP
     SPIN_FLAX: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
-    TAN_LEATHER: Result := RawTotal div 5 * (ProcessedItemValue - RawItemValue) - Round(RawTotal / 5.0) * (RuneValue * 2 + ItemArray5Value);
+    TAN_LEATHER: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue * 2 + ItemArray5Value);
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue * 2;
     PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal)) * (RuneValue * 2 + ItemArray5Value) - RawTotal * CoinCostPerCast;
     RECHARGE_DRAGONSTONE: Result := Trunc(((ProcessedItemValue * 25) - (RawItemValue * 25) - ItemArray5Value - RuneValue) * (RawTotal / 25));    SUPERGLASS_MAKE:
