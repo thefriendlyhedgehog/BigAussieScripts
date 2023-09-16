@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.01 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.02 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -94,7 +94,6 @@ var
   Array5QuantityToBuy,
   RawPurchased,
   RawPurchased2,
-  TotalItemSold,
   WithdrawnCount,
   RawItemCount,
   RawItemToBuy,
@@ -138,11 +137,13 @@ begin
     NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
 end;
 
-procedure SetupAntiBan();
+procedure TAntiban.Setup(); override;
 begin
   Antiban.Skills := [ERSSkill.TOTAL, ERSSKILL.MAGIC];
   Antiban.MinZoom := 62;
   Antiban.MaxZoom := 80;
+
+  inherited;
 end;
 
 procedure SetRequiredItemsForSpell(CHOSENSPELL: ELunarSpell; var AstralRunesRequired: Integer; var RequiredItemArray5: Integer);
@@ -277,7 +278,6 @@ procedure AIOLunarSpells.Init(MaxActions: Int32; MaxTime: Int64); override;
 var
   i: Integer;
 begin
-  SetupAntiBan();
   inherited;
 
   if (not RSClient.IsLoggedIn) then
@@ -495,6 +495,16 @@ begin
   end;
 end;
 
+// Thank you flight for this TakeScreenshot procedure 
+procedure AIOLunarSpells.TakeScreenshot(Name: String);
+var
+  i: Int32;
+begin
+  CreateDirectory('Screenshots/');
+  i := Length(GetFiles('Screenshots/', 'png'));
+  SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
+end;
+
 procedure AIOLunarSpells.OpenGrandExchange();
 var
   attempts: Integer;
@@ -684,16 +694,6 @@ begin
   end;
 end;
 
-// Thank you flight for this TakeScreenshot procedure 
-procedure AIOLunarSpells.TakeScreenshot(Name: String);
-var
-  i: Int32;
-begin
-  CreateDirectory('Screenshots/');
-  i := Length(GetFiles('Screenshots/', 'png'));
-  SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
-end;
-
 procedure AIOLunarSpells.BuyItem(itemName: String; quantity: Int32; price: Int32);
 var
   slotNumber: Int32;
@@ -751,14 +751,24 @@ begin
     Wait(Random(600, 750));
   end;
 
-  confirmButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.CONFIRM);
-  if not confirmButton.Click() then
-  begin
-    exit;
-  end;
+confirmButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.CONFIRM);
+if not confirmButton.Click() then
+begin
+  exit;
+end;
 
-  Wait(RandomRange(1000, 2000)); // Wait for the chat to possibly update
+if Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK]) then
+begin
+  WriteLn('Not enough coins to buy from GE, logging out and terminating script.');
+  TakeScreenshot('GESellCoins');
+  Logout.ClickLogout();
+  TerminateScript();
+end;
 
+startTime := GetTimeRunning();
+repeat
+  Wait(Random(3000, 5000));
+  offerStatus := GrandExchange.GetOfferStatus(slotNumber);
   if Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK]) then
   begin
     WriteLn('Not enough coins to buy from GE, logging out and terminating script.');
@@ -766,12 +776,7 @@ begin
     Logout.ClickLogout();
     TerminateScript();
   end;
-
-  startTime := GetTimeRunning();
-  repeat
-    Wait(Random(3000, 5000));
-    offerStatus := GrandExchange.GetOfferStatus(slotNumber);
-  until (offerStatus.Progress = 100) or ((GetTimeRunning() - startTime) > RandomRange(160000, 210000));
+until (offerStatus.Progress = 100) or ((GetTimeRunning() - startTime) > RandomRange(160000, 210000));
 
   if offerStatus.Progress < 100 then
   begin
@@ -795,15 +800,15 @@ procedure CheckBreakSleepLevel();
 var
   currentLevel: Integer;
 begin
-  if (Length(Antiban.Breaks) > 0) and (GetTimeRunning() >= Antiban.Breaks[0].NextAtTime) then
-  begin
-    Antiban.TakeBreak(Antiban.Breaks[0]);
-  end;
+//  if (Length(Antiban.Breaks) > 0) and (GetTimeRunning() >= Antiban.Breaks[0].NextAtTime) then
+//  begin
+//    Antiban.TakeBreak(Antiban.Breaks[0]);
+//  end;
 
-  if (Length(Antiban.Sleeps) > 0) and (GetTimeRunning() >= Antiban.Sleeps[0].NextAtTime) then
-  begin
-    Antiban.TakeSleep(Antiban.Sleeps[0]);
-  end;
+//  if (Length(Antiban.Sleeps) > 0) and (GetTimeRunning() >= Antiban.Sleeps[0].NextAtTime) then
+//  begin
+//    Antiban.TakeSleep(Antiban.Sleeps[0]);
+//  end;
 
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   if (STOP_AT_LEVEL <> -1) and (currentLevel >= STOP_AT_LEVEL) then
@@ -1034,6 +1039,7 @@ procedure AIOLunarSpells.doBakePieAndStringJewellery();
 begin
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
+  OpenBankDepositItem(ProcessedItemBank);
   WithdrawAstralRunes();
   WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
   if (RawItemToBuy > 0) or (AstralRunesToBuy > 0) then
@@ -1060,20 +1066,32 @@ begin
     Wait(RandomRange(600, 1100));
     if SRL.Dice(20) then
     begin
-      Antiban.DoAntiban;
+      Self.DoAntiban;
     end;
   end;
   CastCount += Inventory.CountItem(ProcessedItem);
   TotalActions += 1;
   Self.Report();
   CheckBreakSleepLevel();
-  OpenBankDepositItem(ProcessedItemBank);
 end;
 
 procedure AIOLunarSpells.doHumidify();
 var
   attempts: Int32;
 begin
+  attempts := 0;
+  while not Bank.IsOpen() and (attempts < 5) do
+  begin
+    OpenBankDepositItem(ProcessedItemBank);
+    Wait(Random(150, 250));
+    attempts += 1;
+  end;
+  if not Bank.IsOpen() then
+  begin
+    WriteLn('Bank could not be opened after 5 attempts.');
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   WithdrawAstralRunes();
@@ -1104,27 +1122,13 @@ begin
   SetWaitTime();
   Wait(waitTimeCasting);
   CheckBreakSleepLevel();
-
-  attempts := 0;
-  while not Bank.IsOpen() and (attempts < 5) do
-  begin
-    OpenBankDepositItem(ProcessedItemBank);
-    Wait(Random(150, 250));
-    attempts += 1;
-  end;
-  if not Bank.IsOpen() then
-  begin
-    WriteLn('Bank could not be opened after 5 attempts, screenshot saved.');
-    TakeScreenshot('Banknotopen');
-    Logout.ClickLogout();
-    TerminateScript();
-  end;
 end;
 
 procedure AIOLunarSpells.doSpinFlaxAndTanLeather();
 var
   i: Integer;
 begin
+  OpenBankDepositItem(ProcessedItemBank);
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
@@ -1161,7 +1165,6 @@ begin
     Wait(waitTimeCasting);
   end;
   CheckBreakSleepLevel();
-  OpenBankDepositItem(ProcessedItemBank);
 end;     
 
 procedure AIOLunarSpells.doSuperGlassAndRechargeDragonstone();
@@ -1218,6 +1221,7 @@ begin
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
+  OpenBankDepositItem(ProcessedItemBank);
   if not CoinsChecked then
   begin
     WriteLn('Counting ' + RawItem);
@@ -1365,7 +1369,6 @@ begin
   CheckBreakSleepLevel();
   bank.Hover();
   Wait(RandomRange(600, 700));
-  OpenBankDepositItem(ProcessedItemBank);
 end;
 
 function Join(const Delimiter: String; const List: array of String): String;
@@ -1489,7 +1492,7 @@ begin
   Self.Init(MaxActions, MaxTime);
   repeat
     Self.doAction();
-    if not MainScreen.HasInterface() then
+    if not MainScreen.HasInterface() or not Bank.IsOpen() then
     begin
       case SCRIPTSPEED of
         TURBO: antibanChance := 10;
@@ -1499,9 +1502,11 @@ begin
       end;
       if SRL.Dice(antibanChance) then
       begin
-        Antiban.DoAntiban;
+        Self.DoAntiban;
       end;
     end;
+    if not Bank.IsOpen() then
+      Self.DoAntiban();
   until Self.ShouldStop();
 end;
 
@@ -1595,8 +1600,8 @@ begin
     WriteLn('   Total Profit: Calculating')
   else
     WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
-  if (Length(Antiban.Breaks) > 0) then
-    WriteLn('   Time until next break: ' + NextBreakTime);
+//  if (Length(Antiban.Breaks) > 0) then
+//    WriteLn('   Time until next break: ' + NextBreakTime);
   if (Length(Antiban.Sleeps) > 0) then
     WriteLn('   Time until sleep ' + NextSleepTime);
   if STOP_AT_LEVEL <> -1 then
@@ -1625,7 +1630,7 @@ begin
 
 if SELLNOTEDITEMCHECK then
 begin
-  if TotalItemSold > 0 then
+  if NotedTotal > 0 then
     WriteLn('   Total ' + ProcessedItem + ' Sold: ' + IntToStr(NotedTotal))
   else
     WriteLn('   Sell Finished item is Enabled.');
