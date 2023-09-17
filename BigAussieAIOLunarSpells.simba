@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.03 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.04 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -865,6 +865,7 @@ end;
 
 procedure AIOLunarSpells.WithdrawAstralRunes();
 begin
+  ItemFinder.Similarity := 0.999;
   if Inventory.CountItemStack(AstralRune) < AstralRunesRequired then
   begin
     WriteLn('Looking for ' + AstralRune);
@@ -892,6 +893,7 @@ end;
 
 procedure AIOLunarSpells.WithdrawRawItem(RawItem: TRSitem; RawItemBank: TRSBankItem; QuantityInput: integer; BUYRAWMATERIALS: boolean);
 begin
+  ItemFinder.Similarity := 0.989;
   WriteLn('Looking for ' + RawItem);
   Bank.WithdrawItem(RawItemBank, True);
   
@@ -935,10 +937,12 @@ begin
     WriteLn('We are out of ' + itemName + ' and buying is disabled. Logging out.');
     TerminateScript();
   end;
+  ItemFinder.Similarity := 0.999;
 end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
+  ItemFinder.Similarity := 0.999;
   if Inventory.CountItemStack(ItemArray5) < (RequiredItemArray5) then
   begin
     WriteLn('Looking for ' + ItemArray5);
