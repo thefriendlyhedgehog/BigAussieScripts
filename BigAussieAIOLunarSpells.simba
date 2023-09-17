@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.05 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.06 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -443,7 +443,6 @@ begin
 
   ProcessedItemBank := TRSBankItem.Setup(ProcessedItem, ProcessedItemQuantity, FALSE);
   RawItemBank := TRSBankItem.Setup(RawItem, RawItemQuantity, FALSE);
-  RawItemValue := ItemData.GetAverage(RawItem);
   ProcessedItemBankNoted := TRSBankItem.Setup(ProcessedItem, Bank.QUANTITY_ALL, True);
   AstralRuneBank := TRSBankItem.Setup(AstralRune, Bank.QUANTITY_ALL, False);
   if Length(Items[i].AssociatedItems) > 4 then
@@ -916,18 +915,25 @@ begin
   end
   else
   begin
-    WriteLn('Looking for ' + RawItem);
-    Bank.WithdrawItem(RawItemBank, True);
-  
-    if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
-      WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
-    else
-      WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-
-    if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
+    if Bank.ContainsItem(RawItem) then
     begin
-      RawItemToBuy := QuantityInput;
-      WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
+      WriteLn('Looking for ' + RawItem);
+      Bank.WithdrawItem(RawItemBank, True);
+  
+      if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
+        WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
+      else
+        WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+
+      if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
+      begin
+        RawItemToBuy := QuantityInput;
+        WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
+      end;
+    end
+    else
+    begin
+      WriteLn(RawItem + ' not found in the bank.');
     end;
   end;
 end;
@@ -1033,40 +1039,40 @@ begin
   case SCRIPTSPEED of
     SLOW: 
       if CHOSENSPELL = SPIN_FLAX then
-        waitTimeCasting := TSRL.SkewedRand(3400, 3500, 3600)
+        waitTimeCasting := TSRL.SkewedRand(1800, 1900, 2000)
       else if CHOSENSPELL = TAN_LEATHER then
-        waitTimeCasting := TSRL.SkewedRand(900, 1200, 1500) // This is very optimised.
+        waitTimeCasting := TSRL.SkewedRand(600, 700, 1000)
       else if CHOSENSPELL = HUMIDIFY then
-        waitTimeCasting := TSRL.SkewedRand(1400, 1500, 2500)
+        waitTimeCasting := TSRL.SkewedRand(1000, 1100, 1200)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1400, 1500, 2500);
+        waitTimeCasting := TSRL.SkewedRand(1300, 1400, 1500);
     NORMAL: 
       if CHOSENSPELL = SPIN_FLAX then
-        waitTimeCasting := TSRL.SkewedRand(3000, 3000, 3100)
+        waitTimeCasting := TSRL.SkewedRand(1600, 1700, 1800)
       else if CHOSENSPELL = TAN_LEATHER then
-        waitTimeCasting := TSRL.SkewedRand(500, 800, 1000) // This is very optimised.
+        waitTimeCasting := TSRL.SkewedRand(500, 700, 900)
       else if CHOSENSPELL = HUMIDIFY then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500)
+        waitTimeCasting := TSRL.SkewedRand(900, 950, 1050)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500);
+        waitTimeCasting := TSRL.SkewedRand(1100, 1150, 1250);
     FAST: 
       if CHOSENSPELL = SPIN_FLAX then
-        waitTimeCasting := TSRL.SkewedRand(2800, 2900, 3000)
+        waitTimeCasting := TSRL.SkewedRand(1580, 1650, 1750)
       else if CHOSENSPELL = TAN_LEATHER then
-        waitTimeCasting := TSRL.SkewedRand(500, 700, 800) // This is very optimised.
+        waitTimeCasting := TSRL.SkewedRand(450, 550, 600)
       else if CHOSENSPELL = HUMIDIFY then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1100, 1200)
+        waitTimeCasting := TSRL.SkewedRand(800, 900, 1000)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1100, 1200);
+        waitTimeCasting := TSRL.SkewedRand(900, 1000, 1100);
     TURBO: 
       if CHOSENSPELL = SPIN_FLAX then
-        waitTimeCasting := TSRL.SkewedRand(3000, 3000, 3100)
+        waitTimeCasting := TSRL.SkewedRand(1580, 1580, 1650) // This is optimised.
       else if CHOSENSPELL = TAN_LEATHER then
-        waitTimeCasting := TSRL.SkewedRand(500, 800, 1000) // This is very optimised.
+        waitTimeCasting := TSRL.SkewedRand(450, 450, 520) // This is optimised.
       else if CHOSENSPELL = HUMIDIFY then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500)
+        waitTimeCasting := TSRL.SkewedRand(800, 800, 900) // This is optimised.
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500);
+        waitTimeCasting := TSRL.SkewedRand(900, 900, 1000); // This is optimised
   end;
 end;
 
@@ -1531,7 +1537,7 @@ begin
     if not MainScreen.HasInterface() or not Bank.IsOpen() then
     begin
       case SCRIPTSPEED of
-        TURBO: antibanChance := 10;
+        TURBO: antibanChance := 5;
         FAST: antibanChance := 30;
         NORMAL: antibanChance := 50;
         SLOW: antibanChance := 70;
@@ -1571,8 +1577,8 @@ begin
   end;
   case ChosenSpell of
     BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;
-    HUMIDIFY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;        // TESTED Reports correct Profit+XP
-    SPIN_FLAX: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
+    HUMIDIFY: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(ProcessedTotal / 27.0)) * RuneValue;
+    SPIN_FLAX: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
     TAN_LEATHER: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue * 2 + ItemArray5Value);
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue * 2;
     PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal)) * (RuneValue * 2 + ItemArray5Value) - RawTotal * CoinCostPerCast;
