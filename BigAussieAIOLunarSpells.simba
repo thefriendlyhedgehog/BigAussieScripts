@@ -491,7 +491,6 @@ begin
   begin
     ItemFinder.Similarity := 0.989; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
     Self.EquipmentCheck();
-    ItemFinder.Similarity := 0.999;
   end;
   Bank.WalkOpen();
   WaitUntil(Bank.IsOpen(), 375, 2150);
@@ -889,11 +888,12 @@ begin
       WriteLn('We are out of ' + AstralRune + '. Will purchase ' + IntToStr(AstralRunesToBuy) + ' runes.');
     end;
   end;
+  ItemFinder.Similarity := 0.989;
 end;
 
 procedure AIOLunarSpells.WithdrawRawItem(RawItem: TRSitem; RawItemBank: TRSBankItem; QuantityInput: integer; BUYRAWMATERIALS: boolean);
 begin
-  ItemFinder.Similarity := 0.989;
+  WriteLn('Current similarity: ' + FloatToStr(ItemFinder.Similarity));
   WriteLn('Looking for ' + RawItem);
   Bank.WithdrawItem(RawItemBank, True);
   
@@ -937,12 +937,10 @@ begin
     WriteLn('We are out of ' + itemName + ' and buying is disabled. Logging out.');
     TerminateScript();
   end;
-  ItemFinder.Similarity := 0.999;
 end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
-  ItemFinder.Similarity := 0.999;
   if Inventory.CountItemStack(ItemArray5) < (RequiredItemArray5) then
   begin
     WriteLn('Looking for ' + ItemArray5);
@@ -1222,9 +1220,7 @@ begin
   SetWaitTime();
   Wait(waitTimeCasting);
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
-  ItemFinder.Similarity := 0.989; // Molten glass needs this
   OpenBankDepositItem(ProcessedItemBank);
-  ItemFinder.Similarity := 0.999; // Revert back or runes fail
 end;     
 
 procedure AIOLunarSpells.doPlankMake();
@@ -1472,7 +1468,6 @@ begin
           WaitUntil(not Mainscreen.HasInterface(), 100, 2000);
           WriteLn('Equipping ' + StaffName + '.');
           Inventory.ClickItem(StaffName);
-          ItemFinder.Similarity := 0.999;
           Wait(Random(200, 500));
           Exit;
         end;
