@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.04 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.05 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -179,9 +179,9 @@ function GetRandomRangeShort(ScriptSpeed: ScriptSpeedTypes): Integer;
 begin
   case ScriptSpeed of
     SLOW: Result := RandomRange(385, 485);
-    NORMAL: Result := RandomRange(300, 385);
-    FAST: Result := RandomRange(200, 300);
-    TURBO: Result := RandomRange(100, 200);
+    NORMAL: Result := RandomRange(385, 400);
+    FAST: Result := RandomRange(385, 400);
+    TURBO: Result := RandomRange(385, 400);
   end;
 end;
 
@@ -190,8 +190,8 @@ begin
   case ScriptSpeed of
     SLOW: Result := RandomRange(1000, 1500);
     NORMAL: Result := RandomRange(900, 1200);
-    FAST: Result := RandomRange(600, 700);
-    TURBO: Result := RandomRange(500, 600);
+    FAST: Result := RandomRange(900, 1200);
+    TURBO: Result := RandomRange(900, 1200);
   end;
 end;
 
@@ -892,20 +892,43 @@ begin
 end;
 
 procedure AIOLunarSpells.WithdrawRawItem(RawItem: TRSitem; RawItemBank: TRSBankItem; QuantityInput: integer; BUYRAWMATERIALS: boolean);
+var
+  attempts: Int32;
 begin
-  WriteLn('Current similarity: ' + FloatToStr(ItemFinder.Similarity));
-  WriteLn('Looking for ' + RawItem);
-  Bank.WithdrawItem(RawItemBank, True);
-  
-  if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
-    WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
-  else
-    WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-
-  if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
+  attempts := 0;
+  while (attempts < 5) and (not Bank.IsOpen()) do
   begin
-    RawItemToBuy := QuantityInput;
-    WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
+    Bank.WalkOpen();
+    WaitUntil(Bank.IsOpen(), 375, 2150);
+    Inc(attempts);
+    if not Bank.IsOpen() then
+    begin
+      Antiban.RandomRotate;
+      Wait(RandomRange(1000, 2000));
+    end;
+  end;
+
+  if not Bank.IsOpen() then
+  begin
+    WriteLn('Failed to open the bank after multiple attempts');
+    Logout.ClickLogout;
+    TerminateScript();
+  end
+  else
+  begin
+    WriteLn('Looking for ' + RawItem);
+    Bank.WithdrawItem(RawItemBank, True);
+  
+    if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
+      WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
+    else
+      WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+
+    if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
+    begin
+      RawItemToBuy := QuantityInput;
+      WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
+    end;
   end;
 end;
 
@@ -1037,13 +1060,13 @@ begin
         waitTimeCasting := TSRL.SkewedRand(1100, 1100, 1200);
     TURBO: 
       if CHOSENSPELL = SPIN_FLAX then
-        waitTimeCasting := TSRL.SkewedRand(2800, 2800, 2900)
+        waitTimeCasting := TSRL.SkewedRand(3000, 3000, 3100)
       else if CHOSENSPELL = TAN_LEATHER then
-        waitTimeCasting := TSRL.SkewedRand(500, 500, 600) // This is very optimised.
+        waitTimeCasting := TSRL.SkewedRand(500, 800, 1000) // This is very optimised.
       else if CHOSENSPELL = HUMIDIFY then
-        waitTimeCasting := TSRL.SkewedRand(1080, 1080, 1100)
+        waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1400, 1500, 2500);
+        waitTimeCasting := TSRL.SkewedRand(1100, 1300, 1500);
   end;
 end;
 
@@ -1422,8 +1445,11 @@ begin
       StaffNames := ['Staff of water', 'Mist battlestaff', 'Mystic mist staff', 'Mud battlestaff', 'Mystic mud staff', 'Steam battlestaff', 'Mystic steam staff', 'Kodai wand', 'Tome of water'];
   end;
 
-  // Check is staff/item is equipped.
+  // Open the equipment screen
+  Equipment.Open();
+  WaitUntil(Equipment.IsOpen(), 375, 2100);
   WriteLn('Looking for ' + StaffName + ' Equipped.');
+  WriteLn('Current similarity: ' + FloatToStr(ItemFinder.Similarity));
   for StaffName in StaffNames do
   begin
     if Equipment.ContainsItem(StaffName) then
@@ -1433,8 +1459,9 @@ begin
     end;
   end;
 
-  // No staff found equipped, now we check inventory.
   WriteLn('Looking for staff in inventory.');
+  Inventory.Open(); // Open the inventory
+  WaitUntil(Inventory.IsOpen(), 375, 2100); // Wait until the inventory is open
   for StaffName in StaffNames do
   begin
     if Inventory.ContainsItem(StaffName) then
@@ -1443,10 +1470,11 @@ begin
       Inventory.ClickItem(StaffName);
       Exit;
     end;
-  end;
+end;
 
   if not Bank.IsOpen() then
     Bank.Open();
+    WaitUntil(Bank.IsOpen, 375, 2150);
 
   if Bank.IsOpen() then
   begin
