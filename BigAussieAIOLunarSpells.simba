@@ -1449,7 +1449,6 @@ begin
   Equipment.Open();
   WaitUntil(Equipment.IsOpen(), 375, 2100);
   WriteLn('Looking for ' + StaffName + ' Equipped.');
-  WriteLn('Current similarity: ' + FloatToStr(ItemFinder.Similarity));
   for StaffName in StaffNames do
   begin
     if Equipment.ContainsItem(StaffName) then
