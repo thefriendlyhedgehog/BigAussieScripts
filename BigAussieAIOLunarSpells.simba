@@ -1653,7 +1653,7 @@ begin
     SPIN_FLAX: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
     TAN_LEATHER: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue * 2 + ItemArray5Value);
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue * 2;
-    PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal)) * (RuneValue * 2 + ItemArray5Value) - RawTotal * CoinCostPerCast;
+    PLANK_MAKE: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(RawTotal / 27.0)) * (RuneValue * 2 + ItemArray5Value) - CoinCostPerCast * RawTotal;
     RECHARGE_DRAGONSTONE: Result := Trunc(((ProcessedItemValue * 25) - (RawItemValue * 25) - ItemArray5Value - RuneValue) * (RawTotal / 25));    SUPERGLASS_MAKE:
     begin
       if RawItem = 'Giant seaweed' then
