@@ -1358,6 +1358,9 @@ if SCRIPTSPEED = SLOW then
 begin
   if SRL.Dice(30) then
   begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Slow casting');
     Magic.CastSpell(ERSSpell.PLANK_MAKE);
     WaitUntil(Inventory.IsOpen(), 375, 2150);
     Inventory.ClickItem(RawItem, '>');
@@ -1367,6 +1370,7 @@ begin
   begin
     MainScreen.CloseInterface(True);
     WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Fast casting standard order.');
     for i := 1 to RawItemCount do
     begin
       CastSpell();
@@ -1387,6 +1391,9 @@ else if SCRIPTSPEED = NORMAL then
 begin
   if SRL.Dice(15) then
   begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Slow casting');
     Magic.CastSpell(ERSSpell.PLANK_MAKE);
     WaitUntil(Inventory.IsOpen(), 375, 2150);
     Inventory.ClickItem(RawItem, '>');
@@ -1396,6 +1403,7 @@ begin
   begin
     MainScreen.CloseInterface(True);
     WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Fast casting standard order.');
     for i := 1 to RawItemCount do
     begin
       CastSpell();
@@ -1416,6 +1424,9 @@ else if SCRIPTSPEED = FAST then
 begin
   if SRL.Dice(10) then
   begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Slow casting');
     Magic.CastSpell(ERSSpell.PLANK_MAKE);
     WaitUntil(Inventory.IsOpen(), 375, 2150);
     Inventory.ClickItem(RawItem, '>');
