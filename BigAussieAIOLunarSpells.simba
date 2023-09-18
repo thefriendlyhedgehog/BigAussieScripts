@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.06 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.07 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -178,7 +178,7 @@ end;
 function GetRandomRangeShort(ScriptSpeed: ScriptSpeedTypes): Integer;
 begin
   case ScriptSpeed of
-    SLOW: Result := RandomRange(385, 485);
+    SLOW: Result := RandomRange(385, 400);
     NORMAL: Result := RandomRange(385, 400);
     FAST: Result := RandomRange(385, 400);
     TURBO: Result := RandomRange(385, 400);
@@ -188,10 +188,10 @@ end;
 function GetRandomRangeLong(ScriptSpeed: ScriptSpeedTypes): Integer;
 begin
   case ScriptSpeed of
-    SLOW: Result := RandomRange(1000, 1500);
-    NORMAL: Result := RandomRange(900, 1200);
-    FAST: Result := RandomRange(900, 1200);
-    TURBO: Result := RandomRange(900, 1200);
+    SLOW: Result := RandomRange(1200, 1500);
+    NORMAL: Result := RandomRange(1200, 1500);
+    FAST: Result := RandomRange(1200, 1500);
+    TURBO: Result := RandomRange(1200, 1500);
   end;
 end;
 
@@ -864,13 +864,13 @@ end;
 procedure AIOLunarSpells.WithdrawAstralRunes();
 begin
   ItemFinder.Similarity := 0.999;
-  if Inventory.CountItemStack(AstralRune) < AstralRunesRequired then
+  if Inventory.CountItemStack(AstralRune) < 30 then // We need to make sure we have enough runes for every cast, This is a crude workaround but the easiest option
   begin
     WriteLn('Looking for ' + AstralRune);
     Bank.WithdrawItem(AstralRuneBank, True);
     WaitUntil(Inventory.ContainsItem(AstralRune), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
 
-    if BUYRUNESCHECK and (Inventory.CountItemStack(AstralRune) < AstralRunesRequired) then
+    if BUYRUNESCHECK and (Inventory.CountItemStack(AstralRune) < 30) then
     begin
       case CHOSENSPELL of
         BAKE_PIE: AstralRunesToBuy := QuantityInput;
@@ -893,6 +893,7 @@ end;
 procedure AIOLunarSpells.WithdrawRawItem(RawItem: TRSitem; RawItemBank: TRSBankItem; QuantityInput: integer; BUYRAWMATERIALS: boolean);
 var
   attempts: Int32;
+  withdrawAttempts: Int32;
 begin
   attempts := 0;
   while (attempts < 5) and (not Bank.IsOpen()) do
@@ -915,23 +916,31 @@ begin
   end
   else
   begin
-    if Bank.ContainsItem(RawItem) then
+    withdrawAttempts := 0;
+    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItem)) and (not Inventory.ContainsItem(RawItem)) do
     begin
       WriteLn('Looking for ' + RawItem);
       Bank.WithdrawItem(RawItemBank, True);
-  
-      if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
-        WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
-      else
-        WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      Inc(withdrawAttempts);
+      Wait(RandomRange(1000, 2000)); // wait before retrying
+    end;
 
-      if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
-      begin
-        RawItemToBuy := QuantityInput;
-        WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
-      end;
-    end
+    if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
+      WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
     else
+      WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+
+    if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
+    begin
+      RawItemToBuy := QuantityInput;
+      WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
+    end;
+
+    if not Inventory.ContainsItem(Rawitem) and (Bank.CountItem(RawItem) > 0) then
+    begin
+      WriteLn('Failed to withdraw ' + RawItem + '. Trying again.');
+    end
+    else if not Inventory.ContainsItem(RawItem) then
     begin
       WriteLn(RawItem + ' not found in the bank.');
     end;
@@ -959,23 +968,28 @@ begin
 end;
 
 procedure AIOLunarSpells.CheckInventoryLogoutIfEmpty(itemName: TRSitem);
+var
+  astralRunesCount, itemArray5Count: Int32;
 begin
-  if not Inventory.ContainsItem(itemName) then
+  astralRunesCount := Inventory.CountItemStack(AstralRune);
+  itemArray5Count := Inventory.CountItemStack(ItemArray5);
+
+  if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
   begin
     Logout.ClickLogout;
-    WriteLn('We are out of ' + itemName + ' and buying is disabled. Logging out.');
+    WriteLn('We are out of ' + itemName + ', AstralRunes or ItemArray5 and buying is disabled. Logging out.');
     TerminateScript();
   end;
 end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
-  if Inventory.CountItemStack(ItemArray5) < (RequiredItemArray5) then
+  if (Inventory.CountItemStack(ItemArray5) < 30) and (CHOSENSPELL <> HUMIDIFY) then
   begin
     WriteLn('Looking for ' + ItemArray5);
     Bank.WithdrawItem(ItemArray5Bank, True);
     WaitUntil(Inventory.ContainsItem(ItemArray5), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    if Inventory.CountItemStack(ItemArray5) < (RequiredItemArray5) then
+    if Inventory.CountItemStack(ItemArray5) < 30 then
     begin
       if BUYRUNESCHECK then
       begin
@@ -1045,7 +1059,9 @@ begin
       else if CHOSENSPELL = HUMIDIFY then
         waitTimeCasting := TSRL.SkewedRand(1000, 1100, 1200)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1300, 1400, 1500);
+        waitTimeCasting := TSRL.SkewedRand(1300, 1400, 1500)
+      else if CHOSENSPELL = PLANK_MAKE then
+        waitTimeCasting := TSRL.SkewedRand(700, 750, 900);
     NORMAL: 
       if CHOSENSPELL = SPIN_FLAX then
         waitTimeCasting := TSRL.SkewedRand(1600, 1700, 1800)
@@ -1054,7 +1070,9 @@ begin
       else if CHOSENSPELL = HUMIDIFY then
         waitTimeCasting := TSRL.SkewedRand(900, 950, 1050)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(1100, 1150, 1250);
+        waitTimeCasting := TSRL.SkewedRand(1100, 1150, 1250)
+      else if CHOSENSPELL = PLANK_MAKE then
+        waitTimeCasting := TSRL.SkewedRand(500, 650, 750);
     FAST: 
       if CHOSENSPELL = SPIN_FLAX then
         waitTimeCasting := TSRL.SkewedRand(1580, 1650, 1750)
@@ -1063,7 +1081,9 @@ begin
       else if CHOSENSPELL = HUMIDIFY then
         waitTimeCasting := TSRL.SkewedRand(800, 900, 1000)
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(900, 1000, 1100);
+        waitTimeCasting := TSRL.SkewedRand(900, 1000, 1100)
+      else if CHOSENSPELL = PLANK_MAKE then
+        waitTimeCasting := TSRL.SkewedRand(500, 550, 750);
     TURBO: 
       if CHOSENSPELL = SPIN_FLAX then
         waitTimeCasting := TSRL.SkewedRand(1580, 1580, 1650) // This is optimised.
@@ -1072,7 +1092,9 @@ begin
       else if CHOSENSPELL = HUMIDIFY then
         waitTimeCasting := TSRL.SkewedRand(800, 800, 900) // This is optimised.
       else if CHOSENSPELL = SUPERGLASS_MAKE then
-        waitTimeCasting := TSRL.SkewedRand(900, 900, 1000); // This is optimised
+        waitTimeCasting := TSRL.SkewedRand(900, 900, 1000) // This is optimised
+      else if CHOSENSPELL = PLANK_MAKE then
+        waitTimeCasting := TSRL.SkewedRand(0, 0, 0);
   end;
 end;
 
@@ -1252,6 +1274,29 @@ begin
   OpenBankDepositItem(ProcessedItemBank);
 end;     
 
+procedure AIOLunarSpells.CastInReverseOrder();
+var
+  slots: TIntegerArray;
+  i: Int32;
+begin
+  WriteLn('Fast casting reverse order.');
+  if Inventory.FindItem(RawItem, slots) then
+  begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    for i := High(slots) downto Low(slots) do
+    begin
+      CastSpell();
+      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      Inventory.ClickSlot(slots[i], '>');
+      if not Inventory.ContainsItem(RawItem) then
+        break;
+      Wait(waitTimeCasting);
+      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    end;
+  end;
+end;
+
 procedure AIOLunarSpells.doPlankMake();
 var
   RawItemCount: Int32;
@@ -1309,100 +1354,127 @@ begin
   RawItemCount := Inventory.CountItem(RawItem);
   RawTotal += RawItemCount;
   Wait(RandomRange(60, 80)); // Small wait to count invent
-  MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100); 
-  if SCRIPTSPEED = SLOW then
+if SCRIPTSPEED = SLOW then
+begin
+  if SRL.Dice(30) then
   begin
-    if SRL.Dice(50) then
+    Magic.CastSpell(ERSSpell.PLANK_MAKE);
+    WaitUntil(Inventory.IsOpen(), 375, 2150);
+    Inventory.ClickItem(RawItem, '>');
+    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+  end
+  else if SRL.Dice(50) then
+  begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    for i := 1 to RawItemCount do
     begin
-      for i := 1 to RawItemCount do
-      begin
-        CastSpell();
-        WaitUntil(Inventory.IsOpen(), 375, 2150);
-        Inventory.ClickItem(RawItem, '>');
-        if not Inventory.ContainsItem(RawItem) then
-          break;
-        Wait(RandomRange(600, 700));
-        WaitUntil(Magic.IsOpen(), 375, 2150);
-      end;
-    end
-    else
-    begin
-      Magic.CastSpell(ERSSpell.PLANK_MAKE);
-      WaitUntil(Inventory.IsOpen(), 375, 2150);
+      CastSpell();
+      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+      if not Inventory.ContainsItem(RawItem) then
+        break;
+      Wait(waitTimeCasting);
+      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
-  else if SCRIPTSPEED = NORMAL then
+  else
   begin
-    if SRL.Dice(80) then
-    begin
-      for i := 1 to RawItemCount do
-      begin
-        CastSpell();
-        WaitUntil(Inventory.IsOpen(), 280, 2150);
-        Inventory.ClickItem(RawItem, '>');
-        if not Inventory.ContainsItem(RawItem) then
-          break;
-        Wait(RandomRange(650, 750));
-        WaitUntil(Magic.IsOpen(), 280, 2150);
-      end;
-    end
-    else
-    begin
-      Magic.CastSpell(ERSSpell.PLANK_MAKE);
-      WaitUntil(Inventory.IsOpen(), 375, 2150);
-      Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
-    end;
-  end
-  else if SCRIPTSPEED = FAST then
-  begin
-    if SRL.Dice(90) then
-    begin
-      for i := 1 to RawItemCount do
-      begin
-        CastSpell();
-        WaitUntil(Inventory.IsOpen(), 375, 2150);
-        Inventory.ClickItem(RawItem, '>');
-        if not Inventory.ContainsItem(RawItem) then
-          break;
-        Wait(RandomRange(600, 700));
-        WaitUntil(Magic.IsOpen(), 375, 2150);
-      end;
-    end
-    else
-    begin
-      Magic.CastSpell(ERSSpell.PLANK_MAKE);
-      WaitUntil(Inventory.IsOpen(), 375, 2150);
-      Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
-    end;
-  end
-  else if SCRIPTSPEED = TURBO then
-  begin
-    if SRL.Dice(99) then
-    begin
-      for i := 1 to RawItemCount do
-      begin
-        CastSpell();
-        WaitUntil(Inventory.IsOpen(), 375, 2150);
-        Inventory.ClickItem(RawItem, '>');
-        if not Inventory.ContainsItem(RawItem) then
-          break;
-        Wait(RandomRange(600, 700));
-        WaitUntil(Magic.IsOpen(), 375, 2150);
-      end;
-    end
-    else
-    begin
-      Magic.CastSpell(ERSSpell.PLANK_MAKE);
-      WaitUntil(Inventory.IsOpen(), 375, 2150);
-      Inventory.ClickItem(RawItem, '>');
-      WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
-    end;
+    CastInReverseOrder();
   end;
+end
+else if SCRIPTSPEED = NORMAL then
+begin
+  if SRL.Dice(15) then
+  begin
+    Magic.CastSpell(ERSSpell.PLANK_MAKE);
+    WaitUntil(Inventory.IsOpen(), 375, 2150);
+    Inventory.ClickItem(RawItem, '>');
+    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+  end
+  else if SRL.Dice(40) then
+  begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    for i := 1 to RawItemCount do
+    begin
+      CastSpell();
+      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      Inventory.ClickItem(RawItem, '>');
+      if not Inventory.ContainsItem(RawItem) then
+        break;
+      Wait(waitTimeCasting);
+      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    end;
+  end
+  else
+  begin
+    CastInReverseOrder();
+  end;
+end
+else if SCRIPTSPEED = FAST then
+begin
+  if SRL.Dice(10) then
+  begin
+    Magic.CastSpell(ERSSpell.PLANK_MAKE);
+    WaitUntil(Inventory.IsOpen(), 375, 2150);
+    Inventory.ClickItem(RawItem, '>');
+    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+  end
+  else if SRL.Dice(20) then
+  begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Fast casting standard order.');
+    for i := 1 to RawItemCount do
+    begin
+      CastSpell();
+      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      Inventory.ClickItem(RawItem, '>');
+      if not Inventory.ContainsItem(RawItem) then
+        break;
+      Wait(waitTimeCasting);
+      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    end;
+  end
+  else
+  begin
+    CastInReverseOrder();
+  end;
+end
+else if SCRIPTSPEED = TURBO then
+begin
+  if SRL.Dice(5) then
+  begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Slow casting');
+    Magic.CastSpell(ERSSpell.PLANK_MAKE);
+    WaitUntil(Inventory.IsOpen(), 375, 2150);
+    Inventory.ClickItem(RawItem, '>');
+    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+  end
+  else if SRL.Dice(15) then
+  begin
+    MainScreen.CloseInterface(True);
+    WaitUntil(not Bank.IsOpen(), 375, 2100); 
+    WriteLn('Fast casting standard order.');
+    for i := 1 to RawItemCount do
+    begin
+      CastSpell();
+      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      Inventory.ClickItem(RawItem, '>');
+      if not Inventory.ContainsItem(RawItem) then
+        break;
+      Wait(waitTimeCasting);
+      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    end;
+  end
+  else
+  begin
+    CastInReverseOrder();
+  end;
+end;
   CastCount += Inventory.CountItem(ProcessedItem);
   Self.Report();
   CheckBreakSleepLevel();
@@ -1493,7 +1565,7 @@ end;
       if Bank.ContainsItem(StaffBankItem) then
       begin
         Bank.WithdrawItem(StaffBankItem, True);
-        WaitUntil(Inventory.ContainsItem(StaffName), 385, RandomRange(800, 1200));
+        WaitUntil(Inventory.ContainsItem(StaffName), 385, RandomRange(1200, 1500));
         if Inventory.ContainsItem(StaffName) then    
         begin
           WriteLn('Found ' + StaffName + '.');
