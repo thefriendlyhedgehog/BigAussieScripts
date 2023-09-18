@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.07 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.08 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -18,10 +18,10 @@ var
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
   SELECTEDITEM: string;                       //= Berry Pie
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
-  BUYRUNESCHECK: Boolean                      = True; // If you have no Astral Runes in your inventory or bank the script will buy more. (The amount purchased will be 1/27 of your clay quantity)
-  BUYRAWMATERIALS: Boolean                    = True; // If you have no Clay in your inventory or bank the script will buy the amount below in the QuantityInput.
-  SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all Soft Clay before any of the other shopping methods.
-  QUANTITYINPUT: Integer                      = 10000;// When you run out of Clay this is how many the script should buy.
+  BUYRUNESCHECK: Boolean                      = True; // If you have no Astral Runes in your inventory or bank the script will buy more.
+  BUYRAWMATERIALS: Boolean                    = True; // If you have no Raw Items in your inventory or bank the script will buy the amount below in the QuantityInput.
+  SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all finished items before any of the other shopping methods.
+  QUANTITYINPUT: Integer                      = 10000;// When you run out of raw items this is how many the script should buy.
   PRICESAPICHECK: Boolean                     = True; // If you are having issues with the prices API no loading this will disable prices, [ALL GRAND EXCHANGE FEATURES WILL BE DISABLED, ALSO YOU WILL NOT GET A PROFIT REPORT]
 //===========================================
 
@@ -972,7 +972,11 @@ var
   astralRunesCount, itemArray5Count: Int32;
 begin
   astralRunesCount := Inventory.CountItemStack(AstralRune);
-  itemArray5Count := Inventory.CountItemStack(ItemArray5);
+  
+  if (CHOSENSPELL = SUPERGLASS_MAKE) or (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = PLANK_MAKE) then
+    itemArray5Count := Inventory.CountItemStack(ItemArray5)
+  else
+    itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
 
   if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
   begin
@@ -1172,8 +1176,8 @@ begin
     CheckInventoryLogoutIfEmpty(RawItem);
     CheckInventoryLogoutIfEmpty(AstralRune);
   end;
-  RawItemCount := Inventory.CountItem(RawItem);
-  RawTotal += RawItemCount;
+  //RawItemCount := Inventory.CountItem(RawItem);
+  //RawTotal += RawItemCount;
   Wait(RandomRange(60, 80));
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 375, 2100);  
@@ -1625,7 +1629,7 @@ begin
     SPIN_FLAX: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
     TAN_LEATHER: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue * 2 + ItemArray5Value);
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue * 2;
-    PLANK_MAKE: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(RawTotal / 27.0)) * (RuneValue * 2 + ItemArray5Value) - CoinCostPerCast * RawTotal;
+    PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - CoinCostPerCast) - Round(ceil(ProcessedTotal / 27.0)) * (RuneValue * 2 + ItemArray5Value);
     RECHARGE_DRAGONSTONE: Result := Trunc(((ProcessedItemValue * 25) - (RawItemValue * 25) - ItemArray5Value - RuneValue) * (RawTotal / 25));    SUPERGLASS_MAKE:
     begin
       if RawItem = 'Giant seaweed' then
