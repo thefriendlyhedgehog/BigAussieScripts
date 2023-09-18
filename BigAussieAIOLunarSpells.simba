@@ -1359,14 +1359,10 @@ begin
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
-  else
-  begin
-    CastInReverseOrder();
-  end;
 end
 else if SCRIPTSPEED = NORMAL then
 begin
-  if SRL.Dice(15) then
+  if SRL.Dice(10) then
   begin
     MainScreen.CloseInterface(True);
     WaitUntil(not Bank.IsOpen(), 375, 2100); 
@@ -1376,7 +1372,7 @@ begin
     Inventory.ClickItem(RawItem, '>');
     WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
   end
-  else if SRL.Dice(40) then
+  else if SRL.Dice(50) then
   begin
     MainScreen.CloseInterface(True);
     WaitUntil(not Bank.IsOpen(), 375, 2100); 
@@ -1392,10 +1388,6 @@ begin
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
-  else
-  begin
-    CastInReverseOrder();
-  end;
 end
 else if SCRIPTSPEED = FAST then
 begin
@@ -1425,10 +1417,6 @@ begin
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
-  else
-  begin
-    CastInReverseOrder();
-  end;
 end
 else if SCRIPTSPEED = TURBO then
 begin
@@ -1458,10 +1446,6 @@ begin
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
-  else
-  begin
-    CastInReverseOrder();
-  end;
 end;
   CastCount += Inventory.CountItem(ProcessedItem);
   Self.Report();
