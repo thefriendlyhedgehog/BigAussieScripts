@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.09 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.10 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -479,6 +479,11 @@ begin
   end;
   Mouse.Distribution := MOUSE_DISTRIBUTION_GAUSS;
   MainScreen.CloseInterface(True);
+  while MainScreen.HasInterface() do
+  begin
+    MainScreen.CloseInterface(True);
+    Wait(250);
+  end;
   StartXP := XPBar.Read();
   CastCount := 0;
   CoinsCount := 0;
@@ -918,7 +923,7 @@ begin
   else
   begin
     withdrawAttempts := 0;
-    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItem)) and (not Inventory.ContainsItem(RawItem)) do
+    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItemBank)) and (not Inventory.ContainsItem(RawItem)) do
     begin
       WriteLn('Looking for ' + RawItem);
       Bank.WithdrawItem(RawItemBank, True);
@@ -985,6 +990,7 @@ else
   begin
     Logout.ClickLogout;
     WriteLn('We are out of ' + itemName + ', AstralRunes or ItemArray5 and buying is disabled. Logging out.');
+    WriteLn('If this is incorrect, make sure your item/runes are at the top on the all tab.');
     TerminateScript();
   end;
 end;
@@ -1045,7 +1051,7 @@ begin
 
   Magic.CastSpell(spell);
 
-  if (Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK])) or 
+  if (Chat.FindLastMessage('You do not have enough', [CHAT_COLOR_BLACK])) or 
      ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) then
   begin
     TakeScreenshot('BlackTextError');
