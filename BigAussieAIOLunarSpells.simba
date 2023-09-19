@@ -479,7 +479,6 @@ begin
   end;
   Mouse.Distribution := MOUSE_DISTRIBUTION_GAUSS;
   MainScreen.CloseInterface(True);
-  WaitUntil(not MainScreen.AnyInterfaceOpen(), 100, 2000);
   StartXP := XPBar.Read();
   CastCount := 0;
   CoinsCount := 0;
