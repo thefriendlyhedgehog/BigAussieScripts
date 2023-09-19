@@ -1337,7 +1337,6 @@ begin
   end;
   RawItemCount := Inventory.CountItem(RawItem);
   RawTotal += RawItemCount;
-  WriteLn('RawTotal: ' + IntToStr(RawTotal));
   Wait(RandomRange(60, 80)); // Small wait to count invent
 if SCRIPTSPEED = SLOW then
 begin
