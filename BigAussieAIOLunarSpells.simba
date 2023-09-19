@@ -479,8 +479,8 @@ begin
   end;
   Mouse.Distribution := MOUSE_DISTRIBUTION_GAUSS;
   MainScreen.CloseInterface(True);
+  WaitUntil(not MainScreen.AnyInterfaceOpen(), 100, 2000);
   StartXP := XPBar.Read();
-//  ProcessedTotal := 0;
   CastCount := 0;
   CoinsCount := 0;
   CoinsChecked := False;
@@ -1737,14 +1737,14 @@ end;
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
   WriteLn('========================================');
 // This is just debug shit because math is stupid and hard
-      WriteLn('RawTotal: ' + IntToStr(RawTotal));
+//      WriteLn('RawTotal: ' + IntToStr(RawTotal));
 //      WriteLn('Processed Total: ' + IntToStr(ProcessedTotal));
-      WriteLn('RawItemValue: ' + IntToStr(RawItemValue));
-      WriteLn('ProcessedItemValue: ' + IntToStr(ProcessedItemValue));
+//      WriteLn('RawItemValue: ' + IntToStr(RawItemValue));
+//      WriteLn('ProcessedItemValue: ' + IntToStr(ProcessedItemValue));
 //      WriteLn('RawTotalSand: ' + IntToStr(RawTotalSand));
-      WriteLn('ItemArray5Value: ' + IntToStr(ItemArray5Value));
-      WriteLn('RuneValue: ' + IntToStr(RuneValue));    
-      WriteLn('CoinCostPerCast: ' + IntToStr(CoinCostPerCast));  
+//      WriteLn('ItemArray5Value: ' + IntToStr(ItemArray5Value));
+//      WriteLn('RuneValue: ' + IntToStr(RuneValue));    
+//      WriteLn('CoinCostPerCast: ' + IntToStr(CoinCostPerCast));  
 end;
 
 var
