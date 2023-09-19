@@ -1691,8 +1691,7 @@ begin
   if Profit = 0 then
     WriteLn('   Total Profit: Calculating')
   else
-      WriteLn('   Total Profit: ' + IntToStr(Profit));
-//    WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
+      WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
 //  if (Length(Antiban.Breaks) > 0) then
 //    WriteLn('   Time until next break: ' + NextBreakTime);
   if (Length(Antiban.Sleeps) > 0) then
