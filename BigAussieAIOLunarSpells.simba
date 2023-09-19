@@ -1360,9 +1360,9 @@ begin
       CastSpell();
       WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
       if not Inventory.ContainsItem(RawItem) then
         break;
+      Wait(waitTimeCasting);
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
@@ -1389,9 +1389,9 @@ begin
       CastSpell();
       WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
       if not Inventory.ContainsItem(RawItem) then
         break;
+      Wait(waitTimeCasting);
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
@@ -1418,9 +1418,9 @@ begin
       CastSpell();
       WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
       if not Inventory.ContainsItem(RawItem) then
         break;
+      Wait(waitTimeCasting);
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
@@ -1447,17 +1447,16 @@ begin
       CastSpell();
       WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
       if not Inventory.ContainsItem(RawItem) then
         break;
+      Wait(waitTimeCasting);
       WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
 end;
   CastCount += Inventory.CountItem(ProcessedItem);
-  CheckBreakSleepLevel();
-if not MainScreen.HasInterface() then
   Self.Report();
+  CheckBreakSleepLevel();
   bank.Hover();
   Wait(RandomRange(600, 700));
 end;
@@ -1674,8 +1673,7 @@ var
   CurrentXP, GainedXP, XP, Profit: Integer;
 begin
   ClearDebug();
-  if not MainScreen.HasInterface() then
-    CurrentXP := XPBar.Read();
+  CurrentXP := XPBar.Read();   
   GainedXP := CurrentXP - startXP;
   XP := TotalActions * 14 * 200;
   Profit := CalculateProfit();
