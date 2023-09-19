@@ -105,7 +105,8 @@ var
   ItemArray5Quantity,
   RawItemSandQuantity,
   AstralRunesRequired,
-  RequiredItemArray5: Integer;
+  RequiredItemArray5,
+  CoinCostPerCast: Integer;
 
   NextBreakTime,
   NextSleepTime: String;
@@ -477,8 +478,9 @@ begin
     TURBO: Mouse.Speed += Random(24, 27);
   end;
   Mouse.Distribution := MOUSE_DISTRIBUTION_GAUSS;
+  MainScreen.CloseInterface(True);
   StartXP := XPBar.Read();
-  ProcessedTotal := 0;
+//  ProcessedTotal := 0;
   CastCount := 0;
   CoinsCount := 0;
   CoinsChecked := False;
@@ -845,7 +847,7 @@ begin
 
   if Bank.IsOpen() then
   begin
-    ProcessedTotal += Inventory.CountItem(ProcessedItem);
+//    ProcessedTotal += Inventory.CountItem(ProcessedItem);
     if Inventory.ContainsItem(item.Item) then
     begin
       Bank.DepositItem(item, True);
@@ -973,10 +975,12 @@ var
 begin
   astralRunesCount := Inventory.CountItemStack(AstralRune);
   
-  if (CHOSENSPELL = SUPERGLASS_MAKE) or (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = PLANK_MAKE) then
-    itemArray5Count := Inventory.CountItemStack(ItemArray5)
-  else
-    itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
+if (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = PLANK_MAKE) then
+  itemArray5Count := Inventory.CountItemStack(ItemArray5)
+else if (CHOSENSPELL = SUPERGLASS_MAKE) then
+  itemArray5Count := 30 // Fix this later
+else
+  itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
 
   if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
   begin
@@ -1042,7 +1046,7 @@ begin
 
   Magic.CastSpell(spell);
 
-  if (Chat.FindLastMessage('not', [CHAT_COLOR_BLACK])) or 
+  if (Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK])) or 
      ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) then
   begin
     TakeScreenshot('BlackTextError');
@@ -1176,8 +1180,8 @@ begin
     CheckInventoryLogoutIfEmpty(RawItem);
     CheckInventoryLogoutIfEmpty(AstralRune);
   end;
-  //RawItemCount := Inventory.CountItem(RawItem);
-  //RawTotal += RawItemCount;
+  RawItemCount := Inventory.CountItem(RawItem);
+  RawTotal += RawItemCount;
   Wait(RandomRange(60, 80));
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 375, 2100);  
@@ -1334,6 +1338,7 @@ begin
   end;
   RawItemCount := Inventory.CountItem(RawItem);
   RawTotal += RawItemCount;
+  WriteLn('RawTotal: ' + IntToStr(RawTotal));
   Wait(RandomRange(60, 80)); // Small wait to count invent
 if SCRIPTSPEED = SLOW then
 begin
@@ -1614,8 +1619,6 @@ begin
 end;
 
 function AIOLunarSpells.CalculateProfit(): Integer;
-var
-  CoinCostPerCast: Integer;
 begin
   case RawItem of
     'Logs': CoinCostPerCast := 70;
@@ -1624,13 +1627,14 @@ begin
     'Mahogany logs': CoinCostPerCast := 1050;
   end;
   case ChosenSpell of
-    BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue;
-    HUMIDIFY: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(ProcessedTotal / 27.0)) * RuneValue;
-    SPIN_FLAX: Result := ProcessedTotal * ProcessedItemValue - RawTotal * RawItemValue - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue + 2 * ItemArray5Value);
-    TAN_LEATHER: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(ProcessedTotal / 5.0)) * (RuneValue * 2 + ItemArray5Value);
-    STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - Round(ceil(RawTotal / 27.0)) * RuneValue * 2;
-    PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - CoinCostPerCast) - Round(ceil(ProcessedTotal / 27.0)) * (RuneValue * 2 + ItemArray5Value);
-    RECHARGE_DRAGONSTONE: Result := Trunc(((ProcessedItemValue * 25) - (RawItemValue * 25) - ItemArray5Value - RuneValue) * (RawTotal / 25));    SUPERGLASS_MAKE:
+    BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue);
+    HUMIDIFY: Result := Trunc((RawTotal / 5) * ((ProcessedItemValue * 5) - (RawItemValue * 5 + RuneValue))); // This is 100% correct
+    SPIN_FLAX: Result := RawTotal * ((ProcessedItemValue * 5) - (RawItemValue * 5) - RuneValue - (2 * ItemArray5Value)); // This is 100% correct
+    TAN_LEATHER: Result := Round((ProcessedItemValue * 5 * (RawTotal / 5)) - (RawItemValue * RawTotal) - (RuneValue * 2 * (RawTotal / 5)) - (ItemArray5Value * (RawTotal / 5))); // This is 100% correct
+    STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue); // Untested but updated.
+    PLANK_MAKE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue * 2 - ItemArray5Value - CoinCostPerCast); // This is 100% Accurate now
+    RECHARGE_DRAGONSTONE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue - ItemArray5Value);
+    SUPERGLASS_MAKE:
     begin
       if RawItem = 'Giant seaweed' then
       begin
@@ -1689,7 +1693,8 @@ begin
   if Profit = 0 then
     WriteLn('   Total Profit: Calculating')
   else
-    WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
+      WriteLn('   Total Profit: ' + IntToStr(Profit));
+//    WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
 //  if (Length(Antiban.Breaks) > 0) then
 //    WriteLn('   Time until next break: ' + NextBreakTime);
   if (Length(Antiban.Sleeps) > 0) then
@@ -1732,14 +1737,14 @@ end;
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
   WriteLn('========================================');
 // This is just debug shit because math is stupid and hard
-//      WriteLn('RawTotal: ' + IntToStr(RawTotal));
+      WriteLn('RawTotal: ' + IntToStr(RawTotal));
 //      WriteLn('Processed Total: ' + IntToStr(ProcessedTotal));
-//      WriteLn('RawItemValue: ' + IntToStr(RawItemValue));
-//      WriteLn('ProcessedItemValue: ' + IntToStr(ProcessedItemValue));
+      WriteLn('RawItemValue: ' + IntToStr(RawItemValue));
+      WriteLn('ProcessedItemValue: ' + IntToStr(ProcessedItemValue));
 //      WriteLn('RawTotalSand: ' + IntToStr(RawTotalSand));
-//      WriteLn('ItemArray5Value: ' + IntToStr(ItemArray5Value));
-//      WriteLn('RuneValue: ' + IntToStr(RuneValue));
-      
+      WriteLn('ItemArray5Value: ' + IntToStr(ItemArray5Value));
+      WriteLn('RuneValue: ' + IntToStr(RuneValue));    
+      WriteLn('CoinCostPerCast: ' + IntToStr(CoinCostPerCast));  
 end;
 
 var
