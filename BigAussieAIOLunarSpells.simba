@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.10 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.11 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -30,6 +30,7 @@ begin
 end;
 
 type
+  TFocusState = (fsFocused, fsUnfocused);
   TItem = record
     Name: string;
     AssociatedItems: array of string;
@@ -76,6 +77,7 @@ end;
 
 var
 
+  FocusState: TFocusState;
   Items: array of TItem;
   StaffNames: Array of String;
 
@@ -98,7 +100,8 @@ var
   RawItemCount,
   RawItemToBuy,
   ProcessedItemQuantity,
-  CoinsCount: Int32;
+  CoinsCount,
+  FocusTimer: Int32;
 
   currentLevel,
   RawItemQuantity,
@@ -176,23 +179,77 @@ begin
   end;
 end;
 
+procedure SwitchFocusState();
+var
+  focusedDuration, unfocusedDuration: Int32;
+  skewness: Int32;
+  switchChance: Int32;
+begin
+  skewness := Random(2, 4);
+
+  // Adjust the chance to switch focus state and the duration of the focused state
+  case SCRIPTSPEED of
+    SLOW: 
+    begin
+      switchChance := 20; // 20% chance to switch focus state
+      focusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 10 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 5 to 10 minutes
+      unfocusedDuration := srl.SkewedRand(10 * 60 * 1000, 0, 20 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 10 to 20 minutes
+    end;
+    NORMAL: 
+    begin
+      switchChance := 15; // 15% chance to switch focus state
+      focusedDuration := srl.SkewedRand(10 * 60 * 1000, 0, 15 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 10 to 15 minutes
+      unfocusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 11 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 5 to 11 minutes
+    end;
+    FAST: 
+    begin
+      switchChance := 10; // 10% chance to switch focus state
+      focusedDuration := srl.SkewedRand(15 * 60 * 1000, 0, 20 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 15 to 20 minutes
+      unfocusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 10 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 5 to 10 minutes
+    end;
+    TURBO: 
+    begin
+      switchChance := 5; // 5% chance to switch focus state
+      focusedDuration := srl.SkewedRand(20 * 60 * 1000, 0, 25 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 20 to 25 minutes
+      unfocusedDuration := srl.SkewedRand(2 * 60 * 1000, 0, 5 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 2 to 5 minutes
+    end;
+  end;
+
+  // Random chance to switch focus state
+  if Random(100) < switchChance then
+  begin
+    if FocusState = fsFocused then
+    begin
+      FocusState := fsUnfocused;
+      FocusTimer := GetTimeRunning() + unfocusedDuration;
+      WriteLn('Switching to Unfocused mode. Will switch again in ', unfocusedDuration, ' ms.');
+    end
+    else
+    begin
+      FocusState := fsFocused;
+      FocusTimer := GetTimeRunning() + focusedDuration;
+      WriteLn('Switching to Focused mode. Will switch again in ', focusedDuration, ' ms.');
+    end;
+  end;
+end;
+
 function GetRandomRangeShort(ScriptSpeed: ScriptSpeedTypes): Integer;
 begin
   case ScriptSpeed of
-    SLOW: Result := RandomRange(385, 400);
-    NORMAL: Result := RandomRange(385, 400);
-    FAST: Result := RandomRange(385, 400);
-    TURBO: Result := RandomRange(385, 400);
+    SLOW: Result := srl.SkewedRand(385, 0, 400, 3);
+    NORMAL: Result := srl.SkewedRand(385, 0, 400, 3);
+    FAST: Result := srl.SkewedRand(385, 0, 400, 3);
+    TURBO: Result := srl.SkewedRand(385, 0, 400, 3);
   end;
 end;
 
 function GetRandomRangeLong(ScriptSpeed: ScriptSpeedTypes): Integer;
 begin
   case ScriptSpeed of
-    SLOW: Result := RandomRange(1200, 1500);
-    NORMAL: Result := RandomRange(1200, 1500);
-    FAST: Result := RandomRange(1200, 1500);
-    TURBO: Result := RandomRange(1200, 1500);
+    SLOW: Result := srl.SkewedRand(1200, 0, 1500, 3);
+    NORMAL: Result := srl.SkewedRand(1200, 0, 1500, 3);
+    FAST: Result := srl.SkewedRand(1200, 0, 1500, 3);
+    TURBO: Result := srl.SkewedRand(1200, 0, 1500, 3);
   end;
 end;
 
@@ -837,7 +894,7 @@ var
   attempts: Int32;
 begin
   attempts := 0;
-  while (attempts < 5) and (not Bank.IsOpen()) do
+  while (attempts < 3) and (not Bank.IsOpen()) do
   begin
     Bank.WalkOpen();
     WaitUntil(Bank.IsOpen(), 375, 2150);
@@ -851,7 +908,7 @@ begin
 
   if Bank.IsOpen() then
   begin
-//    ProcessedTotal += Inventory.CountItem(ProcessedItem);
+    ProcessedTotal += Inventory.CountItem(ProcessedItem);
     if Inventory.ContainsItem(item.Item) then
     begin
       Bank.DepositItem(item, True);
@@ -923,8 +980,13 @@ begin
   else
   begin
     withdrawAttempts := 0;
-    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItemBank)) and (not Inventory.ContainsItem(RawItem)) do
+    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItemBank)) and ((not Inventory.ContainsItem(RawItem)) or ((Inventory.CountItem(RawItem) < 5) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) do
     begin
+      if Inventory.IsFull() then
+      begin
+        WriteLn('Inventory is full.');
+        Break;
+      end;
       WriteLn('Looking for ' + RawItem);
       Bank.WithdrawItem(RawItemBank, True);
       Inc(withdrawAttempts);
@@ -1287,11 +1349,46 @@ begin
   OpenBankDepositItem(ProcessedItemBank);
 end;     
 
+procedure AIOLunarSpells.FastCastingStandardOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: String; waitTimeCasting: Integer);
+var
+  i: Integer;
+begin
+  MainScreen.CloseInterface(True);
+  WaitUntil(not Bank.IsOpen(), 375, 2100); 
+  WriteLn('Fast casting standard order.');
+  
+  for i := 1 to RawItemCount do
+  begin
+    CastSpell();
+    WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    Inventory.ClickItem(RawItem, '>');
+    Wait(waitTimeCasting);
+    
+    if not Inventory.ContainsItem(RawItem) then
+      break;
+      
+    WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+  end;
+end;
+
+procedure SlowAFKCasting(RawItem: String; ScriptSpeed: ScriptSpeedTypes);
+begin
+  MainScreen.CloseInterface(True);
+  WaitUntil(not Bank.IsOpen(), 375, 2100); 
+  WriteLn('Slow/AFK Casting.');
+  Magic.CastSpell(ERSSpell.PLANK_MAKE);
+  WaitUntil(Inventory.IsOpen(), 375, 2150);
+  Inventory.ClickItem(RawItem, '>');
+  WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+end;
+
 procedure AIOLunarSpells.doPlankMake();
 var
   RawItemCount: Int32;
   i: Int32;
 begin
+  FocusState := fsFocused;
+  FocusTimer := GetTimeRunning() + RandomRange(15 * 60 * 1000, 20 * 60 * 1000); // 15-20 minutes
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
@@ -1301,7 +1398,7 @@ begin
     WriteLn('Counting ' + RawItem);
     Bank.ContainsItem(RawItemBank);
     RawItemCount := Bank.CountItemStack(RawItem); // Counts all Logs in the bank.
-    WriteLn('RawItemCount ' + IntToStr(RawItemCount));
+    WriteLn('Amount of logs in bank ' + IntToStr(RawItemCount));
     case RawItem of
       'Logs': CoinsCount := ceil(RawItemCount * 70 / 1000) * 1000;
       'Oak logs': CoinsCount := ceil(RawItemCount * 172 / 1000) * 1000;
@@ -1344,122 +1441,17 @@ begin
   RawItemCount := Inventory.CountItem(RawItem);
   RawTotal += RawItemCount;
   Wait(RandomRange(60, 80)); // Small wait to count invent
-if SCRIPTSPEED = SLOW then
-begin
-  if SRL.Dice(30) then
+  if GetTimeRunning() > FocusTimer then
+    SwitchFocusState();
+
+  if FocusState = fsFocused then
   begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Slow casting');
-    Magic.CastSpell(ERSSpell.PLANK_MAKE);
-    WaitUntil(Inventory.IsOpen(), 375, 2150);
-    Inventory.ClickItem(RawItem, '>');
-    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
+    FastCastingStandardOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting);
   end
-  else if SRL.Dice(50) then
+  else // This will be the fsUnfocused state
   begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Fast casting standard order.');
-    for i := 1 to RawItemCount do
-    begin
-      CastSpell();
-      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-      Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
-      if not Inventory.ContainsItem(RawItem) then
-        break;
-      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    end;
-  end
-end
-else if SCRIPTSPEED = NORMAL then
-begin
-  if SRL.Dice(10) then
-  begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Slow casting');
-    Magic.CastSpell(ERSSpell.PLANK_MAKE);
-    WaitUntil(Inventory.IsOpen(), 375, 2150);
-    Inventory.ClickItem(RawItem, '>');
-    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
-  end
-  else if SRL.Dice(50) then
-  begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Fast casting standard order.');
-    for i := 1 to RawItemCount do
-    begin
-      CastSpell();
-      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-      Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
-      if not Inventory.ContainsItem(RawItem) then
-        break;
-      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    end;
-  end
-end
-else if SCRIPTSPEED = FAST then
-begin
-  if SRL.Dice(10) then
-  begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Slow casting');
-    Magic.CastSpell(ERSSpell.PLANK_MAKE);
-    WaitUntil(Inventory.IsOpen(), 375, 2150);
-    Inventory.ClickItem(RawItem, '>');
-    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
-  end
-  else if SRL.Dice(20) then
-  begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Fast casting standard order.');
-    for i := 1 to RawItemCount do
-    begin
-      CastSpell();
-      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-      Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
-      if not Inventory.ContainsItem(RawItem) then
-        break;
-      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    end;
-  end
-end
-else if SCRIPTSPEED = TURBO then
-begin
-  if SRL.Dice(5) then
-  begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Slow casting');
-    Magic.CastSpell(ERSSpell.PLANK_MAKE);
-    WaitUntil(Inventory.IsOpen(), 375, 2150);
-    Inventory.ClickItem(RawItem, '>');
-    WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
-  end
-  else if SRL.Dice(15) then
-  begin
-    MainScreen.CloseInterface(True);
-    WaitUntil(not Bank.IsOpen(), 375, 2100); 
-    WriteLn('Fast casting standard order.');
-    for i := 1 to RawItemCount do
-    begin
-      CastSpell();
-      WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-      Inventory.ClickItem(RawItem, '>');
-      Wait(waitTimeCasting);
-      if not Inventory.ContainsItem(RawItem) then
-        break;
-      WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    end;
-  end
-end;
+    SlowAFKCasting(RawItem, ScriptSpeed);
+  end;
   CastCount += Inventory.CountItem(ProcessedItem);
   CheckBreakSleepLevel();
 if not MainScreen.HasInterface() then
@@ -1592,6 +1584,11 @@ begin
   Self.Init(MaxActions, MaxTime);
   repeat
     Self.doAction();
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
     if not MainScreen.HasInterface() or not Bank.IsOpen() then
     begin
       case SCRIPTSPEED of
@@ -1637,7 +1634,7 @@ begin
     SPIN_FLAX: Result := RawTotal * ((ProcessedItemValue * 5) - (RawItemValue * 5) - RuneValue - (2 * ItemArray5Value)); // This is 100% correct
     TAN_LEATHER: Result := Round((ProcessedItemValue * 5 * (RawTotal / 5)) - (RawItemValue * RawTotal) - (RuneValue * 2 * (RawTotal / 5)) - (ItemArray5Value * (RawTotal / 5))); // This is 100% correct
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue); // Untested but updated.
-    PLANK_MAKE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue * 2 - ItemArray5Value - CoinCostPerCast); // This is 100% Accurate now
+    PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue - ItemArray5Value - CoinCostPerCast);
     RECHARGE_DRAGONSTONE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue - ItemArray5Value);
     SUPERGLASS_MAKE:
     begin
@@ -1678,6 +1675,8 @@ end;
 procedure AIOLunarSpells.Report();
 var
   CurrentXP, GainedXP, XP, Profit: Integer;
+  FocusStateStr: String;
+  RemainingFocusTime: Int64;
 begin
   ClearDebug();
   if not MainScreen.HasInterface() then
@@ -1689,6 +1688,11 @@ begin
     NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
   if (Length(Antiban.Sleeps) > 0) then
     NextSleepTime := SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - GetTimeRunning)), TIME_BARE);
+  if FocusState = fsFocused then
+    FocusStateStr := 'Focused'
+  else
+    FocusStateStr := 'Unfocused';
+  RemainingFocusTime := FocusTimer - GetTimeRunning();
 
   WriteLn('========================================');
   WriteLn('     BigAussies AIO Lunar Spells      ');
@@ -1704,12 +1708,14 @@ begin
 //    WriteLn('   Time until next break: ' + NextBreakTime);
   if (Length(Antiban.Sleeps) > 0) then
     WriteLn('   Time until sleep ' + NextSleepTime);
+    WriteLn('   Processed Total ' + IntToStr(ProcessedTotal));
   if STOP_AT_LEVEL <> -1 then
    WriteLn('   Current Level: ' + IntToStr(currentLevel) + ' / Stop at Level: ' + IntToStr(STOP_AT_LEVEL));
   WriteLn('----------------------------------------');
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Casts/Hour: ' + IntToStr(Round(CastCount / (GetTimeRunning() / 3600000))));
   WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
+  WriteLn('   Current Focus State: ' + FocusStateStr + ' (will switch in ' + SRL.MsToTime(RemainingFocusTime, Time_Short) + ')');
 
   if BUYRAWMATERIALS then
   begin
