@@ -1714,7 +1714,7 @@ begin
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Casts/Hour: ' + IntToStr(Round(CastCount / (GetTimeRunning() / 3600000))));
   WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
-  WriteLn('   Current Focus State: ' + FocusStateStr + ' (will switch in ' + SRL.MsToTime(RemainingFocusTime, Time_Short) + ')');
+  WriteLn('   Current Focus State: ' + FocusStateStr);
 
   if BUYRAWMATERIALS then
   begin
