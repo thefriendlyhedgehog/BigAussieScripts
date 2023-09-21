@@ -1708,7 +1708,6 @@ begin
 //    WriteLn('   Time until next break: ' + NextBreakTime);
   if (Length(Antiban.Sleeps) > 0) then
     WriteLn('   Time until sleep ' + NextSleepTime);
-    WriteLn('   Processed Total ' + IntToStr(ProcessedTotal));
   if STOP_AT_LEVEL <> -1 then
    WriteLn('   Current Level: ' + IntToStr(currentLevel) + ' / Stop at Level: ' + IntToStr(STOP_AT_LEVEL));
   WriteLn('----------------------------------------');
