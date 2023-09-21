@@ -1717,7 +1717,10 @@ begin
   WriteLn('     BigAussies AIO Lunar Spells      ');
   WriteLn('========================================');
   WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short) + '   Script Speed: ' + ScriptSpeedToString(SCRIPTSPEED));
-  WriteLn('   Current Focus State: ' + FocusStateStr + ' (will switch in ' + SRL.MsToTime(RemainingFocusTime, Time_Short) + ')');
+  if RemainingFocusTime <= 0 then
+    WriteLn('   Current Focus State: ' + FocusStateStr + ' (Will switch soon)')
+  else
+    WriteLn('   Current Focus State: ' + FocusStateStr + ' (will switch in ' + SRL.MsToTime(RemainingFocusTime, Time_Short) + ')');
   WriteLn('   Total Casts: ' + IntToStr(CastCount) + ' ' + SpellToString(ChosenSpell) + ' on ' + RawItem);
   WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
   if Profit = 0 then
