@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.11 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.12 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -192,43 +192,61 @@ begin
     SLOW: 
     begin
       switchChance := 20; // 20% chance to switch focus state
-      focusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 10 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 5 to 10 minutes
-      unfocusedDuration := srl.SkewedRand(10 * 60 * 1000, 0, 20 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 10 to 20 minutes
+      focusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 8 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 5 to 8 minutes
+      unfocusedDuration := srl.SkewedRand(8 * 60 * 1000, 0, 12 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 8 to 12 minutes
     end;
     NORMAL: 
     begin
       switchChance := 15; // 15% chance to switch focus state
-      focusedDuration := srl.SkewedRand(10 * 60 * 1000, 0, 15 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 10 to 15 minutes
-      unfocusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 11 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 5 to 11 minutes
+      focusedDuration := srl.SkewedRand(8 * 60 * 1000, 0, 15 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 8 to 15 minutes
+      unfocusedDuration := srl.SkewedRand(4 * 60 * 1000, 0, 8 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 4 to 8 minutes
     end;
     FAST: 
     begin
       switchChance := 10; // 10% chance to switch focus state
       focusedDuration := srl.SkewedRand(15 * 60 * 1000, 0, 20 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 15 to 20 minutes
-      unfocusedDuration := srl.SkewedRand(5 * 60 * 1000, 0, 10 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 5 to 10 minutes
+      unfocusedDuration := srl.SkewedRand(4 * 60 * 1000, 0, 8 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 4 to 8 minutes
     end;
     TURBO: 
     begin
       switchChance := 5; // 5% chance to switch focus state
-      focusedDuration := srl.SkewedRand(20 * 60 * 1000, 0, 25 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 20 to 25 minutes
+      focusedDuration := srl.SkewedRand(15 * 60 * 1000, 0, 25 * 60 * 1000, skewness) + Random(-1000, 1000); // Focused for roughly 15 to 25 minutes
       unfocusedDuration := srl.SkewedRand(2 * 60 * 1000, 0, 5 * 60 * 1000, skewness) + Random(-1000, 1000); // Unfocused for roughly 2 to 5 minutes
     end;
   end;
 
-  // Random chance to switch focus state
-  if Random(100) < switchChance then
+ if GetTimeRunning() >= FocusTimer then
   begin
     if FocusState = fsFocused then
     begin
       FocusState := fsUnfocused;
       FocusTimer := GetTimeRunning() + unfocusedDuration;
-      WriteLn('Switching to Unfocused mode. Will switch again in ', unfocusedDuration, ' ms.');
+      WriteLn('Switching to Unfocused mode. Will switch again in ', SRL.MsToTime(unfocusedDuration, Time_Short));
     end
     else
     begin
       FocusState := fsFocused;
       FocusTimer := GetTimeRunning() + focusedDuration;
-      WriteLn('Switching to Focused mode. Will switch again in ', focusedDuration, ' ms.');
+      WriteLn('Switching to Focused mode. Will switch again in ', SRL.MsToTime(focusedDuration, Time_Short));
+    end;
+  end
+  else
+  begin
+    // Random chance to switch focus state before the duration is reached
+    if Random(100) < switchChance then
+    begin
+      if FocusState = fsFocused then
+      begin
+        FocusState := fsUnfocused;
+        FocusTimer := GetTimeRunning() + unfocusedDuration;
+        WriteLn('Switching to Unfocused mode. Will switch again in ', SRL.MsToTime(unfocusedDuration, Time_Short));
+      end
+      else
+      begin
+        FocusState := fsFocused;
+        FocusTimer := GetTimeRunning() + focusedDuration;
+        WriteLn('Switching to Focused mode. Will switch again in ', SRL.MsToTime(focusedDuration, Time_Short));
+      end;
     end;
   end;
 end;
@@ -541,6 +559,8 @@ begin
     MainScreen.CloseInterface(True);
     Wait(250);
   end;
+  SwitchFocusState();
+  FocusState := fsFocused;
   StartXP := XPBar.Read();
   CastCount := 0;
   CoinsCount := 0;
@@ -1385,10 +1405,7 @@ end;
 procedure AIOLunarSpells.doPlankMake();
 var
   RawItemCount: Int32;
-  i: Int32;
 begin
-  FocusState := fsFocused;
-  FocusTimer := GetTimeRunning() + RandomRange(15 * 60 * 1000, 20 * 60 * 1000); // 15-20 minutes
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
@@ -1414,7 +1431,7 @@ begin
     WaitUntil(Inventory.ContainsItem('Coins'), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     if Inventory.CountItemStack('Coins') < CoinsCount then
     begin
-      WriteLn('ItemArray5 Count: ' + IntToStr(Inventory.CountItemStack(ItemArray5)));
+      //WriteLn('ItemArray5 Count: ' + IntToStr(Inventory.CountItemStack(ItemArray5)));
       WriteLn('You do not have enough gold to cover all the planks in your bank.');
     end;
     CoinsChecked := True;
@@ -1448,7 +1465,7 @@ begin
   begin
     FastCastingStandardOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting);
   end
-  else // This will be the fsUnfocused state
+  else
   begin
     SlowAFKCasting(RawItem, ScriptSpeed);
   end;
@@ -1688,6 +1705,8 @@ begin
     NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
   if (Length(Antiban.Sleeps) > 0) then
     NextSleepTime := SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - GetTimeRunning)), TIME_BARE);
+
+  // Determine the current focus state and remaining time
   if FocusState = fsFocused then
     FocusStateStr := 'Focused'
   else
@@ -1698,6 +1717,7 @@ begin
   WriteLn('     BigAussies AIO Lunar Spells      ');
   WriteLn('========================================');
   WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short) + '   Script Speed: ' + ScriptSpeedToString(SCRIPTSPEED));
+  WriteLn('   Current Focus State: ' + FocusStateStr + ' (will switch in ' + SRL.MsToTime(RemainingFocusTime, Time_Short) + ')');
   WriteLn('   Total Casts: ' + IntToStr(CastCount) + ' ' + SpellToString(ChosenSpell) + ' on ' + RawItem);
   WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
   if Profit = 0 then
@@ -1713,8 +1733,10 @@ begin
   WriteLn('----------------------------------------');
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Casts/Hour: ' + IntToStr(Round(CastCount / (GetTimeRunning() / 3600000))));
+  if Profit = 0 then
+    WriteLn('   Profit/Hour: Calculating')
+  else
   WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
-  WriteLn('   Current Focus State: ' + FocusStateStr);
 
   if BUYRAWMATERIALS then
   begin
