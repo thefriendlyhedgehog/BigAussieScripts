@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.13 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.14 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1003,11 +1003,6 @@ begin
     withdrawAttempts := 0;
     while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItemBank)) and ((Inventory.CountItem(RawItem) < 5) or ((Inventory.CountItem(RawItem) < 5) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) do
     begin
-      if Inventory.IsFull() then
-      begin
-        WriteLn('Inventory is full.');
-        Break;
-      end;
       WriteLn('Looking for ' + RawItem);
       Bank.WithdrawItem(RawItemBank, True);
       Inc(withdrawAttempts);
@@ -1370,9 +1365,11 @@ begin
   OpenBankDepositItem(ProcessedItemBank);
 end;     
 
-procedure AIOLunarSpells.FastCastingReverseOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: String; waitTimeCasting: Integer);
+procedure AIOLunarSpells.FastCastingReverseOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: TRSItem; waitTimeCasting: Integer);
 var
   i: Integer;
+  itemFound: Boolean;
+  match: TRSItemFinderMatch;
 begin
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 375, 2100); 
@@ -1382,10 +1379,27 @@ begin
   begin
     CastSpell();
     WaitUntil(Inventory.IsOpen(), 385, 1250);
-    Inventory.ClickSlot(i, '>');
+
+    // Check if the item in the slot is a log, thank you skunk sir
+    itemFound := ItemFinder.Find([RawItem], [Inventory.GetSlotBox(i)], match);
+    if itemFound then
+    begin
+      Inventory.ClickSlot(i, '>');
+      Wait(waitTimeCasting);
+        
+      WaitUntil(Magic.IsOpen(), 385, 1250);
+    end
+    else
+    begin
+      WriteLn('Item in slot ' + IntToStr(i) + ' is no longer a log. Skipping.');
+    end;
+  end;
+
+  // Check if there are any remaining RawItem in the inventory
+  if Inventory.ContainsItem(RawItem) then
+  begin
+    WriteLn('Waiting for remaining ' + RawItem + ' to be processed.');
     Wait(waitTimeCasting);
-      
-    WaitUntil(Magic.IsOpen(), 385, 1250);
   end;
 end;
 
@@ -1500,7 +1514,7 @@ begin
 
   if FocusState = fsFocused then
   begin
-  if SRL.Dice(4) then // 50% chance
+  if SRL.Dice(25) then
   begin
     CurrentCastingOrder := Reverse;
   end
@@ -1558,7 +1572,7 @@ begin
     SPIN_FLAX:
       StaffNames := ['Staff of air', 'Mist battlestaff', 'Mystic mist staff', 'Smoke battlestaff', 'Mystic smoke staff', 'Dust battlestaff', 'Mystic dust staff'];
     SUPERGLASS_MAKE:
-      StaffNames := ['Smoke battlestaff', 'Mystic smoke staff'];
+      StaffNames := ['Smoke battlestaff', 'Mystic smoke staff', 'Staff of air', 'Tome of fire'];
     TAN_LEATHER:
       StaffNames := ['Staff of fire', 'Steam battlestaff', 'Mystic steam staff', 'Lava battlestaff', 'Mystic lava staff', 'Smoke battlestaff', 'Mystic smoke staff'];
     STRING_JEWELLERY:
@@ -1652,11 +1666,11 @@ begin
   Self.Init(MaxActions, MaxTime);
   repeat
     Self.doAction();
-//    if WL.Activity.IsFinished() then
-//    begin
-//      WriteLn('No activity detected in 5 minutes! Shutting down.');
-//      Break;
-//    end;
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
     if not MainScreen.HasInterface() or not Bank.IsOpen() then
     begin
       case SCRIPTSPEED of
