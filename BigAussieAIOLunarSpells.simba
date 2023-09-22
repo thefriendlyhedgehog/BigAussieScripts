@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.13 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.12 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -913,7 +913,6 @@ procedure AIOLunarSpells.OpenBankDepositItem(item: TRSBankItem);
 var
   attempts: Int32;
 begin
-  WL.Activity.Restart;
   attempts := 0;
   while (attempts < 3) and (not Bank.IsOpen()) do
   begin
@@ -1001,7 +1000,7 @@ begin
   else
   begin
     withdrawAttempts := 0;
-    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItemBank)) and ((Inventory.CountItem(RawItem) < 5) or ((Inventory.CountItem(RawItem) < 5) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) do
+    while (withdrawAttempts < 3) and (Bank.ContainsItem(RawItemBank)) and ((not Inventory.ContainsItem(RawItem)) or ((Inventory.CountItem(RawItem) < 5) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) do
     begin
       if Inventory.IsFull() then
       begin
@@ -1370,25 +1369,6 @@ begin
   OpenBankDepositItem(ProcessedItemBank);
 end;     
 
-procedure AIOLunarSpells.FastCastingReverseOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: String; waitTimeCasting: Integer);
-var
-  i: Integer;
-begin
-  MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100); 
-  WriteLn('Fast casting reverse order.');
-
-  for i := 27 downto 28 - RawItemCount do
-  begin
-    CastSpell();
-    WaitUntil(Inventory.IsOpen(), 385, 1250);
-    Inventory.ClickSlot(i, '>');
-    Wait(waitTimeCasting);
-      
-    WaitUntil(Magic.IsOpen(), 385, 1250);
-  end;
-end;
-
 procedure AIOLunarSpells.FastCastingStandardOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: String; waitTimeCasting: Integer);
 var
   i: Integer;
@@ -1400,48 +1380,31 @@ begin
   for i := 1 to RawItemCount do
   begin
     CastSpell();
-    WaitUntil(Inventory.IsOpen(), 385, 1250);
+    WaitUntil(Inventory.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     Inventory.ClickItem(RawItem, '>');
     Wait(waitTimeCasting);
     
-//    if not Inventory.ContainsItem(RawItem) then
-//      break;
+    if not Inventory.ContainsItem(RawItem) then
+      break;
       
-    WaitUntil(Magic.IsOpen(), 385, 1250);
+    WaitUntil(Magic.IsOpen(), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
   end;
 end;
 
-procedure AIOLunarSpells.SlowAFKCasting(RawItem: TRSItem; ScriptSpeed: ScriptSpeedTypes);
-var
-  slots: TIntegerArray;
+procedure SlowAFKCasting(RawItem: String; ScriptSpeed: ScriptSpeedTypes);
 begin
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 375, 2100); 
   WriteLn('Slow/AFK Casting.');
-  CastSpell();
+  Magic.CastSpell(ERSSpell.PLANK_MAKE);
   WaitUntil(Inventory.IsOpen(), 375, 2150);
-  
-  // Find all slots containing the RawItem
-  if Inventory.FindItem(RawItem, slots) then
-  begin
-    // If there are no slots containing the RawItem, exit the procedure
-    if Length(slots) = 0 then
-      Exit;
-  
-    // Click a random slot containing the RawItem
-    Inventory.ClickSlot(slots[Random(Length(slots))], '>');
-  end;
-  
+  Inventory.ClickItem(RawItem, '>');
   WaitUntil(not Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), RandomRange(120000, 123000));
 end;
 
 procedure AIOLunarSpells.doPlankMake();
-type
-  CastingOrder = (Standard, Reverse);
 var
   RawItemCount: Int32;
-  CurrentCastingOrder: CastingOrder;
-  FocusJustSwitched: boolean;
 begin
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
@@ -1500,33 +1463,19 @@ begin
 
   if FocusState = fsFocused then
   begin
-  if SRL.Dice(4) then // 50% chance
-  begin
-    CurrentCastingOrder := Reverse;
-  end
-  else
-  begin
-    CurrentCastingOrder := Standard;
-  end;
-  FocusJustSwitched := False;
-
-    if CurrentCastingOrder = Reverse then
-      FastCastingReverseOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting)
-    else
-      FastCastingStandardOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting);
+    FastCastingStandardOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting);
   end
   else
   begin
     SlowAFKCasting(RawItem, ScriptSpeed);
-    FocusJustSwitched := True;
   end;
   CastCount += Inventory.CountItem(ProcessedItem);
   CheckBreakSleepLevel();
-  if not MainScreen.HasInterface() then
-    Self.Report();
+if not MainScreen.HasInterface() then
+  Self.Report();
   bank.Hover();
   Wait(RandomRange(600, 700));
-  end;
+end;
 
 function Join(const Delimiter: String; const List: array of String): String;
 var
@@ -1652,11 +1601,11 @@ begin
   Self.Init(MaxActions, MaxTime);
   repeat
     Self.doAction();
-//    if WL.Activity.IsFinished() then
-//    begin
-//      WriteLn('No activity detected in 5 minutes! Shutting down.');
-//      Break;
-//    end;
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
     if not MainScreen.HasInterface() or not Bank.IsOpen() then
     begin
       case SCRIPTSPEED of
