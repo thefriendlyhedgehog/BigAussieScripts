@@ -587,7 +587,7 @@ begin
     MoveItemToTop(ItemArray5);
   if Bank.IsOpen() then
   begin
-    if not (Inventory.ContainsItem('Rune Pouch')) then
+    if not ((Inventory.Count() = 1) and Inventory.ContainsItem('Rune Pouch')) then
     begin
       Bank.DepositAll();
       WaitUntil(Inventory.Count() = 0, 375, 2150);
