@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.15 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.16 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -58,7 +58,8 @@ type
     MysticStaffBank,
     RawItemSandBank,
     CoinsBank,
-    ProcessedItemBank: TRSBankItem;
+    ProcessedItemBank,
+    RunePouchBank: TRSBankItem;
 
     StaffName,
     MysticStaffName,
@@ -68,7 +69,8 @@ type
     NotedProcessed,
     AstralRune,
     ItemArray5,
-    CoinsItem: TRSitem;
+    CoinsItem,
+    RunePouch: TRSitem;
 
     ShutDownTime,
     waitTimeCasting: Int64;
@@ -116,7 +118,8 @@ var
 
   Timer: TStopWatch;
 
-  CoinsChecked: Boolean;
+  CoinsChecked,
+  HasRunePouch: Boolean;
 
 
 procedure PauseTimer(Task: PBreakTask);
@@ -473,6 +476,8 @@ begin
       break;
     end;
   end;
+  HasRunePouch := False;
+  RunePouch := ('Rune pouch');
 
   if SELECTEDITEM in ['Soda Ash', 'Seaweed', 'Swamp Weed'] then
   begin
@@ -517,6 +522,7 @@ begin
     ItemArray5Quantity := Bank.QUANTITY_ALL;
   end;
 
+  RunePouchBank := TRSBankItem.Setup(RunePouch, 1, FALSE);
   ProcessedItemBank := TRSBankItem.Setup(ProcessedItem, ProcessedItemQuantity, FALSE);
   RawItemBank := TRSBankItem.Setup(RawItem, RawItemQuantity, FALSE);
   ProcessedItemBankNoted := TRSBankItem.Setup(ProcessedItem, Bank.QUANTITY_ALL, True);
@@ -581,8 +587,11 @@ begin
     MoveItemToTop(ItemArray5);
   if Bank.IsOpen() then
   begin
-    Bank.DepositAll();
-    WaitUntil(Inventory.Count() = 0, 375, 2150);
+    if not (Inventory.ContainsItem('Rune Pouch')) then
+    begin
+      Bank.DepositAll();
+      WaitUntil(Inventory.Count() = 0, 375, 2150);
+    end;
   end;
 end;
 
@@ -946,8 +955,35 @@ begin
 end;
 
 procedure AIOLunarSpells.WithdrawAstralRunes();
+var
+  RunePouch: TRSItem;
 begin
   ItemFinder.Similarity := 0.999;
+  
+  if HasRunePouch then
+  begin
+    if not Inventory.ContainsItem('Rune pouch') then
+    begin
+      WriteLn('Looking for RunePouch');
+      Bank.WithdrawItem(RunePouchBank, True);
+      WaitUntil(Inventory.ContainsItem('Rune pouch'), 358, 1250);
+      
+      if not Inventory.ContainsItem('Rune pouch') then
+      begin
+        WriteLn('Rune Pouch not found in the bank.');
+        HasRunePouch := False;
+      end
+      else
+      begin
+        exit;
+      end;
+    end
+    else
+    begin
+      exit;
+    end;
+  end;
+
   if Inventory.CountItemStack(AstralRune) < 30 then // We need to make sure we have enough runes for every cast, This is a crude workaround but the easiest option
   begin
     WriteLn('Looking for ' + AstralRune);
@@ -1056,25 +1092,32 @@ var
   astralRunesCount, itemArray5Count: Int32;
 begin
   astralRunesCount := Inventory.CountItemStack(AstralRune);
-  
-if (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = PLANK_MAKE) then
-  itemArray5Count := Inventory.CountItemStack(ItemArray5)
-else if (CHOSENSPELL = SUPERGLASS_MAKE) then
-  itemArray5Count := 30 // Fix this later
-else
-  itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
 
-  if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
-  begin
-    Logout.ClickLogout;
-    WriteLn('We are out of ' + itemName + ', AstralRunes or ItemArray5 and buying is disabled. Logging out.');
-    WriteLn('If this is incorrect, make sure your item/runes are at the top on the all tab.');
-    TerminateScript();
+if not HasRunePouch then
+begin  
+  if (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = PLANK_MAKE) then
+    itemArray5Count := Inventory.CountItemStack(ItemArray5)
+  else if (CHOSENSPELL = SUPERGLASS_MAKE) then
+    itemArray5Count := 30 // Fix this later
+  else
+    itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
+
+    if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
+    begin
+      Logout.ClickLogout;
+      WriteLn('We are out of ' + itemName + ', AstralRunes or ItemArray5 and buying is disabled. Logging out.');
+      WriteLn('If this is incorrect, make sure your item/runes are at the top on the all tab.');
+      TerminateScript();
+    end;
   end;
 end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
+  if HasRunePouch then
+  begin
+    exit;
+  end;
   if (Inventory.CountItemStack(ItemArray5) < 30) and (CHOSENSPELL <> HUMIDIFY) then
   begin
     WriteLn('Looking for ' + ItemArray5);
@@ -1125,6 +1168,15 @@ begin
     STRING_JEWELLERY: spell := ERSSpell.STRING_JEWELLERY;
     PLANK_MAKE: spell := ERSSpell.PLANK_MAKE;
     RECHARGE_DRAGONSTONE: spell := ERSSpell.RECHARGE_DRAGONSTONE;
+  end;
+
+  Magic.Open();
+  WaitUntil(Magic.IsOpen(), 375, 2150);
+  if not Magic.CanActivate(spell) then
+  begin
+    WriteLn('Spell cannot be cast, logging out and terminating script.');
+    Logout.ClickLogout;
+    TerminateScript();
   end;
 
   Magic.CastSpell(spell);
@@ -1525,10 +1577,13 @@ procedure AIOLunarSpells.doPlankMake();
 type
   CastingOrder = (Standard, Reverse);
 var
+  EmptySlots: Int32;
   RawItemCount: Int32;
   CurrentCastingOrder: CastingOrder;
   FocusJustSwitched: boolean;
 begin
+if EmptySlots <= 0 then
+  EmptySlots := 25;
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
@@ -1561,6 +1616,9 @@ begin
   end;
   WithdrawAstralRunes();
   Withdraw5Array();
+  EmptySlots := Inventory.CountEmptySlots();
+  ProcessedItemBank := TRSBankItem.Setup(ProcessedItem, EmptySlots, FALSE);
+  RawItemBank := TRSBankItem.Setup(RawItem, EmptySlots, FALSE);
   WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
   if (RawItemToBuy > 0) or (AstralRunesToBuy > 0) or (Array5QuantityToBuy > 0) then
   begin
@@ -1654,7 +1712,11 @@ begin
     RECHARGE_DRAGONSTONE:
       StaffNames := ['Staff of water', 'Mist battlestaff', 'Mystic mist staff', 'Mud battlestaff', 'Mystic mud staff', 'Steam battlestaff', 'Mystic steam staff', 'Kodai wand', 'Tome of water'];
   end;
-
+  if Inventory.ContainsItem(RunePouch) then
+  begin
+    HasRunePouch := True;
+    WriteLn('Rune Pouch Found.');
+  end;
   // Open the equipment screen
   Equipment.Open();
   WaitUntil(Equipment.IsOpen(), 375, 2100);
@@ -2154,7 +2216,7 @@ begin
   with Self.BUYRUNESCHECKBox do
   begin
     Create(tab);
-    SetCaption("Buy required runes");
+    SetCaption("Buy Runes - Will not work with Rune Pouch");
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(Self.SELLNOTEDITEMCHECKBox.GetTop() + TControl.AdjustToDPI(25));
 //    SetChecked(BUYRUNESCHECK);
