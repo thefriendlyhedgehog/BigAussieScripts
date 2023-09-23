@@ -1586,7 +1586,7 @@ begin
 
   if FocusState = fsFocused then
   begin
-  if SRL.Dice(100) then
+  if SRL.Dice(20) then
   begin
     CurrentCastingOrder := Reverse;
   end
