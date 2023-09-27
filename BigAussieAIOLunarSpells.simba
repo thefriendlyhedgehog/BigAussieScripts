@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.18 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.19 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -922,7 +922,6 @@ procedure AIOLunarSpells.OpenBankDepositItem(item: TRSBankItem);
 var
   attempts: Int32;
 begin
-  WL.Activity.Restart;
   attempts := 0;
   while (attempts < 3) and (not Bank.IsOpen()) do
   begin
@@ -1046,8 +1045,10 @@ begin
     end;
 
     if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
+      WL.Activity.Restart;
       WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
     else
+      WL.Activity.Restart;
       WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
 
     if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
@@ -1063,6 +1064,8 @@ begin
     else if not Inventory.ContainsItem(RawItem) then
     begin
       WriteLn(RawItem + ' not found in the bank.');
+      Logout.ClickLogout;
+      TerminateScript();
     end;
   end;
 end;
