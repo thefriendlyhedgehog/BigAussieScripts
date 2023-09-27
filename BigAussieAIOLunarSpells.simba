@@ -1045,11 +1045,15 @@ begin
     end;
 
     if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
+    begin
       WL.Activity.Restart;
-      WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed))
+      WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    end
     else
+    begin
       WL.Activity.Restart;
       WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+    end;
 
     if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
     begin
