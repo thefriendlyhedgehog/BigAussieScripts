@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.22 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.23 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1179,6 +1179,12 @@ begin
 
   Magic.Open();
   WaitUntil(Magic.IsOpen(), 375, 2150);
+  if Magic.FiltersIsOpen then
+  begin
+    WriteLn('Attempting to close filters');
+    Magic.CloseFilters;
+    Wait(RandomRange(1000, 2000)); 
+  end;
 
   if not Magic.CanActivate(spell) then
   begin
