@@ -1183,6 +1183,7 @@ begin
   if not Magic.CanActivate(spell) then
   begin
     WriteLn('Spell cannot be cast, logging out and terminating script.');
+    TakeScreenshot('CannotCast');
     Logout.ClickLogout;
     TerminateScript();
   end;
