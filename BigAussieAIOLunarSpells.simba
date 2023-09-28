@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.21 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.22 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1179,12 +1179,13 @@ begin
 
   Magic.Open();
   WaitUntil(Magic.IsOpen(), 375, 2150);
-  //if not Magic.CanActivate(spell) then
-  //begin
-  //  WriteLn('Spell cannot be cast, logging out and terminating script.');
-  //  Logout.ClickLogout;
-  //  TerminateScript();
-  //end;
+
+  if not Magic.CanActivate(spell) then
+  begin
+    WriteLn('Spell cannot be cast, logging out and terminating script.');
+    Logout.ClickLogout;
+    TerminateScript();
+  end;
 
   Magic.CastSpell(spell);
 
@@ -1542,10 +1543,11 @@ begin
   WaitUntil(not Bank.IsOpen(), 375, 2100); 
   WriteLn('Fast casting standard order.');
   
-  for i := 1 to RawItemCount do
+  while RawItemCount > 0 do
   begin
     CastSpell();
     WaitUntil(Inventory.IsOpen(), 385, 1250);
+    RawItemCount := Inventory.CountItem(RawItem);
     self.ClickItem(RawItem, '>');
     Wait(waitTimeCasting);
       
