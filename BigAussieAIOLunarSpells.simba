@@ -1620,7 +1620,11 @@ if EmptySlots <= 0 then
   end;
   WithdrawAstralRunes();
   Withdraw5Array();
-  EmptySlots := Inventory.CountEmptySlots();
+  while EmptySlots <= 0 do
+  begin
+    OpenBankDepositItem(ProcessedItemBank);
+    EmptySlots := Inventory.CountEmptySlots();
+  end;
   ProcessedItemBank := TRSBankItem.Setup(ProcessedItem, EmptySlots, FALSE);
   RawItemBank := TRSBankItem.Setup(RawItem, EmptySlots, FALSE);
   WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
