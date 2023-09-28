@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.20 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.21 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1586,8 +1586,6 @@ var
   CurrentCastingOrder: CastingOrder;
   FocusJustSwitched: boolean;
 begin
-if EmptySlots <= 0 then
-  EmptySlots := 25;
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
@@ -1620,8 +1618,10 @@ if EmptySlots <= 0 then
   end;
   WithdrawAstralRunes();
   Withdraw5Array();
+  EmptySlots := Inventory.CountEmptySlots();
   while EmptySlots <= 0 do
   begin
+    ProcessedItemBank := TRSBankItem.Setup(ProcessedItem, Bank.QUANTITY_ALL, FALSE);
     OpenBankDepositItem(ProcessedItemBank);
     EmptySlots := Inventory.CountEmptySlots();
   end;
