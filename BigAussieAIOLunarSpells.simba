@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.24 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.25 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1186,23 +1186,22 @@ begin
     Wait(RandomRange(1000, 2000)); 
   end;
 
-  if not Magic.CanActivate(spell) then
-  begin
-    if Magic.InfoIsOpen() then
-    begin
-      WriteLn('Info box blocking spell');
-      Magic.CloseInfo();
-      Wait(RandomRange(1000, 2000)); 
-    end;
+//  if not Magic.CanActivate(spell) then
+//  begin
+//    if Magic.InfoIsOpen() then
+//    begin
+//      WriteLn('Info box blocking spell');
+//      Magic.CloseInfo();
+//      Wait(RandomRange(1000, 2000)); 
+//    end;
 
-    if not Magic.CanActivate(spell) then
-    begin
-      WriteLn('Spell cannot be cast, logging out and terminating script.');
-      TakeScreenshot('CannotCast');
-      Logout.ClickLogout;
-      TerminateScript();
-    end;
-  end;
+//    if not Magic.CanActivate(spell) then
+//    begin
+//      WriteLn('Spell cannot be cast, logging out and terminating script.');
+//      TakeScreenshot('CannotCast');
+//      Logout.ClickLogout;
+//      TerminateScript();
+//    end;
 
   Magic.CastSpell(spell);
 
