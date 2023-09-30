@@ -1,8 +1,16 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '#'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1.25 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
+
+// TIPS //
+// Ensure the item you want to process is at the top of your inventory.
+// Start with the staff you will use equipped.
+// If you wish to use the Rune Pouch you MUST start with it in your inventory.
+// The grand exchange features will Buy/Sell at Above/Below market prices, if an order is not filled the script will not cancel/relist you need to do this manually.
+// 
+// SRL-T Revision v2.6.7 / WaspLib v14.8.0
 
 type
   ScriptSpeedTypes = (SLOW, NORMAL, FAST, TURBO);
@@ -318,7 +326,7 @@ begin
     begin
       if GetTickCount - ScrollStart >= ScrollLimit then
       begin
-        WriteLn('Item not found after scrolling');
+        WriteLn('Item not found after scrolling, this isnt reliable. Put the item at the top of the bank yourself.');
         Exit;
       end;
 
@@ -352,6 +360,30 @@ begin
       end;
     end;
   end;
+
+function DisableSpellFiltering(var GameTabs: TRSGameTabs; Tab: ERSGameTab): Boolean;
+var
+  i: Int32;
+  FilterButton: TRSButton;
+begin
+
+  for i := 1 to 3 do
+  begin
+    Magic.open();
+
+    Mouse.Click(GameTabs.GetTabBox(Tab), MOUSE_RIGHT, SRL.Dice(50));
+
+    if ChooseOption.Open() then
+    begin
+      writeln('Disabling spell filtering');
+      ChooseOption.Select('Disable spell filtering');
+    end;
+
+    Result := WaitUntil(GameTabs.GetCurrentTab() = Tab, SRL.TruncatedGauss(50, 2000), SRL.TruncatedGauss(2000, 3000));
+    if Result then
+      Exit;
+  end;
+end;
 
 procedure AIOLunarSpells.Init(MaxActions: Int32; MaxTime: Int64); override;
 var
@@ -575,6 +607,7 @@ begin
   Timer.Start();
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   ClearDebug();
+  //DisableSpellFiltering(GameTabs, ERSGameTab.MAGIC); // Maybe we force disable spell filtering if we have double click issues?
   if STAFFCHECK then
   begin
     ItemFinder.Similarity := 0.989; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
@@ -1186,22 +1219,23 @@ begin
     Wait(RandomRange(1000, 2000)); 
   end;
 
-//  if not Magic.CanActivate(spell) then
-//  begin
-//    if Magic.InfoIsOpen() then
-//    begin
-//      WriteLn('Info box blocking spell');
-//      Magic.CloseInfo();
-//      Wait(RandomRange(1000, 2000)); 
-//    end;
+  if not Magic.CanActivate(spell) then
+  begin
+    if Magic.InfoIsOpen() then
+    begin
+      WriteLn('Info box blocking spell');
+      Magic.CloseInfo();
+      Wait(RandomRange(1000, 2000)); 
+    end;
 
-//    if not Magic.CanActivate(spell) then
-//    begin
-//      WriteLn('Spell cannot be cast, logging out and terminating script.');
-//      TakeScreenshot('CannotCast');
-//      Logout.ClickLogout;
-//      TerminateScript();
-//    end;
+    if not Magic.CanActivate(spell) then
+    begin
+      WriteLn('Spell cannot be cast, logging out and terminating script.');
+      TakeScreenshot('CannotCast');
+      Logout.ClickLogout;
+      TerminateScript();
+    end;
+  end;
 
   Magic.CastSpell(spell);
 
