@@ -1079,12 +1079,10 @@ begin
 
     if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
     begin
-      WL.Activity.Restart;
       WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end
     else
     begin
-      WL.Activity.Restart;
       WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
 
@@ -1099,6 +1097,12 @@ begin
       WriteLn('Failed to withdraw ' + RawItem + '. Trying again.');
     end
     else if not Inventory.ContainsItem(RawItem) then
+    begin
+      WriteLn(RawItem + ' not found in the bank.');
+      Logout.ClickLogout;
+      TerminateScript();
+    end
+    else if ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)) and (Inventory.CountItem(RawItem) < 5) then
     begin
       WriteLn(RawItem + ' not found in the bank.');
       Logout.ClickLogout;
@@ -1238,6 +1242,7 @@ begin
   end;
 
   Magic.CastSpell(spell);
+  WL.Activity.Restart;
 
   if (Chat.FindLastMessage('You do not have enough', [CHAT_COLOR_BLACK])) or 
      ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) then
@@ -1907,7 +1912,7 @@ begin
   case ChosenSpell of
     BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue);
     HUMIDIFY: Result := Trunc((RawTotal / 5) * ((ProcessedItemValue * 5) - (RawItemValue * 5 + RuneValue))); // This is 100% correct
-    SPIN_FLAX: Result := RawTotal * ((ProcessedItemValue * 5) - (RawItemValue * 5) - RuneValue - (2 * ItemArray5Value)); // This is 100% correct
+    SPIN_FLAX: Result := Round((ProcessedItemValue * 5 * (RawTotal / 5)) - (RawItemValue * RawTotal) - (RuneValue * (RawTotal / 5)) - (ItemArray5Value * 2 * (RawTotal / 5)));
     TAN_LEATHER: Result := Round((ProcessedItemValue * 5 * (RawTotal / 5)) - (RawItemValue * RawTotal) - (RuneValue * 2 * (RawTotal / 5)) - (ItemArray5Value * (RawTotal / 5))); // This is 100% correct
     STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue); // Untested but updated.
     PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue - ItemArray5Value - CoinCostPerCast);
