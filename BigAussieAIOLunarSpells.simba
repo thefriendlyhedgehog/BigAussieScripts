@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -26,9 +26,9 @@ var
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
   SELECTEDITEM: string;                       //= Berry Pie
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
-  BUYRUNESCHECK: Boolean                      = True; // If you have no Astral Runes in your inventory or bank the script will buy more.
-  BUYRAWMATERIALS: Boolean                    = True; // If you have no Raw Items in your inventory or bank the script will buy the amount below in the QuantityInput.
-  SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all finished items before any of the other shopping methods.
+  BUYRUNESCHECK: Boolean                      = False; // If you have no Astral Runes in your inventory or bank the script will buy more.
+  BUYRAWMATERIALS: Boolean                    = False; // If you have no Raw Items in your inventory or bank the script will buy the amount below in the QuantityInput.
+  SELLNOTEDITEMCHECK: Boolean                 = False; // If True the script will sell all finished items before any of the other shopping methods.
   QUANTITYINPUT: Integer                      = 10000;// When you run out of raw items this is how many the script should buy.
   BANKFILLERSCHECK: Boolean                   = False; // Enable this if you have setup bank fillers correctly. 
 //===========================================
@@ -995,8 +995,6 @@ begin
 end;
 
 procedure AIOLunarSpells.WithdrawAstralRunes();
-var
-  RunePouch: TRSItem;
 begin
   ItemFinder.Similarity := 0.999;
   
@@ -1675,13 +1673,21 @@ begin
     RawItemCount := Bank.CountItemStack(RawItem); // Counts all Logs in the bank.
     WriteLn('Amount of logs in bank ' + IntToStr(RawItemCount));
     case RawItem of
-      'Logs': CoinsCount := ceil(RawItemCount * 70 / 1000) * 1000;
-      'Oak logs': CoinsCount := ceil(RawItemCount * 172 / 1000) * 1000;
-      'Teak logs': CoinsCount := ceil(RawItemCount * 350 / 1000) * 1000;
-      'Mahogany logs': CoinsCount := ceil(RawItemCount * 1050 / 1000) * 1000;
-    end;
+    'Logs': CoinsCount := ceil(RawItemCount * 70 / 1000) * 1000;
+    'Oak logs': CoinsCount := ceil(RawItemCount * 172 / 1000) * 1000;
+    'Teak logs': CoinsCount := ceil(RawItemCount * 350 / 1000) * 1000;
+    'Mahogany logs': CoinsCount := ceil(RawItemCount * 1050 / 1000) * 1000;
+  end;
+    if BANKFILLERSCHECK then
+    begin
+      CoinsBank := TRSBankItem.Setup(CoinsItem, Bank.QUANTITY_ALL, False);
+      WriteLn('Bank fillers ENABLED, Withdrawing all coins.');
+    end
+    else
+    begin
     CoinsBank := TRSBankItem.Setup(CoinsItem, CoinsCount, False); 
     WriteLn('Coins needed: ' + IntToStr(CoinsCount));
+    end;
   end;
   if not CoinsChecked and (Inventory.CountItem('Coins') < CoinsCount) then
   begin
@@ -1757,6 +1763,7 @@ begin
   bank.Hover();
   Wait(RandomRange(600, 700));
   end;
+
 
 function Join(const Delimiter: String; const List: array of String): String;
 var
