@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -30,7 +30,7 @@ var
   BUYRAWMATERIALS: Boolean                    = True; // If you have no Raw Items in your inventory or bank the script will buy the amount below in the QuantityInput.
   SELLNOTEDITEMCHECK: Boolean                 = True; // If True the script will sell all finished items before any of the other shopping methods.
   QUANTITYINPUT: Integer                      = 10000;// When you run out of raw items this is how many the script should buy.
-  PRICESAPICHECK: Boolean                     = True; // If you are having issues with the prices API no loading this will disable prices, [ALL GRAND EXCHANGE FEATURES WILL BE DISABLED, ALSO YOU WILL NOT GET A PROFIT REPORT]
+  BANKFILLERSCHECK: Boolean                   = False; // Enable this if you have setup bank fillers correctly. 
 //===========================================
 
 begin
@@ -126,8 +126,9 @@ var
 
   Timer: TStopWatch;
 
-  CoinsChecked,
+  CoinsChecked: Boolean;
   HasRunePouch: Boolean;
+  SuperGlassOptimal: Boolean;
 
 
 procedure PauseTimer(Task: PBreakTask);
@@ -973,7 +974,14 @@ begin
     ProcessedTotal += Inventory.CountItem(ProcessedItem);
     if Inventory.ContainsItem(item.Item) then
     begin
-      Bank.DepositItem(item, True);
+      if BANKFILLERSCHECK then
+      begin
+        Bank.DepositAll();
+      end
+      else
+      begin
+        Bank.DepositItem(item, True);
+      end;
       WaitUntil(not Inventory.ContainsItem(item.Item), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
     end;
   end
@@ -1158,7 +1166,7 @@ end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
-  if HasRunePouch then
+  if HasRunePouch and (CHOSENSPELL <> SUPERGLASS_MAKE) then
   begin
     exit;
   end;
@@ -1444,8 +1452,20 @@ begin
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
   WithdrawAstralRunes();
-  Withdraw5Array();
-  WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
+
+  if SuperGlassOptimal then
+  begin
+    Withdraw5Array();
+    WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
+  end
+  else
+  begin
+    WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
+    Withdraw5Array();
+  end;
+
+  SuperGlassOptimal := not SuperGlassOptimal;
+
   if (RawItemToBuy > 0) or (AstralRunesToBuy > 0) or (Array5QuantityToBuy > 0) then
   begin
     SellFinishedItem();
@@ -2055,10 +2075,10 @@ var
 {$IFDEF SCRIPT_GUI}
 type
   TConfig = record(TScriptForm)
-    Message, Message2, QuantityLabel, PricesAPIInfoLabel, ScriptSpeedLabel, GEInfoLabel, GEInfoLabel2, StopAtLevelLabel, ItemSelectorLabel, LunarSpellLabel: TLabel;
+    Message, Message2, QuantityLabel, BankFillersInfoLabel, ScriptSpeedLabel, GEInfoLabel, GEInfoLabel2, StopAtLevelLabel, ItemSelectorLabel, LunarSpellLabel: TLabel;
     QuantityInputBox, StopAtLevelInputBox: TEdit;
     ScriptSpeedSelector: TLabeledCombobox;
-    SELLNOTEDITEMCHECKBox, BUYRAWMATERIALSBox, BUYRUNESCHECKBox, PricesAPICheckBox: TLabeledCheckBox;
+    SELLNOTEDITEMCHECKBox, BUYRAWMATERIALSBox, BUYRUNESCHECKBox, BankFillersCheckBox: TLabeledCheckBox;
     LunarSpellSelector: TComboBox;
     ItemSelector: TComboBox;
   end;
@@ -2071,7 +2091,7 @@ begin
   SELLNOTEDITEMCHECK := Self.SELLNOTEDITEMCHECKBox.IsChecked();
   BUYRAWMATERIALS := Self.BUYRAWMATERIALSBox.IsChecked();
   BUYRUNESCHECK := Self.BUYRUNESCHECKBox.IsChecked();
-  PRICESAPICHECK := Self.PricesAPICheckBox.IsChecked();
+  BANKFILLERSCHECK := Self.BankFillersCheckBox.IsChecked();
   QUANTITYINPUT := StrToInt(Self.QuantityInputBox.GetText); // This should finally give text, took me longer than I care to admit.....
   STOP_AT_LEVEL := StrToInt(Self.StopAtLevelInputBox.GetText);
   inherited;
@@ -2255,7 +2275,7 @@ begin
     Create(tab);
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(Self.ScriptSpeedSelector.GetTop() + TControl.AdjustToDPI(45));
-    SetCaption('Disable this if the GE API is down, all GE Features/Profit will be disabled.');
+    SetCaption('Only enable this if you have bank fillers setup correctly.');
     SetFontColor(clNavy);
   end;
 
@@ -2336,21 +2356,21 @@ begin
     SetCaption('Amount of Raw Materials to buy?');
   end;
 
-  with Self.PricesAPICheckBox do
+  with Self.BankFillersCheckBox do
   begin
     Create(tab);
-    SetCaption("Enable Real-Time Prices");
+    SetCaption("Use Bank Fillers");
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(Self.QuantityInputBox.GetTop() + TControl.AdjustToDPI(35));
-    SetChecked(PRICESAPICHECK);
-    SetHint('PRICES API CHECKBOX.');
+    SetChecked(BANKFILLERSCHECK);
+    SetHint('Enable this if you have bank fillers setup correctly.');
   end;
 
-  with PricesAPIInfoLabel do
+  with BankFillersInfoLabel do
   begin
     Create(tab);
-    SetLeft(Self.PricesAPICheckBox.GetLeft() + Self.PricesAPICheckBox.GetWidth() + TControl.AdjustToDPI(10));
-    SetTop(Self.PricesAPICheckBox.GetTop());
+    SetLeft(Self.BankFillersCheckBox.GetLeft() + Self.BankFillersCheckBox.GetWidth() + TControl.AdjustToDPI(10));
+    SetTop(Self.BankFillersCheckBox.GetTop());
     SetCaption('');
     SetFontColor(clNavy);
   end;
