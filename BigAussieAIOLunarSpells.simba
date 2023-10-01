@@ -786,6 +786,9 @@ begin
   if offerStatus.Progress < 100 then
   begin
     WriteLn('The sell offer for ' + ProcessedItem + ' has not been fully fulfilled after 3 minutes');
+    MainScreen.CloseInterface(True);
+    Logout.ClickLogout();
+    TerminateScript('Sell offer not fully fulfilled. Script terminated.');
   end
   else
   begin
