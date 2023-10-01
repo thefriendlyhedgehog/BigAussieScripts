@@ -4,7 +4,7 @@
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 
-// TIPS //
+// =NOTE=
 // Ensure the item you want to process is at the top of your inventory.
 // Start with the staff you will use equipped.
 // If you wish to use the Rune Pouch you MUST start with it in your inventory.
