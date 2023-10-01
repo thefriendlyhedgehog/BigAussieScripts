@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '6'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -982,7 +982,11 @@ begin
       begin
         Bank.DepositItem(item, True);
       end;
-      WaitUntil(not Inventory.ContainsItem(item.Item), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      if WaitUntil(not Inventory.ContainsItem(item.Item), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed)) then
+      begin
+        writeln('Activity Restart');
+        WL.Activity.Restart;
+      end;
     end;
   end
   else
@@ -1248,7 +1252,6 @@ begin
   end;
 
   Magic.CastSpell(spell);
-  WL.Activity.Restart;
 
   if (Chat.FindLastMessage('You do not have enough', [CHAT_COLOR_BLACK])) or 
      ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) then
@@ -1677,19 +1680,11 @@ begin
     'Oak logs': CoinsCount := ceil(RawItemCount * 172 / 1000) * 1000;
     'Teak logs': CoinsCount := ceil(RawItemCount * 350 / 1000) * 1000;
     'Mahogany logs': CoinsCount := ceil(RawItemCount * 1050 / 1000) * 1000;
-  end;
-    if BANKFILLERSCHECK then
-    begin
-      CoinsBank := TRSBankItem.Setup(CoinsItem, Bank.QUANTITY_ALL, False);
-      WriteLn('Bank fillers ENABLED, Withdrawing all coins.');
-    end
-    else
-    begin
+    end;
     CoinsBank := TRSBankItem.Setup(CoinsItem, CoinsCount, False); 
     WriteLn('Coins needed: ' + IntToStr(CoinsCount));
-    end;
   end;
-  if not CoinsChecked and (Inventory.CountItem('Coins') < CoinsCount) then
+  if not CoinsChecked and (Inventory.CountItem('Coins') < CoinsCount) and (Inventory.CountItem('Coins') = 0) then
   begin
     Bank.WithdrawItem(CoinsBank, True);
     WaitUntil(Inventory.ContainsItem('Coins'), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
