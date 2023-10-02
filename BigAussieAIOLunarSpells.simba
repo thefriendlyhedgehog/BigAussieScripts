@@ -1432,12 +1432,10 @@ begin
   for i := 1 to (RawItemCount div 5) do
   begin
     CastSpell();
-    Self.Report();
-    CastCount += 1;
-    TotalActions += 1;
     SetWaitTime();
     Wait(waitTimeCasting);
   end;
+  Self.Report();
   CheckBreakSleepLevel();
 end;     
 
@@ -1726,7 +1724,10 @@ begin
     'Teak logs': CoinsCount := ceil(RawItemCount * 350 / 1000) * 1000;
     'Mahogany logs': CoinsCount := ceil(RawItemCount * 1050 / 1000) * 1000;
     end;
-    CoinsBank := TRSBankItem.Setup(CoinsItem, CoinsCount, False); 
+    if BANKFILLERSCHECK then
+      CoinsBank := TRSBankItem.Setup(CoinsItem, bank.QUANTITY_ALL, False)
+    else
+      CoinsBank := TRSBankItem.Setup(CoinsItem, CoinsCount, False); 
     WriteLn('Coins needed: ' + IntToStr(CoinsCount));
   end;
   if not CoinsChecked and (Inventory.CountItem('Coins') < CoinsCount) and (Inventory.CountItem('Coins') = 0) then
