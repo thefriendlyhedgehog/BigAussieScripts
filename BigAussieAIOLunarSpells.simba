@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '8'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -524,7 +524,7 @@ begin
   else if SELECTEDITEM = 'Giant Seaweed' then
   begin
     RawItemQuantity := 3;
-    ItemArray5Quantity := 18;
+    ItemArray5Quantity := 3;
     ProcessedItemQuantity := Bank.QUANTITY_ALL;
   end
   else if CHOSENSPELL = HUMIDIFY then // This just stops it uses ALL because it spams the chat
@@ -1444,25 +1444,24 @@ end;
 procedure AIOLunarSpells.doSuperGlassAndRechargeDragonstone();
 var
   SandCount: Int32;
+  i: Int32;
 begin
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   Array5QuantityToBuy := 0;
   WithdrawAstralRunes();
 
-  if SuperGlassOptimal then
+  if RawItem = 'Giant seaweed' then
   begin
-    Withdraw5Array();
     WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
+    for i := 1 to 6 do
+    Withdraw5Array();
   end
   else
   begin
     WithdrawRawItem(RawItem, RawItemBank, QuantityInput, BUYRAWMATERIALS);
     Withdraw5Array();
   end;
-
-  if not SRL.Dice(1) then
-  SuperGlassOptimal := not SuperGlassOptimal;
 
   if (RawItemToBuy > 0) or (AstralRunesToBuy > 0) or (Array5QuantityToBuy > 0) then
   begin
