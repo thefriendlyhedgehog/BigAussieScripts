@@ -1104,14 +1104,20 @@ begin
     else if not Inventory.ContainsItem(RawItem) then
     begin
       WriteLn(RawItem + ' not found in the bank.');
-      Logout.ClickLogout;
-      TerminateScript();
+      if not BUYRAWMATERIALS then
+      begin
+        Logout.ClickLogout;
+        TerminateScript();
+      end;
     end
     else if ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)) and (Inventory.CountItem(RawItem) < 5) then
     begin
       WriteLn(RawItem + ' not found in the bank.');
-      Logout.ClickLogout;
-      TerminateScript();
+      if not BUYRAWMATERIALS then
+      begin
+        Logout.ClickLogout;
+        TerminateScript();
+      end;
     end;
   end;
 end;
