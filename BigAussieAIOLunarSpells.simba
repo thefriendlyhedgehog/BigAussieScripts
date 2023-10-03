@@ -120,6 +120,7 @@ var
   AstralRunesRequired,
   RequiredItemArray5,
   CoinCostPerCast: Integer;
+  PreviousProfit: Integer;
 
   NextBreakTime,
   NextSleepTime: String;
@@ -128,7 +129,6 @@ var
 
   CoinsChecked: Boolean;
   HasRunePouch: Boolean;
-  SuperGlassOptimal: Boolean;
 
 
 procedure PauseTimer(Task: PBreakTask);
@@ -1253,8 +1253,11 @@ begin
   end;
 
   Magic.CastSpell(spell);
-  CastCount += 1;
-  TotalActions += 1;
+  if CHOSENSPELL <> PLANK_MAKE then
+  begin
+    CastCount += 1;
+    TotalActions += 1;
+  end;
 
   if (Chat.FindLastMessage('You do not have enough', [CHAT_COLOR_BLACK])) or 
     ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) then
@@ -1350,7 +1353,7 @@ begin
       Self.DoAntiban;
     end;
   end;
-  CastCount += Inventory.CountItem(ProcessedItem);
+//  CastCount += Inventory.CountItem(ProcessedItem);
   Self.Report();
   CheckBreakSleepLevel();
 end;
@@ -1800,6 +1803,7 @@ begin
     FocusJustSwitched := True;
   end;
   CastCount += Inventory.CountItem(ProcessedItem);
+  TotalActions += Inventory.CountItem(ProcessedItem);
   CheckBreakSleepLevel();
   if not MainScreen.HasInterface() then
     Self.Report();
@@ -1982,11 +1986,11 @@ begin
   end;
   case ChosenSpell of
     BAKE_PIE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue);
-    HUMIDIFY: Result := Trunc((RawTotal / 5) * ((ProcessedItemValue * 5) - (RawItemValue * 5 + RuneValue))); // This is 100% correct
-    SPIN_FLAX: Result := Round((ProcessedItemValue * 5 * (RawTotal / 5)) - (RawItemValue * RawTotal) - (RuneValue * (RawTotal / 5)) - (ItemArray5Value * 2 * (RawTotal / 5)));
-    TAN_LEATHER: Result := Round((ProcessedItemValue * 5 * (RawTotal / 5)) - (RawItemValue * RawTotal) - (RuneValue * 2 * (RawTotal / 5)) - (ItemArray5Value * (RawTotal / 5))); // This is 100% correct
-    STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue); // Untested but updated.
-    PLANK_MAKE: Result := ProcessedTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue - ItemArray5Value - CoinCostPerCast);
+    HUMIDIFY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - RuneValue;
+    SPIN_FLAX: Result := RawTotal * (ProcessedItemValue - RawItemValue) - (RuneValue - 2 * ItemArray5Value);
+    TAN_LEATHER: Result := RawTotal * (ProcessedItemValue - RawItemValue) - (2 * RuneValue - ItemArray5Value);
+    STRING_JEWELLERY: Result := RawTotal * (ProcessedItemValue - RawItemValue) - 2 * RuneValue; // Untested but updated.
+    PLANK_MAKE: Result := RawTotal * (ProcessedItemValue - RawItemValue - 2 * RuneValue - ItemArray5Value - CoinCostPerCast);
     RECHARGE_DRAGONSTONE: Result := RawTotal * (ProcessedItemValue - RawItemValue - RuneValue - ItemArray5Value);
     SUPERGLASS_MAKE:
     begin
@@ -2026,21 +2030,22 @@ end;
 
 procedure AIOLunarSpells.Report();
 var
-  CurrentXP, GainedXP, XP, Profit, ProfitAPI: Integer;
+  CurrentXP, GainedXP, Profit, ProfitAPI: Integer;
   FocusStateStr: String;
   RemainingFocusTime: Int64;
 begin
-  ProfitAPI = 0;
   ClearDebug();
   if not MainScreen.HasInterface() then
     CurrentXP := XPBar.Read();
   GainedXP := CurrentXP - startXP;
-  XP := TotalActions * 14 * 200;
   Profit := CalculateProfit();
-  ProfitAPI := CalculateProfit();
-  StatsPayload.Update(GainedXP, ProfitAPI, 0);
+  ProfitAPI := Profit - PreviousProfit; 
+  PreviousProfit := Profit;
+
+  XPBar.EarnedXP();
+  StatsPayload.Update(0, ProfitAPI, 0);
   if not APIClient.IsSetup or APIClient.Timer.IsFinished() then
-    APIClient.SubmitStats(APIClient.GetUUID());
+      APIClient.SubmitStats(APIClient.GetUUID());
     
   if (Length(Antiban.Breaks) > 0) then
     NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
