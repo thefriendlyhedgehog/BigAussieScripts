@@ -400,8 +400,8 @@ begin
     Exit;
   end;
 
-  StatsPayload.Setup({$macro SCRIPT_ID});
-  APIClient.TimeStamp := GetTickCount();
+  //StatsPayload.Setup({$macro SCRIPT_ID});
+  //APIClient.TimeStamp := GetTickCount();
 
   SetLength(Items, 59);          // Rawitem, ProcessedItem, NotedItem, AstralRune, ItemArray5(Nature Rune/Sand), Coins(6th array only used on MAKE PLANK)
   Items[0].Name := 'Berry Pie';
