@@ -1213,7 +1213,6 @@ end;
 procedure AIOLunarSpells.CastSpell();
 var
   spell: ERSSpell;
-  currentXP: Int32;
 begin
   case CHOSENSPELL of
     BAKE_PIE: spell := ERSSpell.BAKE_PIE;
