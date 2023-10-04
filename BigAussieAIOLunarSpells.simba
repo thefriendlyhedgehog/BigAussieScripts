@@ -21,7 +21,7 @@ var
 
   // You ONLY need to edit these if you are not going to use the GUI //
   ENABLE_GUI: Boolean                         = True; // Enable or Disable the use of a GUI - NOTE: Some settings can only be changed in the GUI
-  STAFFCHECK: Boolean                         = True; // Set to "False" to disable the checking of required staff.
+  STAFFCHECK: Boolean                         = True; // Set to "False" to disable the checking of required staffs.
   STOP_AT_LEVEL: Integer                      = 99; // Script will Logout and stop when this level is reached.
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
   SELECTEDITEM: string;                       //= Berry Pie
@@ -400,8 +400,8 @@ begin
     Exit;
   end;
 
-  //StatsPayload.Setup({$macro SCRIPT_ID});
-  //APIClient.TimeStamp := GetTickCount();
+  StatsPayload.Setup({$macro SCRIPT_ID});
+  APIClient.TimeStamp := GetTickCount();
 
   SetLength(Items, 59);          // Rawitem, ProcessedItem, NotedItem, AstralRune, ItemArray5(Nature Rune/Sand), Coins(6th array only used on MAKE PLANK)
   Items[0].Name := 'Berry Pie';
@@ -611,7 +611,11 @@ begin
   Timer.Start();
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   ClearDebug();
-  //DisableSpellFiltering(GameTabs, ERSGameTab.MAGIC); // Maybe we force disable spell filtering if we have double click issues?
+  if Inventory.ContainsItem(RunePouch) then
+  begin
+    HasRunePouch := True;
+    WriteLn('Rune Pouch Found, Will use pouch instead of runes. Ensure your pouch is full.');
+  end;
   if STAFFCHECK then
   begin
     ItemFinder.Similarity := 0.989; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
@@ -1495,7 +1499,6 @@ begin
   Bank.Hover();
   SetWaitTime();
   Wait(waitTimeCasting);
-  currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   OpenBankDepositItem(ProcessedItemBank);
 end;     
 
@@ -1852,11 +1855,6 @@ begin
       StaffNames := ['Staff of earth', 'Dust battlestaff', 'Mystic dust staff', 'Mud battlestaff', 'Mystic mud staff', 'Lava battlestaff', 'Mystic lava staff'];
     RECHARGE_DRAGONSTONE:
       StaffNames := ['Staff of water', 'Mist battlestaff', 'Mystic mist staff', 'Mud battlestaff', 'Mystic mud staff', 'Steam battlestaff', 'Mystic steam staff', 'Kodai wand', 'Tome of water'];
-  end;
-  if Inventory.ContainsItem(RunePouch) then
-  begin
-    HasRunePouch := True;
-    WriteLn('Rune Pouch Found.');
   end;
   // Open the equipment screen
   Equipment.Open();
