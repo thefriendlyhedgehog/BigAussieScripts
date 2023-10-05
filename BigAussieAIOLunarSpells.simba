@@ -977,10 +977,12 @@ begin
       if BANKFILLERSCHECK then
       begin
         Bank.DepositAll();
+        WaitUntil(not Inventory.ContainsItem(ProcessedItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       end
       else
       begin
         Bank.DepositItem(item, True);
+        WaitUntil(not Inventory.ContainsItem(ProcessedItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       end;
       if WaitUntil(not Inventory.ContainsItem(item.Item), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed)) then
       begin
@@ -1075,6 +1077,7 @@ begin
     TerminateScript();
   end;
   
+  Wait(RandomRange(300, 500));
   if (Inventory.CountItem(RawItem) < 5) then
   begin
     WriteLn('Withdrawing ' + RawItem);
@@ -1435,7 +1438,7 @@ begin
     SetWaitTime();
     Wait(waitTimeCasting);
   end;
-  Self.Report();
+//  Self.Report();
   CheckBreakSleepLevel();
 end;     
 
