@@ -1054,10 +1054,9 @@ end;
 procedure AIOLunarSpells.WithdrawRawItem(RawItem: TRSitem; RawItemBank: TRSBankItem; QuantityInput: integer; BUYRAWMATERIALS: boolean);
 var
   attempts: Int32;
-  withdrawAttempts: Int32;
 begin
   attempts := 0;
-  while (attempts < 5) and (not Bank.IsOpen()) do
+  while (attempts < 3) and (not Bank.IsOpen()) do
   begin
     Bank.WalkOpen();
     WaitUntil(Bank.IsOpen(), 375, 2150);
@@ -1074,55 +1073,38 @@ begin
     WriteLn('Failed to open the bank after multiple attempts');
     Logout.ClickLogout;
     TerminateScript();
-  end
-  else
+  end;
+  
+  if (Inventory.CountItem(RawItem) < 5) then
   begin
-    withdrawAttempts := 0;
-    while (withdrawAttempts < 3) and ((Inventory.CountItem(RawItem) < 3) or ((Inventory.CountItem(RawItem) < 5) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) do
-    begin
-      WriteLn('Looking for ' + RawItem);
-      Bank.WithdrawItem(RawItemBank, True);
-      Inc(withdrawAttempts);
-      Wait(RandomRange(1000, 2000)); // wait before retrying
-    end;
+    WriteLn('Withdrawing ' + RawItem);
+    Bank.WithdrawItem(RawItemBank, True);
+    WaitUntil(Inventory.CountItem(RawItem) >= 5, 375, 2150);
+  end;
+    
+  if (Inventory.CountItem(RawItem) < 5) and (Bank.CountItem(RawItem) > 0) then
+  begin
+    WriteLn('No ' + Rawitem + ' Found in inventory but found in bank? Attempting again');
+    Bank.WithdrawItem(RawItemBank, True);
+    WaitUntil(Inventory.CountItem(RawItem) >= 5, 375, 2150);
+  end;
 
-    if (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER) then
-    begin
-      WaitUntil(Inventory.CountItem(RawItem) >= 5, GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    end
-    else
-    begin
-      WaitUntil(Inventory.ContainsItem(RawItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    end;
-
-    if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
-    begin
-      RawItemToBuy := QuantityInput;
-      WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
-    end;
-
-    if not Inventory.ContainsItem(Rawitem) and (Bank.CountItem(RawItem) > 0) then
-    begin
-      WriteLn('Failed to withdraw ' + RawItem + '. Trying again.');
-    end
-    else if not Inventory.ContainsItem(RawItem) then
-    begin
-      WriteLn(RawItem + ' not found in the bank.');
-      if not BUYRAWMATERIALS then
-      begin
-        Logout.ClickLogout;
-        TerminateScript();
-      end;
-    end
-    else if ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)) and (Inventory.CountItem(RawItem) < 5) then
-    begin
-      WriteLn(RawItem + ' not found in the bank.');
-      if not BUYRAWMATERIALS then
-      begin
-        Logout.ClickLogout;
-        TerminateScript();
-      end;
-    end;
+  if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
+  begin
+    RawItemToBuy := QuantityInput;
+    WriteLn('Will purchase ' + IntToStr(RawItemToBuy) + ' ' + RawItem);
+  end
+  else if not Inventory.ContainsItem(RawItem) and not BUYRAWMATERIALS then
+  begin
+    WriteLn(RawItem + ' Not in Inventory after withdraw, Buy Materials is disabled. Logging out.');
+    Logout.ClickLogout;
+    TerminateScript();
+  end
+  else if ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)) and (Inventory.CountItem(RawItem) < 5) and not BUYRAWMATERIALS then
+  begin
+    WriteLn(RawItem + ' Not in Inventory after withdraw, Buy Materials is disabled. Logging out.');
+    Logout.ClickLogout;
+    TerminateScript();
   end;
 end;
 
@@ -1152,21 +1134,29 @@ var
 begin
   astralRunesCount := Inventory.CountItemStack(AstralRune);
 
-if not HasRunePouch then
-begin  
-  if (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = PLANK_MAKE) then
-    itemArray5Count := Inventory.CountItemStack(ItemArray5)
-  else if (CHOSENSPELL = SUPERGLASS_MAKE) then
-    itemArray5Count := 30 // Fix this later
-  else
-    itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
-
-    if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
+  if not HasRunePouch then
+  begin  
+    if (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = PLANK_MAKE) then
+      itemArray5Count := Inventory.CountItemStack(ItemArray5)
+    else if (CHOSENSPELL = SUPERGLASS_MAKE) then
+      itemArray5Count := 30 // Fix this later
+    else
+      itemArray5Count := 30; // Set to 30 so it doesn't trigger the logout condition
+    if not Inventory.ContainsItem(itemName) then
     begin
-      Logout.ClickLogout;
-      WriteLn('We are out of ' + itemName + ', AstralRunes or ItemArray5 and buying is disabled. Logging out.');
-      WriteLn('If this is incorrect, make sure your item/runes are at the top on the all tab.');
-      TerminateScript();
+      Wait(1000); 
+      if not Inventory.ContainsItem(itemName) then
+      begin
+        if not Inventory.ContainsItem(itemName) or (astralRunesCount < 30) or (itemArray5Count < 30) then
+        begin
+          Logout.ClickLogout;
+          WriteLn('We are out of ' + itemName + ', AstralRunes or ItemArray5 and buying is disabled. Logging out.');
+          WriteLn('If this is incorrect, make sure your item/runes are at the top on the all tab.');
+          WriteLn('Item Array 5 Count: ' + IntToStr(itemArray5Count));
+          WriteLn('Astral Runes Count: ' + IntToStr(astralRunesCount));
+          TerminateScript();
+        end;
+      end;
     end;
   end;
 end;
