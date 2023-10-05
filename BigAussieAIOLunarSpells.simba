@@ -10,7 +10,7 @@
 // If you wish to use the Rune Pouch you MUST start with it in your inventory.
 // The grand exchange features will Buy/Sell at Above/Below market prices, if an order is not filled the script will not cancel/relist you need to do this manually.
 // 
-// SRL-T - V2.7.0 / Wasplib V14.8.5
+// SRL-T - V2.7.1 / Wasplib V14.8.6
 
 type
   ScriptSpeedTypes = (SLOW, NORMAL, FAST, TURBO);
