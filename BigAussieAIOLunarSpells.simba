@@ -1076,7 +1076,7 @@ begin
     Logout.ClickLogout;
     TerminateScript();
   end;
-  
+
   Wait(RandomRange(300, 500));
   if (Inventory.CountItem(RawItem) < 5) then
   begin
@@ -1438,7 +1438,7 @@ begin
     SetWaitTime();
     Wait(waitTimeCasting);
   end;
-//  Self.Report();
+  Self.Report();
   CheckBreakSleepLevel();
 end;     
 
