@@ -1323,6 +1323,8 @@ end;
 
 procedure AIOLunarSpells.doBakePieAndStringJewellery();
 begin
+  if RawItem = 'Raw summer pie' then
+    ItemFinder.Similarity := 0.999;
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   OpenBankDepositItem(ProcessedItemBank);
