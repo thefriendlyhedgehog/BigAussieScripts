@@ -1322,9 +1322,10 @@ begin
 end;
 
 procedure AIOLunarSpells.doBakePieAndStringJewellery();
+var
+  initialXP, currentXP: Int32;
+  startTime: UInt64;
 begin
-  if RawItem = 'Raw summer pie' then
-    ItemFinder.Similarity := 0.999;
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   OpenBankDepositItem(ProcessedItemBank);
@@ -1349,6 +1350,8 @@ begin
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 375, 2100);  
   CastSpell();
+  initialXP := XPBar.Read();
+  startTime := GetTickCount();
   while Inventory.ContainsItem(RawItem) do
   begin
     Wait(RandomRange(600, 1100));
@@ -1356,8 +1359,15 @@ begin
     begin
       Self.DoAntiban;
     end;
+    currentXP := XPBar.Read();
+    if (currentXP <= initialXP) and (GetTickCount() - startTime >= RandomRange(3000, 4000)) then
+      break;
+    if currentXP > initialXP then
+    begin
+      initialXP := currentXP;
+      startTime := GetTickCount();
+    end;
   end;
-//  CastCount += Inventory.CountItem(ProcessedItem);
   Self.Report();
   CheckBreakSleepLevel();
 end;
