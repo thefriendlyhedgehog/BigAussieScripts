@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '15'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '16'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -515,6 +515,8 @@ begin
   HasRunePouch := False;
   RunePouch := ('Rune pouch');
 
+  BUYRAWMATERIALS := QUANTITYINPUT > 0;
+
   if SELECTEDITEM in ['Soda Ash', 'Seaweed', 'Swamp Weed'] then
   begin
     RawItemQuantity := 13;
@@ -646,105 +648,16 @@ begin
   SaveScreenshot('Screenshots/LunarAIO_' + Name + '_' + IntToStr(i) + '.png');
 end;
 
-procedure AIOLunarSpells.OpenGrandExchange();
-var
-  attempts: Integer;
-  chatTitle: String;
-begin
-  attempts := 0;
-
-  while attempts < 3 do
-  begin
-    if GrandExchange.Open() then
-    begin
-      WriteLn('Successfully opened the Grand Exchange');
-      Exit;
-    end;
-
-    chatTitle := Chat.GetChatTitle();
-
-    if chatTitle = 'Grand Exchange Clerk' then
-    begin
-      WriteLn('Clicked on Grand Exchange Clerk, Trying chat options.');
-      Chat.ClickContinue(True);
-      Wait(Random(150, 300));
-      Chat.ClickOption('I''d like to set up trade offers please.', True);
-      Wait(Random(800, 1200));
-      Chat.ClickContinue(True);
-      Inc(attempts);
-      continue;
-    end;
-
-   WriteLn('Failed to open the Grand Exchange');
-    Inc(attempts);
-  end;
-
-  Logout.ClickLogout();
-  TerminateScript('Failed to open Grand Exchange after 3 attempts, logged out and terminated.')
-end;
-
-procedure AIOLunarSpells.CollectAll(UpdateHistory: Boolean = True; Force: Boolean = False);
-var
-  CollectButton: TRSButton;
-begin
-  if not RSClient.IsLoggedIn() then exit();
-
-  if not GrandExchange.Open() then
-  begin
-    WriteLn('Failed to open the Grand Exchange');
-    exit();
-  end;
-
-  CollectButton := GrandExchange.GetOverviewButton(ERSGEOverviewButton.COLLECT);
-  Wait(RandomRange(700, 900)); // Laggy GE
-  if not CollectButton.Visible() then
-  begin
-    WriteLn('Collect button not visible or nothing to collect, moving on.');
-    exit();
-  end;
-
-  if not CollectButton.Click() then
-  begin
-    WriteLn('Failed to click the Collect button');
-    exit();
-  end;
-
-//  if not WaitUntil(not CollectButton.Visible(), 250, , RandomRange(800, 1200)) then
-//    WriteLn('Clicked collect button but items did not collect');
-end;
-
-function FindEmptySlot(): Int32;
-var
-  i: Int32;
-  offerStatus: TRSGEOfferStatus;
-begin
-  for i := 0 to 7 do
-  begin
-    offerStatus := GrandExchange.GetOfferStatus(i);
-    if offerStatus.OfferType = ERSGEOfferType.EMPTY then
-    begin
-      Result := i;
-      Exit;
-    end;
-  end;
-  Result := -1;
-end;
-
 procedure AIOLunarSpells.SellItem(itemName: String; quantity: Int32; price: Int32);
 var
   slotNumber: Int32;
-  sellButton, confirmButton, quantityButton, decreaseButton: TRSButton;
-  offerStatus: TRSGEOfferStatus;
-  i: Int32;
   startTime: Int64;
+  offerStatus: TRSGEOfferStatus;
 begin
-  OpenGrandExchange();
-  if not GrandExchange.Open() then
-  begin
-    exit;
-  end;
-
-  slotNumber := FindEmptySlot();
+  if Bank.IsOpen() then
+    Bank.Close();
+  GrandExchange.Open();
+  slotNumber := GrandExchange.nextEmptySlot();
 
   if slotNumber = -1 then
   begin
@@ -752,37 +665,7 @@ begin
     exit;
   end;
 
-  sellButton := GrandExchange.GetOfferCreateButton(ERSGEOfferCreateButton.SELL, slotNumber);
-  if not sellButton.Click() then
-  begin
-    exit;
-  end;
-
-  if not Inventory.ClickItem(NotedProcessed) then
-  begin
-    exit;
-  end;
-  Wait(Random(400, 800));
-  decreaseButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.PRICE_DECREASE);
-  for i := 1 to 2 do
-  begin
-    if not decreaseButton.Click() then
-    begin
-      exit;
-    end;
-  end;
-
-  quantityButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.QUANTITY_ALL);
-  if not quantityButton.Click() then
-  begin
-    exit;
-  end;
-
-  confirmButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.CONFIRM);
-  if not confirmButton.Click() then
-  begin
-    exit;
-  end;
+  GrandExchange.CreateSellOffer(slotNumber, itemName, quantity, price);
 
   startTime := GetTimeRunning();
   repeat
@@ -792,15 +675,13 @@ begin
 
   if offerStatus.Progress < 100 then
   begin
-    WriteLn('The sell offer for ' + ProcessedItem + ' has not been fully fulfilled after 3 minutes');
-    MainScreen.CloseInterface(True);
+    WriteLn('The sell offer for ' + itemName + ' has not been fully fulfilled after 3 minutes');
     Logout.ClickLogout();
     TerminateScript('Sell offer not fully fulfilled. Script terminated.');
   end
   else
   begin
-    NotedTotal += WithdrawnCount;
-    WriteLn('The sell offer for ' + ProcessedItem + ' has been fulfilled');
+    WriteLn('The sell offer for ' + itemName + ' has been fulfilled');
   end;
 end;
 
@@ -832,111 +713,44 @@ begin
         end;
       end;
     end;
-    Wait(RandomRange(700, 900));
-    CollectAll();
-    Wait(RandomRange(900, 1300));
+    GrandExchange.CollectOffer();
   end;
 end;
 
 procedure AIOLunarSpells.BuyItem(itemName: String; quantity: Int32; price: Int32);
 var
   slotNumber: Int32;
-  i: Int32;
-  buyButton, confirmButton, quantityButton, increaseButton: TRSButton;
-  offerStatus: TRSGEOfferStatus;
   startTime: Int64;
+  offerStatus: TRSGEOfferStatus;
 begin
-  OpenGrandExchange();
-  if not GrandExchange.Open() then
-  begin
-    exit;
-  end;
+  if Bank.IsOpen() then
+    Bank.Close();
 
-  slotNumber := FindEmptySlot();
-
+  GrandExchange.Open();
+  WaitUntil(GrandExchange.IsOpen, 100, 3000);
+  slotNumber := GrandExchange.nextEmptySlot();
   if slotNumber = -1 then
   begin
+    WriteLn('All slots are full');
     exit;
   end;
+  GrandExchange.CreateBuyOffer(itemName, '+10', quantity, slotNumber);
 
-  buyButton := GrandExchange.GetOfferCreateButton(ERSGEOfferCreateButton.BUY, slotNumber);
-  if not buyButton.Click() then
-  begin
-    exit;
-  end;
-  Wait(RandomRange(1000, 2000)); // GE is laggy.
-  if not GrandExchange.Search(itemName, True) then
-  begin
-    exit;
-  end;
-  Wait(RandomRange(1000, 2000)); // GE is laggy.
-  quantityButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.QUANTITY_ENTER);
-  if not quantityButton.Click() then
-  begin
-    exit;
-  end;
-
-  Wait(Random(1200, 1600)); // GE is laggy...
-
-  // Probably a cleaner way to do this but it works so....
-  Keyboard.Send(IntToStr(quantity));
-  KeyDown(VK_RETURN);
-  Wait(Random(60, 100));
-  if IsKeyDown(VK_RETURN) then
-    KeyUp(VK_RETURN);
-
-  increaseButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.PRICE_INCREASE);
-  for i := 1 to 2 do
-  begin
-    if not increaseButton.Click() then
-    begin
-      exit;
-    end;
-    Wait(Random(600, 750));
-  end;
-
-confirmButton := GrandExchange.GetSetupOfferButton(ERSGESetupOfferButton.CONFIRM);
-if not confirmButton.Click() then
-begin
-  exit;
-end;
-
-if Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK]) then
-begin
-  WriteLn('Not enough coins to buy from GE, logging out and terminating script.');
-  TakeScreenshot('GESellCoins');
-  Logout.ClickLogout();
-  TerminateScript();
-end;
-
-startTime := GetTimeRunning();
-repeat
-  Wait(Random(3000, 5000));
-  offerStatus := GrandExchange.GetOfferStatus(slotNumber);
-  if Chat.FindLastMessage('enough', [CHAT_COLOR_BLACK]) then
-  begin
-    WriteLn('Not enough coins to buy from GE, logging out and terminating script.');
-    TakeScreenshot('GESellCoins');
-    Logout.ClickLogout();
-    TerminateScript();
-  end;
-until (offerStatus.Progress = 100) or ((GetTimeRunning() - startTime) > RandomRange(160000, 210000));
+  startTime := GetTimeRunning();
+  repeat
+    Wait(Random(3000, 5000));
+    offerStatus := GrandExchange.GetOfferStatus(slotNumber);
+  until (offerStatus.Progress = 100) or ((GetTimeRunning() - startTime) > RandomRange(160000, 210000));
 
   if offerStatus.Progress < 100 then
   begin
-    WriteLn('The buy offer for ' + RawItem + ' has not been fully fulfilled after 3 minutes, Will move on.');
-    CollectAll();
-    MainScreen.CloseInterface(True);
+    WriteLn('The buy offer for ' + itemName + ' has not been fully fulfilled after 3 minutes');
+    Logout.ClickLogout();
+    TerminateScript('Buy offer not fully fulfilled. Script terminated.');
   end
   else
   begin
-    WriteLn('The buy offer for ' + RawItem + ' has been fulfilled');
-  end;
-
-  case itemName of
-    'RawItem2': RawPurchased2 += quantity;
-    'RawItem': RawPurchased += quantity;
-    'AstralRune': RunesPurchased += quantity;
+    WriteLn('The buy offer for ' + itemName + ' has been fulfilled');
   end;
 end;
 
@@ -1087,14 +901,14 @@ begin
   begin
     WriteLn('Withdrawing ' + RawItem);
     Bank.WithdrawItem(RawItemBank, True);
-    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 375, 2150);
+    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 375, 900);
   end;
     
   if (Inventory.CountItem(RawItem) < requiredQuantity) and (Bank.CountItem(RawItem) > 0) then
   begin
     WriteLn('No ' + Rawitem + ' Found in inventory but found in bank? Attempting again');
     Bank.WithdrawItem(RawItemBank, True);
-    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 375, 2150);
+    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 375, 900);
   end;
 
   if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
@@ -1127,7 +941,7 @@ end;
 
 procedure AIOLunarSpells.ExitGEOpenBank();
 begin
-  CollectAll();
+  GrandExchange.CollectOffer();
   MainScreen.CloseInterface(True);
   WaitUntil(not Mainscreen.HasInterface(), 100, 2000);
   Bank.WalkOpen();
@@ -2150,7 +1964,7 @@ type
     Message, Message2, QuantityLabel, BankFillersInfoLabel, ScriptSpeedLabel, GEInfoLabel, GEInfoLabel2, StopAtLevelLabel, ItemSelectorLabel, LunarSpellLabel: TLabel;
     QuantityInputBox, StopAtLevelInputBox: TEdit;
     ScriptSpeedSelector: TLabeledCombobox;
-    SELLNOTEDITEMCHECKBox, BUYRAWMATERIALSBox, BUYRUNESCHECKBox, BankFillersCheckBox: TLabeledCheckBox;
+    SELLNOTEDITEMCHECKBox, BUYRUNESCHECKBox, BankFillersCheckBox: TLabeledCheckBox;
     LunarSpellSelector: TComboBox;
     ItemSelector: TComboBox;
   end;
@@ -2161,7 +1975,6 @@ begin
   CHOSENSPELL := ELunarSpell(Self.LunarSpellSelector.GetItemIndex());
   SCRIPTSPEED := ScriptSpeedTypes(Self.ScriptSpeedSelector.GetItemIndex());
   SELLNOTEDITEMCHECK := Self.SELLNOTEDITEMCHECKBox.IsChecked();
-  BUYRAWMATERIALS := Self.BUYRAWMATERIALSBox.IsChecked();
   BUYRUNESCHECK := Self.BUYRUNESCHECKBox.IsChecked();
   BANKFILLERSCHECK := Self.BankFillersCheckBox.IsChecked();
   QUANTITYINPUT := StrToInt(Self.QuantityInputBox.GetText); // This should finally give text, took me longer than I care to admit.....
@@ -2348,19 +2161,16 @@ begin
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(Self.ScriptSpeedSelector.GetTop() + TControl.AdjustToDPI(45));
     SetCaption('Only enable this if you have bank fillers setup correctly.');
-    SetFontColor(clNavy);
+    SetFontColor(clRed);
   end;
-
-//  Self.AddTab('Grand Exchange Features'); //  Keep this incase we cant do it all on 1 tab
-//  tab := Self.Tabs[High(Self.Tabs)];
 
   with Self.Message do
   begin
     Create(tab);
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(TControl.AdjustToDPI(160));
-    SetCaption('Below are BETA Grand Exchange Features.');
-    SetFontColor(clRed);
+    SetCaption('Auto Buys/Sells at Above/Below market rate for faster sales.');
+    SetFontColor(clNavy);
   end;
 
   with Self.SELLNOTEDITEMCHECKBox do
@@ -2382,26 +2192,7 @@ begin
 //    SetChecked(BUYRUNESCHECK);
     SetHint('Will buy required runes for each spell, will only buy what is needed.');
   end;
-
-  with GEInfoLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.SELLNOTEDITEMCHECKBox.GetLeft() + Self.SELLNOTEDITEMCHECKBox.GetWidth() + TControl.AdjustToDPI(40));
-    SetTop(Self.SELLNOTEDITEMCHECKBox.GetTop());
-    SetCaption('Will sell below market average');
-      SetFontColor(clNavy);
-  end;
-
-  with Self.BUYRAWMATERIALSBox do
-  begin
-    Create(tab);
-    SetCaption("Buy Raw Material");
-    SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.BUYRUNESCHECKBox.GetTop() + TControl.AdjustToDPI(25));
-//    SetChecked(BUYRAWMATERIALS);
-    SetHint('Will buy raw materials at above market average when you run out');
-  end;
-
+{
   with GEInfoLabel2 do
   begin
     Create(tab);
@@ -2410,12 +2201,13 @@ begin
     SetCaption('Will buy above market average');
       SetFontColor(clNavy);
   end;
+}
 
   with Self.QuantityInputBox do
   begin
     Create(tab);
     SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.BUYRAWMATERIALSBox.GetTop() + TControl.AdjustToDPI(25));
+    SetTop(Self.BUYRUNESCHECKBox.GetTop() + TControl.AdjustToDPI(25));
     SetWidth(100);
     SetText('0');
   end;
@@ -2433,7 +2225,7 @@ begin
     Create(tab);
     SetCaption("Use Bank Fillers");
     SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.QuantityInputBox.GetTop() + TControl.AdjustToDPI(35));
+    SetTop(Self.QuantityInputBox.GetTop() + TControl.AdjustToDPI(60));
     SetChecked(BANKFILLERSCHECK);
     SetHint('Enable this if you have bank fillers setup correctly.');
   end;
@@ -2444,7 +2236,7 @@ begin
     SetLeft(Self.BankFillersCheckBox.GetLeft() + Self.BankFillersCheckBox.GetWidth() + TControl.AdjustToDPI(10));
     SetTop(Self.BankFillersCheckBox.GetTop());
     SetCaption('');
-    SetFontColor(clNavy);
+    SetFontColor(clRed);
   end;
 
   Self.CreateBankSettings();
