@@ -130,29 +130,6 @@ var
   CoinsChecked: Boolean;
   HasRunePouch: Boolean;
 
-
-procedure PauseTimer(Task: PBreakTask);
-var
-  T: PBreakTask;
-begin
-  Timer.Pause;
-  T := Task;
-end;
-
-procedure ResumeTimer(Task: PBreakTask);
-var
-  T: PBreakTask;
-begin
-  Timer.Resume;
-  T := Task;
-end;
-
-procedure OnBreakFinish(Task: PBreakTask);
-begin
-  if (Length(Antiban.Breaks) > 0) then
-    NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
-end;
-
 procedure TAntiban.Setup(); override;
 begin
   Antiban.Skills := [ERSSkill.TOTAL, ERSSKILL.MAGIC];
