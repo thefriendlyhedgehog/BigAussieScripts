@@ -1,5 +1,5 @@
 //{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '0.1'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -8,11 +8,11 @@
 
 //=============DEFAULT SCRIPT SETTINGS============== // The values below are adjustable in the GUI and don't need to be changed here.
 var
-  STONYBASALTINPUT: Integer                      = 10; // 
-  ICYBASALTINPUT: Integer                        = 10;//
-  TESALTMINEINPUT: Integer                       = 10;//
-  EFHSALTMINEINPUT: Integer                       = 1000;//
-  URTSALTMINEINPUT: Integer                       = 1000;//
+  STONYBASALTINPUT: Integer                      = 10; 
+  ICYBASALTINPUT: Integer                        = 10;
+  TESALTMINEINPUT: Integer                       = 10;
+  EFHSALTMINEINPUT: Integer                      = 1000;
+  URTSALTMINEINPUT: Integer                      = 1000;
   BASALTONLYCHECK: Boolean                       = False;
 
   RSW: TRSWalker;
@@ -164,9 +164,7 @@ begin
 
     if not Snowflake.IsVisible() then
     begin
-      RSW.WalkBlind([6882, 707], 25);
-      while Minimap.IsPlayerMoving() do
-        Wait(100);
+      RSW.WalkBlind([6882, 707], 35);
     end;
 
     if not Snowflake.IsVisible() then
@@ -183,22 +181,13 @@ function SaltMiner.DESCENT_STAIRS(): Boolean;
 begin
   if not StairsDescend.IsVisible() then
   begin
-    RSW.WalkBlind([6870, 683], 25);
-    while Minimap.IsPlayerMoving() do
-    begin
-      if StairsDescend.IsVisible() then
-      begin
-        StairsDescend.Click();
-        Wait(RandomRange(300, 500));
-      end;
-      Wait(100);
-    end;
+    RSW.WalkBlind([6870, 683], 35);
   end;
 
   if StairsDescend.IsVisible() then
   begin
     StairsDescend.Click();
-    Wait(RandomRange(300, 500));
+    WaitUntil(Minimap.PercentBlack() >= 10, 100, 5000);
     while Minimap.IsPlayerMoving() do
       Wait(100);
   end;
@@ -209,23 +198,13 @@ begin
   Result := False;
   if not StairsAscend.IsVisible() then
   begin
-    RSW.WalkBlind([10431, 4521], 30);
-    while Minimap.IsPlayerMoving() do
-    begin
-      if StairsAscend.IsVisible() then
-      begin
-        StairsAscend.Click();
-        Wait(RandomRange(300, 500));
-        Result := True;
-      end;
-      Wait(100);
-    end;
+    RSW.WalkBlind([10431, 4521], 35);
   end;
 
   if StairsAscend.IsVisible() then
   begin
     StairsAscend.Click();
-    Wait(RandomRange(300, 500));
+    WaitUntil(Minimap.PercentBlack() <= 10, 100, 5000);
     while Minimap.IsPlayerMoving() do
       Wait(100);
     Result := True;
@@ -234,7 +213,7 @@ end;
 
 function SaltMiner.WALKTOMINESPOTS(): Boolean;
 begin
-  RSW.WalkBlind([10432, 4562], 25);
+  RSW.WalkBlind([10408, 4578], 35);
   while Minimap.IsPlayerMoving() do
   begin
     if BasaltRock.IsVisible() then
@@ -263,7 +242,7 @@ begin
     begin
       Rock.Click();
 
-      MiningDuration := RandomRange(700, 900);
+      MiningDuration := RandomRange(600, 750);
       T.Start();
 
       while (T.ElapsedTime < MiningDuration) do
@@ -314,7 +293,7 @@ begin
     begin
       BasaltRock.Click();
 
-      MiningDuration := RandomRange(700, 900);
+      MiningDuration := RandomRange(600, 750);
       T.Start();
 
       while (T.ElapsedTime < MiningDuration) do
@@ -339,7 +318,7 @@ begin
     end;
   end;
   ItemCount := Inventory.CountItem(Basalt);
-  ItemCount += ItemTotal;
+  ItemTotal += ItemCount;
   Result := not Inventory.IsFull();
 end;
 
@@ -399,11 +378,37 @@ begin
   UrtSaltCount := Inventory.CountItemStack(UrtSalt);
   EfhSaltCount := Inventory.CountItemStack(EfhSalt);
 
-  if ((TESALTMINEINPUT = 0) or Boolean(TeSaltCount >= TESALTMINEINPUT)) and
-    ((EFHSALTMINEINPUT = 0) or Boolean(EfhSaltCount >= EFHSALTMINEINPUT)) and
-    ((URTSALTMINEINPUT = 0) or Boolean(UrtSaltCount >= URTSALTMINEINPUT)) then
+  if BASALTONLYCHECK then
   begin
-    WriteLn('Desired amount of all salt types reached.');
+    if Inventory.IsFull() then
+    begin
+      if Minimap.PercentBlack() > 10 then
+        Self.CurrentState := STATE_ASCEND_STAIRS
+      else
+        Self.CurrentState := STATE_NOTEBASALT;
+    end
+    else
+    begin
+      if Minimap.PercentBlack() > 10 then
+      begin
+        if BasaltRock.IsVisible() or RSW.AtTile([10411, 4565], 12) then
+          Self.CurrentState := STATE_MINEBASALT
+        else
+          Self.CurrentState := STATE_WALKTOMINESPOTS;
+      end
+      else
+        Self.CurrentState := STATE_DESCENT_STAIRS;
+    end;
+  end
+  else
+  begin
+  if (((TESALTMINEINPUT = 0) or (TeSaltCount >= TESALTMINEINPUT)) and
+     ((EFHSALTMINEINPUT = 0) or (EfhSaltCount >= EFHSALTMINEINPUT)) and
+     ((URTSALTMINEINPUT = 0) or (UrtSaltCount >= URTSALTMINEINPUT)) and
+     ((STONYBASALTINPUT = 0) or (Self.CraftedStonyBasalt >= STONYBASALTINPUT)) and
+     ((ICYBASALTINPUT = 0) or (Self.CraftedIcyBasalt >= ICYBASALTINPUT))) then
+  begin
+    WriteLn('Desired amount reached.');
     Logout.ClickLogout();
     TerminateScript();
   end
@@ -426,37 +431,22 @@ begin
     end
     else
     begin
-      if BASALTONLYCHECK then
-      begin
-        if Inventory.IsFull() then
+        if ((STONYBASALTINPUT > 0) and (Self.CraftedStonyBasalt >= STONYBASALTINPUT)) and
+          ((ICYBASALTINPUT > 0) and (Self.CraftedIcyBasalt >= ICYBASALTINPUT)) then
         begin
-          if Minimap.PercentBlack() > 10 then
-            Self.CurrentState := STATE_ASCEND_STAIRS
-          else
-            Self.CurrentState := STATE_NOTEBASALT;
+          WriteLn('Desired amount of both Stony Basalt and Icy Basalt reached.');
+          Logout.ClickLogout();
+          TerminateScript();
         end
-        else
-        begin
-          if Minimap.PercentBlack() > 10 then
-          begin
-            if BasaltRock.IsVisible() or RSW.AtTile([10411, 4565], 12) then
-              Self.CurrentState := STATE_MINEBASALT
-            else
-              Self.CurrentState := STATE_WALKTOMINESPOTS;
-          end
-          else
-            Self.CurrentState := STATE_DESCENT_STAIRS;
-        end;
-      end
-      else
-      begin
-        if (STONYBASALTINPUT > 0) and (Self.CraftedStonyBasalt >= STONYBASALTINPUT) then
+        else if ((STONYBASALTINPUT > 0) and (Self.CraftedStonyBasalt >= STONYBASALTINPUT)) and
+                ((ICYBASALTINPUT = 0) or (Self.CraftedIcyBasalt >= ICYBASALTINPUT)) then
         begin
           WriteLn('Desired amount of Stony Basalt reached.');
           Logout.ClickLogout();
           TerminateScript();
         end
-        else if (ICYBASALTINPUT > 0) and (Self.CraftedIcyBasalt >= ICYBASALTINPUT) then
+        else if ((ICYBASALTINPUT > 0) and (Self.CraftedIcyBasalt >= ICYBASALTINPUT)) and
+                ((STONYBASALTINPUT = 0) or (Self.CraftedStonyBasalt >= STONYBASALTINPUT)) then
         begin
           WriteLn('Desired amount of Icy Basalt reached.');
           Logout.ClickLogout();
@@ -589,6 +579,12 @@ begin
   WriteLn('----------------------------------------');
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
+
+  if BASALTONLYCHECK then
+  begin
+    WriteLn('   Total Basalt Mined: ' + IntToStr(ItemTotal));
+  end;
+
   if TESALTMINEINPUT > 0 then
   begin
     WriteLn('   TE Salt Mined: ' + IntToStr(Inventory.CountItemStack(TeSalt)) + ' / ' + IntToStr(TESALTMINEINPUT) + ' Target');
@@ -649,7 +645,6 @@ begin
   Options.SetZoomLevel(Random(20, 40));
   Mouse.Speed := Random(16, 22);
   Mouse.Distribution := MOUSE_DISTRIBUTION_GAUSS;
-  Self.RSW.AdaptiveWalk := True;
 
   StartXP := XPBar.Read();
   ItemTotal := 0;
@@ -701,6 +696,21 @@ begin
   inherited;
 end;
 
+procedure TConfig.BasaltOnlyCheckBoxClicked(Sender: TObject);
+begin
+  Self.StonyInputBox.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.IcyInputBox.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.TeSaltMineInputBox.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.EfhSaltMineInputBox.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.StonyInputBoxLabel.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.IcyInputBoxLabel.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.TeSaltMineInputLabel.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.EfhSaltMineInputLabel.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.Message.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.UrtSaltMineInputLabel.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+  Self.UrtSaltMineInputBox.SetVisible(not Self.BasaltOnlyCheckBox.CheckBox.IsChecked());
+end;
+
 procedure TConfig.Run(); override;
 var
   tab: TTabSheet;
@@ -715,11 +725,29 @@ begin
 
   Self.CreateVersionPanel(tab);
 
-  with Self.StonyInputBoxLabel do
+  with Self.BasaltOnlyLabel do
   begin
     Create(tab);
     SetLeft(TControl.AdjustToDPI(37));
     SetTop(TControl.AdjustToDPI(160));
+    SetCaption('Enabled this to mine and note Basalt Only.');
+  end;
+
+  with Self.BasaltOnlyCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Mine/Note Basalt Only.");
+    SetLeft(Self.BasaltOnlyLabel.GetLeft());
+    SetTop(Self.BasaltOnlyLabel.GetTop() + TControl.AdjustToDPI(20));
+    SetHint('Enabled to Mine and Note BASALT ONLY');
+    CheckBox.setOnChange(@Self.BasaltOnlyCheckBoxClicked);
+  end;
+
+  with Self.StonyInputBoxLabel do
+  begin
+    Create(tab);
+    SetLeft(Self.BasaltOnlyCheckBox.GetLeft());
+    SetTop(Self.BasaltOnlyCheckBox.GetTop() + TControl.AdjustToDPI(35));
     SetCaption('Number Of Stony Basalt To Create');
   end;
 
@@ -751,23 +779,6 @@ begin
     SetHint('Number of Icy Basalt to make.');
     SetWidth(100);
     SetText('0');
-  end;
-
-  with Self.BasaltOnlyLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.IcyInputBox.GetLeft());
-    SetTop(Self.IcyInputBox.GetTop() + TControl.AdjustToDPI(35));
-    SetCaption('Enabled this to mine and note Basalt Only.');
-  end;
-
-  with Self.BasaltOnlyCheckBox do
-  begin
-    Create(tab);
-    SetCaption("Mine/Note Basalt Only.");
-    SetLeft(Self.BasaltOnlyLabel.GetLeft());
-    SetTop(Self.BasaltOnlyLabel.GetTop() + TControl.AdjustToDPI(20));
-    SetHint('Enabled to Mine and Note BASALT ONLY');
   end;
 
   with Self.Message do
