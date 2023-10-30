@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := 'bf912822-96fd-4be6-9ad1-5d66ac3bd018'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -683,7 +683,7 @@ var
 type
   TConfig = record(TScriptForm)
     StonyInputBoxLabel, IcyInputBoxLabel, BasaltOnlyLabel, TeSaltMineInputLabel, EfhSaltMineInputLabel, Message, UrtSaltMineInputLabel: TLabel;
-    StonyInputBox, IcyInputBox, TeSaltMineInputBox, EfhSaltMineInputBox, UrtSaltMineInputBox: TEdit;
+    StonyInputBox, IcyInputBox, TeSaltMineInputBox, EfhSaltMineInputBox, UrtSaltMineInputBox: TLabeledEdit;
     BasaltOnlyCheckBox: TLabeledCheckBox;
   end;
 
@@ -745,42 +745,28 @@ begin
     CheckBox.setOnChange(@Self.BasaltOnlyCheckBoxClicked);
   end;
 
-  with Self.StonyInputBoxLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.BasaltOnlyCheckBox.GetLeft());
-    SetTop(Self.BasaltOnlyCheckBox.GetTop() + TControl.AdjustToDPI(35));
-    SetCaption('Number Of Stony Basalt To Create');
-  end;
-
   with Self.StonyInputBox do
   begin
     Create(tab);
-    SetLeft(Self.StonyInputBoxLabel.GetLeft());
-    SetTop(Self.StonyInputBoxLabel.GetTop() + TControl.AdjustToDPI(20));
-    SetCaption('Number of Stony Basalt to make.');
+    SetLeft(Self.BasaltOnlyCheckBox.GetLeft());
+    SetTop(Self.BasaltOnlyCheckBox.GetTop() + TControl.AdjustToDPI(50));
+    SetCaption('Stony Basalt to make.');
     SetHint('Number of Stony Basalt to make.');
-    SetWidth(100);
+    SetWidth(TControl.AdjustToDPI(120));
     SetText('0');
-  end;
-
-  with Self.IcyInputBoxLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.StonyInputBox.GetLeft());
-    SetTop(Self.StonyInputBox.GetTop() + TControl.AdjustToDPI(35));
-    SetCaption('Number Of Icy Basalt To Create.');
+    Edit.SetOnKeyPress(@Edit.NumberField);
   end;
 
   with Self.IcyInputBox do
   begin
     Create(tab);
-    SetLeft(Self.IcyInputBoxLabel.GetLeft());
-    SetTop(Self.IcyInputBoxLabel.GetTop() + TControl.AdjustToDPI(20));
-    SetCaption('Number of Icy Basalt to make.');
+    SetLeft(Self.StonyInputBox.GetLeft());
+    SetTop(Self.StonyInputBox.GetTop() + TControl.AdjustToDPI(50));
+    SetCaption('Icy Basalt to make.');
     SetHint('Number of Icy Basalt to make.');
-    SetWidth(100);
+    SetWidth(TControl.AdjustToDPI(120));
     SetText('0');
+    Edit.SetOnKeyPress(@Edit.NumberField);
   end;
 
   with Self.Message do
@@ -792,61 +778,41 @@ begin
     SetFontColor(clRed);
   end;
 
-  with Self.TeSaltMineInputLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.Message.GetLeft());
-    SetTop(Self.Message.GetTop() + TControl.AdjustToDPI(20));
-    SetCaption('TE Salt To Mine');
-  end;
 
   with Self.TeSaltMineInputBox do
   begin
     Create(tab);
-    SetLeft(Self.TeSaltMineInputLabel.GetLeft());
-    SetTop(Self.TeSaltMineInputLabel.GetTop() + TControl.AdjustToDPI(20));
-    SetCaption('TE Salt To Mine.');
-    SetHint('TE Salt To Mine');
+    SetLeft(Self.Message.GetLeft());
+    SetTop(Self.Message.GetTop() + TControl.AdjustToDPI(50));
+    SetCaption('Te salt to mine..');
+    SetHint('Te salt to mine.');
     SetWidth(100);
     SetText('0');
-  end;
-
-  with Self.EfhSaltMineInputLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.TeSaltMineInputBox.GetLeft());
-    SetTop(Self.TeSaltMineInputBox.GetTop() + TControl.AdjustToDPI(35));
-    SetCaption('EFH Salt To Mine');
+    Edit.SetOnKeyPress(@Edit.NumberField);
   end;
 
   with Self.EfhSaltMineInputBox do
   begin
     Create(tab);
-    SetLeft(Self.EfhSaltMineInputLabel.GetLeft());
-    SetTop(Self.EfhSaltMineInputLabel.GetTop() + TControl.AdjustToDPI(20));
-    SetCaption('EFH Salt To Mine.');
-    SetHint('EFH Salt To Mine.');
+    SetLeft(Self.TeSaltMineInputBox.GetLeft());
+    SetTop(Self.TeSaltMineInputBox.GetTop() + TControl.AdjustToDPI(50));
+    SetCaption('Efh salt to mine.');
+    SetHint('Efh salt to mine.');
     SetWidth(100);
     SetText('0');
-  end;
-
-  with Self.UrtSaltMineInputLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.EfhSaltMineInputBox.GetLeft());
-    SetTop(Self.EfhSaltMineInputBox.GetTop() + TControl.AdjustToDPI(35));
-    SetCaption('TE Salt To Mine');
+    Edit.SetOnKeyPress(@Edit.NumberField);
   end;
 
   with Self.UrtSaltMineInputBox do
   begin
     Create(tab);
-    SetLeft(Self.UrtSaltMineInputLabel.GetLeft());
-    SetTop(Self.UrtSaltMineInputLabel.GetTop() + TControl.AdjustToDPI(20));
-    SetCaption('TE Salt To Mine.');
-    SetHint('TE Salt To Mine.');
+    SetLeft(Self.EfhSaltMineInputBox.GetLeft());
+    SetTop(Self.EfhSaltMineInputBox.GetTop() + TControl.AdjustToDPI(50));
+    SetCaption('Urt salt to mine.');
+    SetHint('Urt salt to mine.');
     SetWidth(100);
     SetText('0');
+    Edit.SetOnKeyPress(@Edit.NumberField);
   end;
 
   Self.CreateAntibanManager();
