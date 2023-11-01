@@ -4,7 +4,6 @@
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 
-
 type
   ScriptSpeedTypes = (SLOW, NORMAL, FAST, TURBO);
 
@@ -532,17 +531,17 @@ begin
   case SCRIPTSPEED of
     SLOW: 
     begin
-      Mouse.Speed := Random(12, 14);
+      Mouse.Speed := Random(12, 15);
       AntiBanChance := 100;  // 100% chance
     end;
     NORMAL: 
     begin
-      Mouse.Speed := Random(17, 22);
+      Mouse.Speed := Random(16, 20);
       AntiBanChance := 70;  // 70% chance
     end;
     FAST: 
     begin
-      Mouse.Speed := Random(24, 29);
+      Mouse.Speed := Random(21, 25);
       AntiBanChance := 50;  // 50% chance
     end;
     TURBO: 
