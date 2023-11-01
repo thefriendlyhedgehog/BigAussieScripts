@@ -50,12 +50,15 @@ type
     Anvil: TRSObject;
     BankChest: TRSObject;
 
+    FoundRareItems: TStringArray;
+
 end;
 
 var
   Timer: TStopWatch;
 
 // The traditional "WalkPath" but using a different formula for building paths
+// "BORROWED" from Flight <3 Shout-Out to flight.
 function TRSWalker.WalkPath(Path: TPointArray; WaitUntilDistance: Int32 = 0): Boolean; override;
   function BuildPath(TPA: TPointArray): TPointArray;
   var
@@ -371,22 +374,22 @@ begin
   WriteLn('Current state: ', Self.CurrentState);
 
   case Self.CurrentState of
-    STATE_MINEBARRONITE:
-      begin
-        MINEBARRONITE();
-        if Inventory.IsFull() then
-          Self.CurrentState := STATE_WALK_TO_ANVIL;
-      end;
     STATE_WALKTOMINESPOTS:
       begin
         WALKTOMINESPOTS();
         if RSW.AtTile(MineSpot1, 15) then
           Self.CurrentState := STATE_MINEBARRONITE;
       end;
+    STATE_MINEBARRONITE:
+      begin
+        MINEBARRONITE();
+        if Inventory.IsFull() then
+          Self.CurrentState := STATE_WALK_TO_ANVIL;
+      end;
     STATE_WALK_TO_ANVIL:
       begin
         WALK_TO_ANVIL();
-        if RSW.AtTile(AnvilLoc, 35) then
+        if RSW.AtTile(AnvilLoc, 15) then
           Self.CurrentState := STATE_USEANVIL;
       end;
     STATE_USEANVIL:
@@ -400,7 +403,7 @@ begin
     STATE_WALK_TO_BANK:
       begin
         WALK_TO_BANK();
-        if RSW.AtTile(BankLoc, 35) then
+        if RSW.AtTile(BankLoc, 15) then
           Self.CurrentState := STATE_BANKITEMS;
       end;
     STATE_BANKITEMS:
@@ -451,20 +454,25 @@ begin
   WriteLn('----------------------------------------');
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Shards/Hour Est.: ' + FormatRoundedNumber(Round((TotalShardsMined) / (GetTimeRunning() / 3600000))));
-  
-  RareItemFound := False;
+
   for i := 0 to High(RareItems) do
   begin
     if Inventory.ContainsItem(RareItems[i]) then
     begin
-      WriteLn('   Found Ancient Relic: ' + RareItems[i]);
-      RareItemFound := True;
+      if not Self.FoundRareItems.Contains(RareItems[i]) then
+        Self.FoundRareItems += [RareItems[i]];
     end;
   end;
-  
-  if not RareItemFound then
+
+  if Length(Self.FoundRareItems) > 0 then
+  begin
+    WriteLn('   Found Ancient Relics: ');
+    for i := 0 to High(Self.FoundRareItems) do
+      WriteLn('     - ' + Self.FoundRareItems[i]);
+  end
+  else
     WriteLn('   No Ancient Relics Found yet');
-  
+
   WriteLn('========================================');
   WriteLn('     BigAussies Barronite Miner      ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});

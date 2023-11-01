@@ -1,0 +1,708 @@
+{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''} 
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1 BETA'}
+{$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
+{$I SRL-T/osr.simba}
+{$I WaspLib/osr.simba}
+
+
+type
+  ScriptSpeedTypes = (SLOW, NORMAL, FAST, TURBO);
+
+var
+  RSW: TRSWalker;
+  SCRIPTSPEED: ScriptSpeedTypes = NORMAL;
+
+begin
+  Login.PlayerIndex := 1;
+end;
+
+type
+  EState = (
+    STATE_OPEN_FURNACE,
+    STATE_OPEN_BANK,
+    STATE_WITHDRAW_BARS,
+    STATE_SMELT
+  );
+
+  Furnaces = (
+    SHILO_VILLAGE, PRIFDDINAS_FURNACE, EDGEVILLE_FURNACE, NEITIZNOT_FURNACE, MOUNT_KARUULM_FURNACE, PORT_PHASMATYS_FURNACE, FALADOR_FURNACE
+  );
+
+  BallSmelter = record (TBaseBankScript)
+    CurrentState: EState;
+
+    CannonBallItem: TRSitem;
+    SteelBarItem: TRSitem;
+    DoubleAmmoMouldItem: TRSitem;
+
+    CannonBallBank: TRSBankItem;
+    SteelBarBank: TRSBankItem;
+    DoubleAmmoMouldBank: TRSBankItem;
+
+    Furnace: TRSObject;
+    ShiloVillageFurnace: TRSObject;
+    NeitiznotFurnace: TRSObject;
+    MountKaruulmFurnace: TRSObject;
+    PortPhasmatysFurnace: TRSObject;
+
+    NeitiznotBankChest: TRSObject;
+    KaruulmBankChest: TRSObject;
+    PortPhasmatysBank: TRSObject;
+    
+    SteelBarValue: Int32;
+    CannonBallValue: Int32;
+
+    StartXP: Integer;
+    CurrentXP: Integer;
+    BallsSmelted: Integer;
+
+    ChosenLocation: String;
+
+    AntiBanChance: Double;
+end;
+
+var
+  Timer: TStopWatch;
+  ChosenFurnace = Furnaces.EDGEVILLE_FURNACE;
+
+procedure TAntiban.Setup(); override;
+begin
+  Self.Skills := [ERSSkill.Smithing, ERSSkill.TOTAL];
+  Self.MinZoom := 0;
+  Self.MaxZoom := 10;
+
+  inherited;
+end;
+
+function GetRandomRangeShort(ScriptSpeed: ScriptSpeedTypes): Integer;
+begin
+  case ScriptSpeed of
+    SLOW: Result := srl.SkewedRand(120, 80, 140, 3);
+    NORMAL: Result := srl.SkewedRand(90, 70, 120, 3);
+    FAST: Result := srl.SkewedRand(80, 60, 100, 3);
+    TURBO: Result := srl.SkewedRand(50, 40, 80, 3);
+  end;
+end;
+
+function GetRandomRangeLong(ScriptSpeed: ScriptSpeedTypes): Integer;
+begin
+  case ScriptSpeed of
+    SLOW: Result := srl.SkewedRand(1400, 1000, 1500, 3);
+    NORMAL: Result := srl.SkewedRand(1000, 800, 1300, 3);
+    FAST: Result := srl.SkewedRand(800, 800, 1200, 3);
+    TURBO: Result := srl.SkewedRand(700, 600, 1000, 3);
+  end;
+end;
+
+procedure BallSmelter.SetupFurnaces();
+begin
+    with Self.ShiloVillageFurnace do
+    begin
+      Setup(3, 7, [[6819, 4577]]);
+      Setup(['Furnace']);
+      Finder.Colors += CTS2(6448237, 30, 0.11, 0.13); //furnace
+      Finder.Colors += CTS2(11130738, 29, 0.52, 1.44); //fire
+    end;
+
+    with Self.NeitiznotFurnace do
+    begin
+      Setup(2, 7, [[3812, 1690]]);
+      Setup(['Clay forge']);
+      Finder.Colors += CTS2(6319989, 12, 0.07, 0.10); //furnace
+      Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //fire
+    end; 
+
+    with Self.MountKaruulmFurnace do
+    begin
+      Setup(4, 7, [[698, 1227]]);
+      Setup(['Volcanic Furnace']);
+      Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //Blue fire
+    end;
+
+    with Self.PortPhasmatysFurnace do
+    begin
+      Setup(3, 7, [[10148, 2531]]);
+      Setup(['Furnace']);
+      Finder.Colors += CTS2(6448237, 30, 0.11, 0.13); //furnace
+      Finder.Colors += CTS2(11130738, 29, 0.52, 1.44); //fire
+    end;
+end;
+
+procedure BallSmelter.SetupBanks();
+begin
+    with Self.NeitiznotBankChest do
+    begin
+      Setup(4, [[3794, 1701], [3790, 1701], [3777, 1704], [3773, 1704]]);
+      Setup(['ank c', 'ches']);
+      Finder.Colors += CTS2(2578283, 10, 0.05, 0.78);
+      Finder.ColorClusters += [CTS2(1985634, 16, 0.05, 0.50), CTS2(5135991, 18, 0.38, 1.01), 30];
+      Finder.ColorClusters += [CTS2(2902103, 15, 0.04, 0.40), CTS2(4281697, 17, 0.08, 0.11), 5];
+    end;
+
+    with Self.KaruulmBankChest do
+    begin
+      Setup(2, [[688,1160]]);
+      Setup(['ank c', 'ches']);
+      Finder.Colors += CTS2(1776423, 2, 9.45, 2.65) // Stolen from AeroWyrms <3
+    end;  
+
+    with Self.PortPhasmatysBank do
+    begin
+      Setup(7, [[10157, 2590], [10153, 2590], [10143, 2591], [10139, 2591]]);
+      Setup(['ank b', 'k booth']);
+      Finder.Colors += CTS2(3037782, 17, 0.10, 0.61);
+    end;  
+end;
+
+procedure BallSmelter.SetupItems();
+begin
+  SteelBarItem := ('Steel bar');
+  CannonBallItem := ('Cannonball');
+  DoubleAmmoMouldItem := ('Double ammo mould');
+
+  SteelBarBank := TRSBankItem.Setup(SteelBarItem, Bank.QUANTITY_ALL, FALSE);
+  CannonBallBank := TRSBankItem.Setup(CannonBallItem, Bank.QUANTITY_ALL, FALSE);
+  DoubleAmmoMouldBank := TRSBankItem.Setup(DoubleAmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
+
+  SteelBarValue := ItemData.GetAverage(SteelBarItem);
+  CannonBallValue := ItemData.GetAverage(CannonBallItem);
+end;
+
+procedure BallSmelter.SetupLocations();
+begin
+  writeln('Loading ' + ChosenLocation);
+  case ChosenFurnace of
+    SHILO_VILLAGE:
+      begin
+        RSW.Setup([RSRegions.SHILO_VILLAGE]);
+        self.SetupFurnaces();
+        Furnace := self.ShiloVillageFurnace;
+      end;
+
+    PRIFDDINAS_FURNACE:
+      begin
+        RSW.Setup([RSRegions.PRIFDDINAS]);
+        Furnace := RSObjects.PrifddinasFurnace;
+      end;
+
+    EDGEVILLE_FURNACE:
+      begin
+        RSW.Setup([RSRegions.VARROCK]);
+        Furnace := RSObjects.EdgevilleFurnace;
+      end;
+    
+    NEITIZNOT_FURNACE:
+      begin
+        RSW.Setup([[3536, 1469, 4233, 1868]]);
+        self.SetupFurnaces();
+        Furnace := self.NeitiznotFurnace;
+      end;
+
+    MOUNT_KARUULM_FURNACE:
+      begin
+        RSW.Setup([[274, 963, 1006, 1466]]);
+        self.SetupFurnaces();
+        Furnace := self.MountKaruulmFurnace;
+      end;
+
+    PORT_PHASMATYS_FURNACE:
+      begin
+        RSW.Setup([[9959, 2439, 10312, 2705]]);
+        self.SetupFurnaces();
+        Furnace := self.PortPhasmatysFurnace;
+      end;
+
+    FALADOR_FURNACE:
+      begin
+        RSW.Setup([RSRegions.FALADOR]);
+        Furnace := RSObjects.FaladorFurnace;
+      end;
+  end;
+end;
+
+procedure BallSmelter.OPEN_FURNACE();
+var
+  attempts: int32;
+  waitTime: int32;
+begin
+  if Bank.IsOpen() then
+  begin
+    Bank.Close();
+    WaitUntil(not Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 2400);
+  end;
+
+  case ChosenFurnace of
+    SHILO_VILLAGE: waitTime := Random(3300, 3500);
+    PRIFDDINAS_FURNACE: waitTime := Random(4000, 4100);
+    EDGEVILLE_FURNACE: waitTime := Random(4600, 4800);
+    NEITIZNOT_FURNACE: waitTime := Random(5100, 5300);
+    MOUNT_KARUULM_FURNACE: waitTime := Random(5100, 5300);
+    PORT_PHASMATYS_FURNACE: waitTime := Random(5100, 5300);
+    FALADOR_FURNACE: waitTime := Random(12500, 12700);
+    else waitTime := Random(5900, 6100);
+  end;
+
+  attempts := 0;
+  while (attempts < 2) and (not Make.IsOpen()) do
+  begin
+    writeln('Opening Furnace.');
+    Furnace.WalkClick();
+
+    WaitUntil(not Minimap.IsPlayerMoving(), GetRandomRangeShort(ScriptSpeed), waitTime);
+
+    if not Make.IsOpen() then
+    begin
+      writeln('Could not open furnace, rotating and retrying.');
+      AntiBan.RandomRotate();
+      Inc(attempts);
+    end;
+  end;
+
+  if not Make.IsOpen() then
+  begin
+    writeln('Could not open furnace after multiple attempts');
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
+end;
+
+procedure BallSmelter.OpenSpecificBank();
+begin
+  case ChosenFurnace of
+    SHILO_VILLAGE: 
+      Bank.WalkOpen(RSNPCs.ShiloVillageBankers); // Standard bank open wasn't working here sooo this is a workaround
+    NEITIZNOT_FURNACE: 
+      Bank.WalkOpen(NeitiznotBankChest);
+    MOUNT_KARUULM_FURNACE: 
+      Bank.WalkOpen(KaruulmBankChest);
+    PORT_PHASMATYS_FURNACE: 
+    begin
+      Bank.WalkOpen(PortPhasmatysBank);
+      if Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]) then
+      begin
+        Chat.ClickContinue(True);
+        WriteLn('Got click to Continue, Consider using a Ghostspeak Necklace or Mort Legs 2+ to bypass this');
+      end;
+      WaitUntil(Bank.IsOpen() or Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]), GetRandomRangeShort(ScriptSpeed), 1500);
+    end
+    else
+      Bank.WalkOpen();
+  end;
+end;
+
+procedure BallSmelter.OPEN_BANK();
+var
+  attempts: Int32;
+begin
+  attempts := 0;
+  while (attempts < 2) and (not Bank.IsOpen()) do
+  begin
+    OpenSpecificBank();
+
+    if WaitUntil(Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 3000) then
+      break; // Break, will exit the loop if the bank is open.
+
+    // If the bank is not open, we do a random rotate and try again.
+    AntiBan.RandomRotate();
+    Inc(attempts);
+  end;
+end;
+
+procedure BallSmelter.WITHDRAW_BARS();
+begin
+  if not Bank.IsOpen() then
+  begin
+    writeln('Opening bank.');
+    Bank.WalkOpen();
+    WaitUntil(Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 3000);
+  end;
+
+  if Bank.IsOpen() then
+  begin
+    writeln('Withdrawing Steel Bars');
+    Bank.WithdrawItem(SteelBarBank, True);
+    WaitUntil(Inventory.ContainsItem(SteelBarItem), GetRandomRangeShort(ScriptSpeed), 3000);
+  end;
+end;
+
+procedure BallSmelter.SMELT();
+begin
+  if Make.IsOpen() then
+  begin
+    if Make.Select('Cannonballs', Make.QUANTITY_ALL) then
+    begin
+      writeln('Making Cannonballs.');
+      while Inventory.ContainsItem(SteelBarItem) do
+      begin
+        if SRL.Dice(AntiBanChance) then
+          Self.DoAntiban;
+        Wait(Random(1000, 5000));
+      end;
+      WL.Activity.Restart(); // Restart our timer if we we smithed.
+    end
+    else
+    begin
+      writeln('Failed to select Cannonballs');
+    end;
+  end
+  else
+  begin
+    writeln('Make interface is not open?');
+  end;
+  if SRL.Dice(AntiBanChance) then
+    Self.DoAntiban;
+  BallsSmelted += Inventory.CountItemStack(CannonBallItem);
+  Self.Report();
+end;
+
+procedure BallSmelter.MouldCheck();
+var
+  AmmoMouldItem, DoubleAmmoMouldItem: TRSItem;
+  AmmoMouldBank, DoubleAmmoMouldBank: TRSBankItem;
+begin
+  writeln('Checking Inventory for Mould');
+
+  AmmoMouldItem := ('Ammo mould');
+  DoubleAmmoMouldItem := ('Double ammo mould');
+
+  if Inventory.ContainsItem(AmmoMouldItem) then
+  begin
+    writeln('Single Ammo mould found in inventory');
+  end
+  else if Inventory.ContainsItem(DoubleAmmoMouldItem) then
+  begin
+    writeln('Double ammo mould found in inventory');
+  end
+  else
+  begin
+    writeln('No mould found, will check bank');
+
+    AmmoMouldBank := TRSBankItem.Setup(AmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
+    DoubleAmmoMouldBank := TRSBankItem.Setup(DoubleAmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
+
+    if ChosenFurnace = SHILO_VILLAGE then
+      Bank.WalkOpen(RSNPCs.ShiloVillageBankers)
+    else if ChosenFurnace = NEITIZNOT_FURNACE then
+      Bank.WalkOpen(NeitiznotBankChest)
+    else if ChosenFurnace = MOUNT_KARUULM_FURNACE then
+      Bank.WalkOpen(KaruulmBankChest)
+    else if ChosenFurnace = PORT_PHASMATYS_FURNACE then
+    begin
+      Bank.WalkOpen(PortPhasmatysBank);
+      if Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]) then
+      begin
+        Chat.ClickContinue(True);
+        WriteLn('Got click to Continue, Consider using a Ghostspeak Necklace or Mort Legs 2+ to bypass this');
+      end;
+      WaitUntil(Bank.IsOpen() or Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]), GetRandomRangeShort(ScriptSpeed), 1500);
+    end
+    else
+      Bank.WalkOpen();
+
+    WaitUntil(Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 3000);
+
+    if Bank.WithdrawItem(DoubleAmmoMouldBank, True) then
+    begin
+      writeln('Double ammo withdrawn from bank');
+    end
+    else if Bank.WithdrawItem(AmmoMouldBank, True) then
+    begin
+      writeln('Ammo mould withdrawn from bank');
+    end
+    else
+    begin
+      writeln('No mould found in bank');
+      if Bank.IsOpen() then
+      begin
+        Bank.Close();
+        WaitUntil(not Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 2400);
+      end;
+      Logout.ClickLogout();
+      TerminateScript();
+    end;
+  end;
+end;
+
+procedure BallSmelter.doAction();
+begin
+  case Self.CurrentState of
+    STATE_OPEN_BANK:
+      begin
+        if not Inventory.ContainsItem(SteelBarItem) then
+        begin
+          OPEN_BANK();
+          Self.CurrentState := STATE_WITHDRAW_BARS;
+        end
+        else
+          Self.CurrentState := STATE_OPEN_FURNACE;
+      end;
+    STATE_WITHDRAW_BARS:
+      begin
+        WITHDRAW_BARS();
+        Self.CurrentState := STATE_OPEN_FURNACE;
+      end;
+    STATE_OPEN_FURNACE:
+      begin
+        if Inventory.ContainsItem(SteelBarItem) then
+        begin
+          OPEN_FURNACE();
+          Self.CurrentState := STATE_SMELT;
+        end
+        else
+          Self.CurrentState := STATE_OPEN_BANK;
+      end;
+    STATE_SMELT:
+      begin
+        if Make.IsOpen() and Inventory.ContainsItem(SteelBarItem) then
+        begin
+          SMELT();
+          Self.CurrentState := STATE_OPEN_BANK;
+        end
+        else if not Inventory.ContainsItem(SteelBarItem) then
+          Self.CurrentState := STATE_OPEN_BANK
+        else
+          Self.CurrentState := STATE_OPEN_FURNACE;
+      end;
+  end;
+end;
+
+function FormatRoundedNumber(Number: Integer): String;
+begin
+  // If the number is >= 1 million, format it with 1 decimal place and add "M" suffix
+  if Number >= 1000000 then
+    Result := FormatFloat('0.0M', Number / 1000000)
+  // If the number is >= 1 thousand, format it with no decimal places and add "K" suffix
+  else if Number >= 1000 then
+    Result := FormatFloat('0K', Number / 1000)
+  // For smaller numbers, use the regular SRL.FormatNumber function
+  else
+    Result := SRL.FormatNumber(Number);
+end;
+
+function ScriptSpeedToString(speed: ScriptSpeedTypes): String;
+begin
+  case speed of
+    SLOW: Result := 'Slow';
+    NORMAL: Result := 'Normal';
+    FAST: Result := 'Fast';
+    TURBO: Result := 'Turbo';
+  end;
+end;
+
+procedure BallSmelter.Report();
+var
+  Runtime: Integer;
+  XPPerHour: Integer;
+  CurrentXP: Integer;
+  GainedXP: Integer;
+  Profit: Integer;
+begin
+  ClearDebug();
+  CurrentXP := XPBar.Read();
+  GainedXP := CurrentXP - StartXP;
+  Runtime := Timer.ElapsedTime;
+  XPPerHour := Round(((CurrentXP - StartXP) / Runtime) * 3600);
+  Profit := ((CannonBallValue * 4) - SteelBarValue) * (BallsSmelted div 4);
+
+  WriteLn('========================================');
+  WriteLn('     BigAussies Cannonball Smelter      ');
+  WriteLn('========================================');
+  WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short) + '   Script Speed: ' + ScriptSpeedToString(SCRIPTSPEED));
+  WriteLn('   Cannonballs Made: ' + IntToStr(BallsSmelted));
+  WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
+  WriteLn('   Profit: ' + FormatRoundedNumber(Profit));
+  WriteLn('----------------------------------------');
+  WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
+  WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
+  WriteLn('   Cannonballs/Hour: ' + FormatRoundedNumber(Round((BallsSmelted) / (GetTimeRunning() / 3600000)))); 
+  WriteLn('========================================');
+  WriteLn('     BigAussies Cannonball Smelter      ');
+  WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
+  WriteLn('     Furnace Location: ' + ChosenLocation);
+  WriteLn('========================================');
+end;
+
+procedure BallSmelter.Init(MaxActions: UInt32; MaxTime: UInt64); override;
+begin
+  inherited;
+  self.SetupItems();
+  self.SetupLocations();
+  self.SetupBanks();
+
+  case SCRIPTSPEED of
+    SLOW: 
+    begin
+      Mouse.Speed := Random(12, 14);
+      AntiBanChance := 100;  // 100% chance
+    end;
+    NORMAL: 
+    begin
+      Mouse.Speed := Random(17, 22);
+      AntiBanChance := 70;  // 70% chance
+    end;
+    FAST: 
+    begin
+      Mouse.Speed := Random(24, 29);
+      AntiBanChance := 50;  // 50% chance
+    end;
+    TURBO: 
+    begin
+      Mouse.Speed := Random(30, 35);
+      AntiBanChance := 30;  // 30% chance
+    end;
+  end;
+
+  StartXP := XPBar.Read();
+
+  self.MouldCheck(); // Check if the player has a mould in inventory or bank.
+end;
+
+procedure BallSmelter.Run(MaxActions: UInt32; MaxTime: UInt64);
+begin
+  Self.Init(MaxActions, MaxTime);
+
+  repeat
+    Self.doAction();
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
+    
+    if SRL.Dice(AntiBanChance) then
+      Self.DoAntiban;
+  until Self.ShouldStop();
+end;
+
+var
+  Script: BallSmelter;
+
+{$IFDEF SCRIPT_GUI}
+type
+  TConfig = record(TScriptForm)
+    FurnaceSelector: TLabeledCombobox;
+    ScriptSpeedSelector: TLabeledCombobox;
+    FurnaceInfo, AdditionalInfo: TLabel;
+  end;
+
+// Just showing off set on change because Torwent told me about it lol....
+procedure TConfig.FurnaceSelectorChange(sender: TObject);
+begin
+  case Furnaces(Self.FurnaceSelector.GetItemIndex()) of
+    SHILO_VILLAGE: 
+    begin
+      Self.FurnaceInfo.SetCaption('10 Tiles From Bank - (3 Seconds) - You MUST disable GP warning and have money in coffer.');
+      Self.AdditionalInfo.SetCaption('Closest furnace to a bank, 20 coins each use, unless completed Elite Karamja Diary.');
+    end;
+    PRIFDDINAS_FURNACE: 
+    begin
+      Self.FurnaceInfo.SetCaption('11 Tiles From Bank - (3.6 Seconds)');
+      Self.AdditionalInfo.SetCaption('');
+    end;
+    EDGEVILLE_FURNACE: 
+    begin
+      Self.FurnaceInfo.SetCaption('14 Tiles From Bank - (4.2 Seconds)');
+      Self.AdditionalInfo.SetCaption('');
+    end;
+    NEITIZNOT_FURNACE: 
+    begin
+      Self.FurnaceInfo.SetCaption('15 Tiles From Bank - (4.8 Seconds)');
+      Self.AdditionalInfo.SetCaption('This bank has a door but it is jammed open and cannot be closed.');
+    end;
+    MOUNT_KARUULM_FURNACE: 
+    begin
+      Self.FurnaceInfo.SetCaption('15 Tiles From Bank - (4.8 Seconds)');
+      Self.AdditionalInfo.SetCaption('');
+    end;
+    PORT_PHASMATYS_FURNACE: 
+    begin
+      Self.FurnaceInfo.SetCaption('16 Tiles From Bank - (4.8 Seconds)');
+      Self.AdditionalInfo.SetCaption('Equipping a Ghostspeak Amulet or Morytania legs 2+ Will skip dialog.');
+    end;
+    FALADOR_FURNACE: 
+    begin
+      Self.FurnaceInfo.SetCaption('40 Tiles From Bank - (12 Seconds)');
+      Self.AdditionalInfo.SetCaption('');
+    end;
+  end;
+end;
+
+procedure TConfig.StartScript(sender: TObject); override; 
+begin
+  ChosenFurnace := Furnaces(Self.FurnaceSelector.GetItemIndex());
+  Script.ChosenLocation := Self.FurnaceSelector.GetText();
+  SCRIPTSPEED := ScriptSpeedTypes(Self.ScriptSpeedSelector.GetItemIndex());
+  inherited;
+end;
+
+procedure TConfig.Run(); override;
+var
+  tab: TTabSheet;
+begin
+  Self.Setup("BigAussies Cannoball Smelter");
+  Self.Start.SetOnClick(@Self.StartScript);
+
+  Self.AddTab('Script Settings');
+  tab := Self.Tabs[High(Self.Tabs)];
+
+  Self.CreateAccountManager(tab);
+
+  Self.CreateVersionPanel(tab);
+
+  with Self.FurnaceSelector do
+  begin
+    Create(tab);
+    SetCaption('Furnace Location:');
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(TControl.AdjustToDPI(160));
+    AddItemArray(['Shilo Village', 'Prifddinas', 'Edgeville', 'Neitiznot', 'Mount Karuulm', 'Port Phasmatys', 'Falador']);
+    SetItemIndex(-1); // Set to -1 for blank
+    SetHint('Select the furnace you wish to use.');
+    Combobox.SetOnChange(@Self.FurnaceSelectorChange);
+  end;
+
+  with Self.FurnaceInfo do
+  begin
+    Create(tab);
+    SetLeft(Self.FurnaceSelector.GetLeft() + Self.FurnaceSelector.GetWidth() + TControl.AdjustToDPI(10));
+    SetTop(Self.FurnaceSelector.GetTop() + TControl.AdjustToDPI(20));
+  end;
+
+  with Self.AdditionalInfo do
+  begin
+    Create(tab);
+    SetLeft(Self.FurnaceInfo.GetLeft());
+    SetTop(Self.FurnaceInfo.GetTop() + Self.FurnaceInfo.GetHeight() + TControl.AdjustToDPI(5));
+  end;
+
+  with Self.ScriptSpeedSelector do
+  begin
+    Create(tab);
+    SetCaption('Script Speed:');
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(Self.FurnaceSelector.GetTop() + TControl.AdjustToDPI(50));
+    AddItemArray(['Slow', 'Normal', 'Fast', 'Turbo']);
+    SetItemIndex(Ord(SCRIPTSPEED));
+    SetWidth(130);
+    SetHint('This affects Wait Times/Mouse Speed and Antiban Frequency.');
+  end;
+
+  Self.CreateAntibanManager();
+
+  Self.CreateWaspLibSettings();
+
+  Self.CreateAPISettings();
+
+  inherited;
+end;
+
+var
+  Config: TConfig;
+{$ENDIF}
+
+begin
+  {$IFDEF SCRIPT_GUI}
+  Sync(@Config.Run);
+  {$ENDIF}
+  Script.Run(WLSettings.MaxActions, WLSettings.MaxTime);
+end.
