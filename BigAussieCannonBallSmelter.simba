@@ -581,10 +581,11 @@ type
   TConfig = record(TScriptForm)
     FurnaceSelector: TLabeledCombobox;
     ScriptSpeedSelector: TLabeledCombobox;
-    FurnaceInfo, AdditionalInfo: TLabel;
+    FurnaceInfo, AdditionalInfo, AdditionalInfo2, AdditionalInfo3, AdditionalInfo4: TLabel;
   end;
 
 // Just showing off set on change because Torwent told me about it lol....
+// We need to clear each extra additional because I don't know a better way to?
 procedure TConfig.FurnaceSelectorChange(sender: TObject);
 begin
   case Furnaces(Self.FurnaceSelector.GetItemIndex()) of
@@ -592,36 +593,57 @@ begin
     begin
       Self.FurnaceInfo.SetCaption('10 Tiles From Bank - (3 Seconds) - You MUST disable GP warning and have money in coffer.');
       Self.AdditionalInfo.SetCaption('Closest furnace to a bank, 20 coins each use, unless completed Elite Karamja Diary.');
+      Self.AdditionalInfo2.SetCaption('');
+      Self.AdditionalInfo3.SetCaption('Member''s Only');
+      Self.AdditionalInfo4.SetCaption('');
     end;
     PRIFDDINAS_FURNACE: 
     begin
       Self.FurnaceInfo.SetCaption('11 Tiles From Bank - (3.6 Seconds)');
       Self.AdditionalInfo.SetCaption('');
+      Self.AdditionalInfo2.SetCaption('Member''s Only');
+      Self.AdditionalInfo3.SetCaption('');
+      Self.AdditionalInfo4.SetCaption('');
     end;
     EDGEVILLE_FURNACE: 
     begin
       Self.FurnaceInfo.SetCaption('14 Tiles From Bank - (4.2 Seconds)');
       Self.AdditionalInfo.SetCaption('');
+      Self.AdditionalInfo2.SetCaption('');
+      Self.AdditionalInfo3.SetCaption('');
+      Self.AdditionalInfo4.SetCaption('Free To Play');
     end;
     NEITIZNOT_FURNACE: 
     begin
       Self.FurnaceInfo.SetCaption('15 Tiles From Bank - (4.8 Seconds)');
       Self.AdditionalInfo.SetCaption('This bank has a door but it is jammed open and cannot be closed.');
+      Self.AdditionalInfo2.SetCaption('');
+      Self.AdditionalInfo3.SetCaption('Member''s Only');
+      Self.AdditionalInfo4.SetCaption('');
     end;
     MOUNT_KARUULM_FURNACE: 
     begin
       Self.FurnaceInfo.SetCaption('15 Tiles From Bank - (4.8 Seconds)');
       Self.AdditionalInfo.SetCaption('');
+      Self.AdditionalInfo2.SetCaption('Member''s Only');
+      Self.AdditionalInfo3.SetCaption('');
+      Self.AdditionalInfo4.SetCaption('');
     end;
     PORT_PHASMATYS_FURNACE: 
     begin
       Self.FurnaceInfo.SetCaption('16 Tiles From Bank - (4.8 Seconds)');
       Self.AdditionalInfo.SetCaption('Equipping a Ghostspeak Amulet or Morytania legs 2+ Will skip dialog.');
+      Self.AdditionalInfo2.SetCaption('');
+      Self.AdditionalInfo3.SetCaption('Member''s Only');
+      Self.AdditionalInfo4.SetCaption('');
     end;
     FALADOR_FURNACE: 
     begin
       Self.FurnaceInfo.SetCaption('40 Tiles From Bank - (12 Seconds)');
       Self.AdditionalInfo.SetCaption('');
+      Self.AdditionalInfo2.SetCaption('');
+      Self.AdditionalInfo3.SetCaption('');
+      Self.AdditionalInfo4.SetCaption('Free To Play');
     end;
   end;
 end;
@@ -667,11 +689,36 @@ begin
     SetTop(Self.FurnaceSelector.GetTop() + TControl.AdjustToDPI(20));
   end;
 
+  // This is a crude work around for setting colours on each line but I could not get it to stop changing with each dropdown? Even reverting back to black wasn't working so this was my lazy fix
   with Self.AdditionalInfo do
   begin
     Create(tab);
     SetLeft(Self.FurnaceInfo.GetLeft());
     SetTop(Self.FurnaceInfo.GetTop() + Self.FurnaceInfo.GetHeight() + TControl.AdjustToDPI(5));
+  end;
+
+  with Self.AdditionalInfo2 do
+  begin
+    Create(tab);
+    SetLeft(Self.FurnaceInfo.GetLeft());
+    SetTop(Self.FurnaceInfo.GetTop() + Self.FurnaceInfo.GetHeight() + TControl.AdjustToDPI(5));
+    SetFontColor(clRed);
+  end;
+
+  with Self.AdditionalInfo3 do
+  begin
+    Create(tab);
+    SetLeft(Self.FurnaceInfo.GetLeft());
+    SetTop(Self.AdditionalInfo.GetTop() + Self.AdditionalInfo.GetHeight() + TControl.AdjustToDPI(5));
+    SetFontColor(clRed);
+  end;
+
+  with Self.AdditionalInfo4 do
+  begin
+    Create(tab);
+    SetLeft(Self.FurnaceInfo.GetLeft());
+    SetTop(Self.FurnaceInfo.GetTop() + Self.FurnaceInfo.GetHeight() + TControl.AdjustToDPI(5));
+    SetFontColor(clBlue);
   end;
 
   with Self.ScriptSpeedSelector do
