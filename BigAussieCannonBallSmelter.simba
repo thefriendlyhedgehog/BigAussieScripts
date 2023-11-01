@@ -524,6 +524,10 @@ end;
 procedure BallSmelter.Init(MaxActions: UInt32; MaxTime: UInt64); override;
 begin
   inherited;
+
+  StatsPayload.Setup({$macro SCRIPT_ID});
+  APIClient.TimeStamp := GetTickCount();
+  
   self.SetupItems();
   self.SetupLocations();
   self.SetupBanks();
