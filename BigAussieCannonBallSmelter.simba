@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -324,6 +324,13 @@ begin
     Bank.WithdrawItem(SteelBarBank, True);
     WaitUntil(Inventory.ContainsItem(SteelBarItem), GetRandomRangeShort(ScriptSpeed), 3000);
   end;
+
+  if not Inventory.ContainsItem(SteelBarItem) then
+  begin
+    writeln('Out of Steel Bars. Logging out and terminating script.');
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
 end;
 
 procedure BallSmelter.SMELT();
@@ -355,8 +362,6 @@ begin
   begin
     writeln('Make interface is not open?');
   end;
-  if SRL.Dice(AntiBanChance) then
-    Self.DoAntiban;
   Self.Report();
 end;
 
