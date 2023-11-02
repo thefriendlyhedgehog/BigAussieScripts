@@ -325,19 +325,24 @@ begin
 end;
 
 procedure BallSmelter.SMELT();
+var
+  initialBalls, finalBalls: Integer;
 begin
   if Make.IsOpen() then
   begin
     if Make.Select('Cannonballs', Make.QUANTITY_ALL) then
     begin
       writeln('Making Cannonballs.');
+      initialBalls := Inventory.CountItemStack(CannonBallItem);
       while Inventory.ContainsItem(SteelBarItem) do
       begin
         if SRL.Dice(AntiBanChance) then
           Self.DoAntiban;
         Wait(Random(1000, 5000));
       end;
-      WL.Activity.Restart(); // Restart our timer if we we smithed.
+      finalBalls := Inventory.CountItemStack(CannonBallItem);
+      BallsSmelted += (finalBalls - initialBalls);
+      WL.Activity.Restart();
     end
     else
     begin
@@ -350,7 +355,6 @@ begin
   end;
   if SRL.Dice(AntiBanChance) then
     Self.DoAntiban;
-  BallsSmelted += Inventory.CountItemStack(CannonBallItem);
   Self.Report();
 end;
 
