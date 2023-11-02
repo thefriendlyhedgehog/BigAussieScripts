@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -236,13 +236,13 @@ begin
     EDGEVILLE_FURNACE: waitTime := Random(4600, 4800);
     NEITIZNOT_FURNACE: waitTime := Random(5100, 5300);
     MOUNT_KARUULM_FURNACE: waitTime := Random(5100, 5300);
-    PORT_PHASMATYS_FURNACE: waitTime := Random(5100, 5300);
+    PORT_PHASMATYS_FURNACE: waitTime := Random(5300, 5500);
     FALADOR_FURNACE: waitTime := Random(12500, 12700);
     else waitTime := Random(5900, 6100);
   end;
 
   attempts := 0;
-  while (attempts < 2) and (not Make.IsOpen()) do
+  while (attempts < 3) and (not Make.IsOpen()) do
   begin
     writeln('Opening Furnace.');
     Furnace.WalkClick();
