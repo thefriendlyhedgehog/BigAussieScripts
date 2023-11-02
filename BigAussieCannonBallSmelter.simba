@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -105,7 +105,7 @@ begin
 
     with Self.NeitiznotFurnace do
     begin
-      Setup(2, 7, [[3812, 1690]]);
+      Setup(2, 6, [[3812, 1690]]);
       Setup(['Clay forge']);
       Finder.Colors += CTS2(6319989, 12, 0.07, 0.10); //furnace
       Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //fire
@@ -244,9 +244,10 @@ begin
   attempts := 0;
   while (attempts < 3) and (not Make.IsOpen()) do
   begin
+    //debug(Furnace);
     writeln('Opening Furnace.');
     Furnace.WalkClick();
-
+    wait(500); // This gives us a chance to start moving
     WaitUntil(not Minimap.IsPlayerMoving(), GetRandomRangeShort(ScriptSpeed), waitTime);
 
     if not Make.IsOpen() then
@@ -294,7 +295,7 @@ var
   attempts: Int32;
 begin
   attempts := 0;
-  while (attempts < 2) and (not Bank.IsOpen()) do
+  while (attempts < 3) and (not Bank.IsOpen()) do
   begin
     OpenSpecificBank();
 
@@ -302,6 +303,7 @@ begin
       break; // Break, will exit the loop if the bank is open.
 
     // If the bank is not open, we do a random rotate and try again.
+    writeln('Could not find bank, rotate and trying again');
     AntiBan.RandomRotate();
     Inc(attempts);
   end;
@@ -517,7 +519,7 @@ begin
   WriteLn('----------------------------------------');
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
-  WriteLn('   Cannonballs/Hour: ' + FormatRoundedNumber(Round((BallsSmelted) / (GetTimeRunning() / 3600000)))); 
+  WriteLn('   Cannonballs/Hour: ' + IntToStr(Round((BallsSmelted) / (GetTimeRunning() / 3600000))));
   WriteLn('========================================');
   WriteLn('     BigAussies Cannonball Smelter      ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
