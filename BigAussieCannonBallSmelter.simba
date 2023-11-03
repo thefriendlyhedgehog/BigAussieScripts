@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '6 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -267,6 +267,8 @@ begin
 end;
 
 procedure BallSmelter.OpenSpecificBank();
+var
+  chatTitle, dialog: string;
 begin
   case ChosenFurnace of
     SHILO_VILLAGE:
@@ -280,10 +282,31 @@ begin
       Bank.WalkOpen(PortPhasmatysBank);
       if Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]) then
       begin
+        chatTitle := Chat.GetChatTitle();
+        dialog := Chat.GetChat();
         Chat.ClickContinue(True);
-        WriteLn('Got click to Continue, Consider using a Ghostspeak Necklace or Mort Legs 2+ to bypass this');
+        if chatTitle = 'Ghost banker' then
+        begin
+          WriteLn('Clicked Talk by Mistake, doing dialog');
+          if dialog = 'Woooo wooo wooooo woooo' then
+          begin
+            WriteLn('No Necklace or legs equipped. Trying again to click booth.');
+            exit();
+          end;
+        end
+        else
+          WriteLn('Got click to Continue, Consider using a Ghostspeak Necklace or Mort Legs 2+ to speed this up');
       end;
-      WaitUntil(Bank.IsOpen() or Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]), GetRandomRangeShort(ScriptSpeed), 1500);
+
+      WaitUntil(Bank.IsOpen() or (Chat.GetChatTitle() = 'Ghost banker'), GetRandomRangeShort(ScriptSpeed), 1500);
+
+      if chatTitle = 'Ghost banker' then
+      begin
+        wait(GetRandomRangeShort(ScriptSpeed));
+        WriteLn('Clicked on Ghost banker by mistake, doing options.');
+        Chat.ClickOption('I''d like to access my bank account, please.', True);
+        WaitUntil(Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 3000);
+      end;
     end
     else
       Bank.WalkOpen();
@@ -322,10 +345,10 @@ begin
   begin
     writeln('Withdrawing Steel Bars');
     Bank.WithdrawItem(SteelBarBank, True);
-    WaitUntil(Inventory.ContainsItem(SteelBarItem), GetRandomRangeShort(ScriptSpeed), 3000);
+    WaitUntil(Inventory.ContainsItem(SteelBarItem), GetRandomRangeShort(ScriptSpeed), 5000);
   end;
 
-  if not Inventory.ContainsItem(SteelBarItem) then
+  if not Bank.ContainsItem(SteelBarItem) then
   begin
     writeln('Out of Steel Bars. Logging out and terminating script.');
     Logout.ClickLogout();
