@@ -142,7 +142,7 @@ begin
     begin
       Setup(2, [[688,1160]]);
       Setup(['ank c', 'ches']);
-      Finder.Colors += CTS2(1776423, 2, 9.45, 2.65) // Stolen from AeroWyrms <3
+      Finder.Colors += CTS2(1776423, 2, 9.45, 2.65); // Stolen from AeroWyrms <3
     end;
 
     with Self.PortPhasmatysBank do
