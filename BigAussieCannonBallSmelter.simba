@@ -54,6 +54,7 @@ type
     StartXP: Integer;
     CurrentXP: Integer;
     BallsSmelted: Integer;
+    initialBalls: Integer;
 
     ChosenLocation: String;
 
@@ -358,7 +359,8 @@ end;
 
 procedure BallSmelter.SMELT();
 var
-  initialBalls, finalBalls: Integer;
+  finalBalls: Integer;
+  lastXPCheckTime: Int64;
 begin
   if Make.IsOpen() then
   begin
@@ -366,11 +368,40 @@ begin
     begin
       writeln('Making Cannonballs.');
       initialBalls := Inventory.CountItemStack(CannonBallItem);
+      finalBalls := 0;
+      lastXPCheckTime := GetTickCount();
       while Inventory.ContainsItem(SteelBarItem) do
       begin
-        if SRL.Dice(AntiBanChance) then
+        if SRL.Dice(AntiBanChance) and (Inventory.CountItem(SteelBarItem) >= 4) then
           Self.DoAntiban;
-        Wait(Random(1000, 5000));
+
+        if Chat.LeveledUp() then
+        begin
+          Chat.HandleLevelUp;
+          Wait(200);
+        end;
+
+        if (GetTickCount() - lastXPCheckTime) > 7000 then
+        begin
+          if not XPBar.EarnedXP() then
+          begin
+            writeln('No XP gained in the last 7 seconds, Possibly from logout/break. Restarting loop.');
+            exit;
+          end
+          else
+          begin
+            lastXPCheckTime := GetTickCount();
+          end;
+        end;
+
+        // Pre hover is player has 2 or less steel bars.
+        if (Inventory.CountItem(SteelBarItem) <= 2) and (not MainScreen.IsUpText(['Bank'])) then
+        begin
+          writeln('Smelting almost finished, Attempting to Hover bank');
+          Bank.Hover();
+        end;
+
+        Wait(Random(1000, 3000));
       end;
       finalBalls := Inventory.CountItemStack(CannonBallItem);
       BallsSmelted += (finalBalls - initialBalls);
@@ -571,6 +602,7 @@ begin
   end;
 
   StartXP := XPBar.Read();
+  initialBalls := 0; // Otherwise we start at -1
 
   self.MouldCheck(); // Check if the player has a mould in inventory or bank.
   ItemFinder.Similarity := 0.99999;
@@ -588,7 +620,7 @@ begin
       Break;
     end;
 
-    if SRL.Dice(AntiBanChance) then
+    if SRL.Dice(AntiBanChance) and (not MainScreen.IsUpText(['Bank'])) then
       Self.DoAntiban;
   until Self.ShouldStop();
 end;
