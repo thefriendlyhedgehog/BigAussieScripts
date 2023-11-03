@@ -395,7 +395,7 @@ begin
         end;
 
         // Pre hover is player has 2 or less steel bars.
-        if (Inventory.CountItem(SteelBarItem) <= 2) and (not MainScreen.IsUpText(['Bank'])) then
+        if (Inventory.CountItem(SteelBarItem) <= 2) and (not MainScreen.IsUpText(['Bank'])) and (ChosenFurnace <> Furnaces.FALADOR_FURNACE) then
         begin
           writeln('Smelting almost finished, Attempting to Hover bank');
           Bank.Hover();
