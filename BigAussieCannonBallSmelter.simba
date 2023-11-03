@@ -413,26 +413,7 @@ begin
     AmmoMouldBank := TRSBankItem.Setup(AmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
     DoubleAmmoMouldBank := TRSBankItem.Setup(DoubleAmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
 
-    if ChosenFurnace = SHILO_VILLAGE then
-      Bank.WalkOpen(RSNPCs.ShiloVillageBankers)
-    else if ChosenFurnace = NEITIZNOT_FURNACE then
-      Bank.WalkOpen(NeitiznotBankChest)
-    else if ChosenFurnace = MOUNT_KARUULM_FURNACE then
-      Bank.WalkOpen(KaruulmBankChest)
-    else if ChosenFurnace = PORT_PHASMATYS_FURNACE then
-    begin
-      Bank.WalkOpen(PortPhasmatysBank);
-      if Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]) then
-      begin
-        Chat.ClickContinue(True);
-        WriteLn('Got click to Continue, Consider using a Ghostspeak Necklace or Mort Legs 2+ to bypass this');
-      end;
-      WaitUntil(Bank.IsOpen() or Chat.FindOption('Click here to continue', [CHAT_COLOR_BLUE, CHAT_COLOR_WHITE]), GetRandomRangeShort(ScriptSpeed), 1500);
-    end
-    else
-      Bank.WalkOpen();
-
-    WaitUntil(Bank.IsOpen(), GetRandomRangeShort(ScriptSpeed), 3000);
+    OPEN_BANK();
 
     if Bank.WithdrawItem(DoubleAmmoMouldBank, True) then
     begin
