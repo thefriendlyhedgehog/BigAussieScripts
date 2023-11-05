@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '17'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '18'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -10,7 +10,7 @@
 // If you wish to use the Rune Pouch you MUST start with it in your inventory.
 // The grand exchange features will Buy/Sell at Above/Below market prices, if an order is not filled the script will not cancel/relist you need to do this manually.
 // 
-// SRL-T V2.7.7 / WaspLib - 14.11.2
+// SRL-T V2.7.8 / WaspLib - 14.12.2
 
 type
   ScriptSpeedTypes = (SLOW, NORMAL, FAST, TURBO);
@@ -1527,7 +1527,7 @@ begin
   begin
     WriteLn('Counting ' + RawItem);
     Bank.ContainsItem(RawItemBank);
-    RawItemCount := Bank.CountItemStack(RawItem); // Counts all Logs in the bank.
+    RawItemCount := Bank.CountItemStack(RawItem);
     WriteLn('Amount of logs in bank ' + IntToStr(RawItemCount));
     case RawItem of
     'Logs': CoinsCount := ceil(RawItemCount * 70 / 1000) * 1000;
@@ -1672,8 +1672,8 @@ begin
   end;
 
   WriteLn('Looking for staff in inventory.');
-  Inventory.Open(); // Open the inventory
-  WaitUntil(Inventory.IsOpen(), 375, 2100); // Wait until the inventory is open
+  Inventory.Open();
+  WaitUntil(Inventory.IsOpen(), 375, 2100);
   for StaffName in StaffNames do
   begin
     if Inventory.ContainsItem(StaffName) then
@@ -1872,13 +1872,12 @@ begin
       WriteLn('   Current Focus State: ' + FocusStateStr + ' (will switch in ' + SRL.MsToTime(RemainingFocusTime, Time_Short) + ')');
   end;
   WriteLn('   Total Casts: ' + IntToStr(CastCount) + ' ' + SpellToString(ChosenSpell) + ' on ' + RawItem);
+  WriteLn('   Total Processed Items: ' + IntToStr(RawTotal));
   WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
   if Profit = 0 then
     WriteLn('   Total Profit: Calculating')
   else
       WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
-//  if (Length(Antiban.Breaks) > 0) then
-//    WriteLn('   Time until next break: ' + NextBreakTime);
   if (Length(Antiban.Sleeps) > 0) then
     WriteLn('   Time until sleep ' + NextSleepTime);
   if STOP_AT_LEVEL <> -1 then
@@ -2156,7 +2155,6 @@ begin
     SetCaption("Sell Finished Item");
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(Self.Message.GetTop() + TControl.AdjustToDPI(25));
-//    SetChecked(SELLNOTEDITEMCHECK);
     SetHint('Will sell all processed items.');
   end;
 
@@ -2166,19 +2164,8 @@ begin
     SetCaption("Buy Runes - Will not work with Rune Pouch");
     SetLeft(TControl.AdjustToDPI(300));
     SetTop(Self.SELLNOTEDITEMCHECKBox.GetTop() + TControl.AdjustToDPI(25));
-//    SetChecked(BUYRUNESCHECK);
     SetHint('Will buy required runes for each spell, will only buy what is needed.');
   end;
-{
-  with GEInfoLabel2 do
-  begin
-    Create(tab);
-    SetLeft(Self.BUYRAWMATERIALSBox.GetLeft() + Self.BUYRAWMATERIALSBox.GetWidth() + TControl.AdjustToDPI(40));
-    SetTop(Self.BUYRAWMATERIALSBox.GetTop());
-    SetCaption('Will buy above market average');
-      SetFontColor(clNavy);
-  end;
-}
 
   with Self.QuantityInputBox do
   begin
