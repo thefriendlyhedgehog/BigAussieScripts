@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '8 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -33,10 +33,13 @@ type
     CannonBallItem: TRSitem;
     SteelBarItem: TRSitem;
     DoubleAmmoMouldItem: TRSitem;
+    AmmoMouldItem: TRSitem;
 
     CannonBallBank: TRSBankItem;
     SteelBarBank: TRSBankItem;
     DoubleAmmoMouldBank: TRSBankItem;
+    AmmoMouldBank: TRSBankItem;
+    MouldItem: TRSBankItem;
 
     Furnace: TRSObject;
     ShiloVillageFurnace: TRSObject;
@@ -94,40 +97,6 @@ begin
   end;
 end;
 
-procedure BallSmelter.SetupFurnaces();
-begin
-    with Self.ShiloVillageFurnace do
-    begin
-      Setup(3, 7, [[6819, 4577]]);
-      Setup(['Furnace']);
-      Finder.Colors += CTS2(6448237, 30, 0.11, 0.13); //furnace
-      Finder.Colors += CTS2(11130738, 29, 0.52, 1.44); //fire
-    end;
-
-    with Self.NeitiznotFurnace do
-    begin
-      Setup(2, 6, [[3812, 1690]]);
-      Setup(['Clay forge']);
-      Finder.Colors += CTS2(6319989, 12, 0.07, 0.10); //furnace
-      Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //fire
-    end;
-
-    with Self.MountKaruulmFurnace do
-    begin
-      Setup(4, 7, [[698, 1227]]);
-      Setup(['Volcanic Furnace']);
-      Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //Blue fire
-    end;
-
-    with Self.PortPhasmatysFurnace do
-    begin
-      Setup(3, 7, [[10148, 2531]]);
-      Setup(['Furnace']);
-      Finder.Colors += CTS2(6448237, 30, 0.11, 0.13); //furnace
-      Finder.Colors += CTS2(11130738, 29, 0.52, 1.44); //fire
-    end;
-end;
-
 procedure BallSmelter.SetupBanks();
 begin
     with Self.NeitiznotBankChest do
@@ -159,10 +128,12 @@ begin
   SteelBarItem := ('Steel bar');
   CannonBallItem := ('Cannonball');
   DoubleAmmoMouldItem := ('Double ammo mould');
+  AmmoMouldItem := ('Ammo mould');
 
   SteelBarBank := TRSBankItem.Setup(SteelBarItem, Bank.QUANTITY_ALL, FALSE);
   CannonBallBank := TRSBankItem.Setup(CannonBallItem, Bank.QUANTITY_ALL, FALSE);
   DoubleAmmoMouldBank := TRSBankItem.Setup(DoubleAmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
+  AmmoMouldBank := TRSBankItem.Setup(AmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
 
   SteelBarValue := ItemData.GetAverage(SteelBarItem);
   CannonBallValue := ItemData.GetAverage(CannonBallItem);
@@ -175,7 +146,6 @@ begin
     SHILO_VILLAGE:
       begin
         RSW.Setup([RSRegions.SHILO_VILLAGE]);
-        self.SetupFurnaces();
         Furnace := self.ShiloVillageFurnace;
       end;
 
@@ -194,21 +164,18 @@ begin
     NEITIZNOT_FURNACE:
       begin
         RSW.Setup([[3536, 1469, 4233, 1868]]);
-        self.SetupFurnaces();
         Furnace := self.NeitiznotFurnace;
       end;
 
     MOUNT_KARUULM_FURNACE:
       begin
         RSW.Setup([[274, 963, 1006, 1466]]);
-        self.SetupFurnaces();
         Furnace := self.MountKaruulmFurnace;
       end;
 
     PORT_PHASMATYS_FURNACE:
       begin
         RSW.Setup([[9959, 2439, 10312, 2705]]);
-        self.SetupFurnaces();
         Furnace := self.PortPhasmatysFurnace;
       end;
 
@@ -334,7 +301,11 @@ begin
 end;
 
 procedure BallSmelter.WITHDRAW_BARS();
+var
+  itemsToKeep: TRSItemArray;
 begin
+  itemsToKeep := [MouldItem.Item, CannonBallItem, SteelBarItem];
+
   if not Bank.IsOpen() then
   begin
     writeln('Opening bank.');
@@ -344,12 +315,30 @@ begin
 
   if Bank.IsOpen() then
   begin
+
+    // Withdraw mould if it's not in the inventory
+    if not Inventory.ContainsItem(MouldItem.Item) then
+    begin
+      writeln('Withdrawing Mould.');
+      Bank.WithdrawItem(MouldItem, True);
+      WaitUntil(Inventory.ContainsItem(MouldItem.Item), GetRandomRangeShort(ScriptSpeed), 5000);
+    end;
+
     writeln('Withdrawing Steel Bars');
     Bank.WithdrawItem(SteelBarBank, True);
     WaitUntil(Inventory.ContainsItem(SteelBarItem), GetRandomRangeShort(ScriptSpeed), 5000);
   end;
 
-  if not Bank.ContainsItem(SteelBarItem) then
+  if Inventory.ContainsRandomItems(itemsToKeep) then
+  begin
+    writeln('Found unwanted item, Depositing all items.');
+    OpenSpecificBank();
+    Bank.DepositRandomItems(itemsToKeep);
+    Bank.WithdrawItem(SteelBarBank, True);
+    Wait(Random(200, 500));
+  end;
+
+  if not Bank.ContainsItem(SteelBarBank) then
   begin
     writeln('Out of Steel Bars. Logging out and terminating script.');
     Logout.ClickLogout();
@@ -420,39 +409,34 @@ begin
 end;
 
 procedure BallSmelter.MouldCheck();
-var
-  AmmoMouldItem, DoubleAmmoMouldItem: TRSItem;
-  AmmoMouldBank, DoubleAmmoMouldBank: TRSBankItem;
 begin
   writeln('Checking Inventory for Mould');
 
-  AmmoMouldItem := ('Ammo mould');
-  DoubleAmmoMouldItem := ('Double ammo mould');
-
-  if Inventory.ContainsItem(AmmoMouldItem) then
+  if Inventory.ContainsItem(AmmoMouldBank.Item) then
   begin
     writeln('Single Ammo mould found in inventory');
+    MouldItem := AmmoMouldBank;
   end
-  else if Inventory.ContainsItem(DoubleAmmoMouldItem) then
+  else if Inventory.ContainsItem(DoubleAmmoMouldBank.Item) then
   begin
     writeln('Double ammo mould found in inventory');
+    MouldItem := DoubleAmmoMouldBank;
   end
   else
   begin
     writeln('No mould found, will check bank');
-
-    AmmoMouldBank := TRSBankItem.Setup(AmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
-    DoubleAmmoMouldBank := TRSBankItem.Setup(DoubleAmmoMouldItem, Bank.QUANTITY_ALL, FALSE);
 
     OPEN_BANK();
 
     if Bank.WithdrawItem(DoubleAmmoMouldBank, True) then
     begin
       writeln('Double ammo withdrawn from bank');
+      MouldItem := DoubleAmmoMouldBank;
     end
     else if Bank.WithdrawItem(AmmoMouldBank, True) then
     begin
       writeln('Ammo mould withdrawn from bank');
+      MouldItem := AmmoMouldBank;
     end
     else
     begin
