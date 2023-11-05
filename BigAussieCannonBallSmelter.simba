@@ -97,6 +97,40 @@ begin
   end;
 end;
 
+procedure BallSmelter.SetupFurnaces();
+begin
+    with Self.ShiloVillageFurnace do
+    begin
+      Setup(3, 7, [[6819, 4577]]);
+      Setup(['Furnace']);
+      Finder.Colors += CTS2(6448237, 30, 0.11, 0.13); //furnace
+      Finder.Colors += CTS2(11130738, 29, 0.52, 1.44); //fire
+    end;
+
+    with Self.NeitiznotFurnace do
+    begin
+      Setup(2, 6, [[3812, 1690]]);
+      Setup(['Clay forge']);
+      Finder.Colors += CTS2(6319989, 12, 0.07, 0.10); //furnace
+      Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //fire
+    end;
+
+    with Self.MountKaruulmFurnace do
+    begin
+      Setup(4, 7, [[698, 1227]]);
+      Setup(['Volcanic Furnace']);
+      Finder.Colors += CTS2(5594035, 8, 0.09, 3.08); //Blue fire
+    end;
+
+    with Self.PortPhasmatysFurnace do
+    begin
+      Setup(3, 7, [[10148, 2531]]);
+      Setup(['Furnace']);
+      Finder.Colors += CTS2(6448237, 30, 0.11, 0.13); //furnace
+      Finder.Colors += CTS2(11130738, 29, 0.52, 1.44); //fire
+    end;
+end;
+
 procedure BallSmelter.SetupBanks();
 begin
     with Self.NeitiznotBankChest do
@@ -146,6 +180,7 @@ begin
     SHILO_VILLAGE:
       begin
         RSW.Setup([RSRegions.SHILO_VILLAGE]);
+        self.SetupFurnaces();
         Furnace := self.ShiloVillageFurnace;
       end;
 
@@ -164,18 +199,21 @@ begin
     NEITIZNOT_FURNACE:
       begin
         RSW.Setup([[3536, 1469, 4233, 1868]]);
+        self.SetupFurnaces();
         Furnace := self.NeitiznotFurnace;
       end;
 
     MOUNT_KARUULM_FURNACE:
       begin
         RSW.Setup([[274, 963, 1006, 1466]]);
+        self.SetupFurnaces();
         Furnace := self.MountKaruulmFurnace;
       end;
 
     PORT_PHASMATYS_FURNACE:
       begin
         RSW.Setup([[9959, 2439, 10312, 2705]]);
+        self.SetupFurnaces();
         Furnace := self.PortPhasmatysFurnace;
       end;
 
