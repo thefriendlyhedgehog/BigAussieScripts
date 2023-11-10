@@ -351,8 +351,6 @@ begin
   WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
   WriteLn('----------------------------------------');
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
-  WriteLn('   Expected XP: ' + FormatRoundedNumber(ExpectedXP));
-  WriteLn('   Expected XP/Hour: ' + FormatRoundedNumber(Round((ExpectedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('========================================');
   WriteLn('     BigAussies Sqirkin      ');
   WriteLn('       Version: ' + {$MACRO SCRIPT_REVISION});
