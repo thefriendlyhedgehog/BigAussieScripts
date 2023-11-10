@@ -1,0 +1,449 @@
+{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1 BETA'}
+{$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
+{$I SRL-T/osr.simba}
+{$I WaspLib/osr.simba}
+var
+  RSW: TRSWalker;
+  MINENERGY: Integer                         = 50;
+
+
+begin
+  Login.PlayerIndex := 1;
+end;
+
+const
+  HOUSE_POLY: TPointArray = [[8662, 3883], [8662, 3901], [8688, 3901], [8688, 3883]];
+
+type
+  EState = (
+    STATE_TELEPORT_TO_GARDEN,
+    STATE_ENTER_GARDEN,
+    STATE_MAKE_JUICE,
+    STATE_GIVE_SQIRKS,
+    STATE_DO_BANKING,
+    STATE_EXIT_GARDEN,
+    STATE_OUT_SUPPLIES,
+    STATE_DO_SQIRK
+  );
+
+  ELocation = (
+    ALKAHID,
+    GARDEN,
+    GARDENLOBBY
+  );
+
+  SQIRK = record (TBaseBankScript)
+    CurrentState: EState;
+
+    StartXP: Integer;
+
+    Apprentice: TRSNPC;
+    Selim: TRSNPC;
+
+    GardenGate: TRSObject;
+    Sqirktree: TRSObject;
+    Fountain: TRSObject;
+
+    SummerSqirk: TRSItem;
+    BeerGlass: TRSItem;
+    SummerSqirkJuice: TRSItem;
+    PestleAndMortar: TRSItem;
+
+    PestleAndMortarBank: TRSBankItem;
+    BeerGlassBank: TRSBankItem;
+
+    MyPos: TPoint;
+end;
+
+var
+  Timer: TStopWatch;
+
+procedure TAntiban.Setup(); override;
+begin
+  Self.Skills := [ERSSkill.THIEVING, ERSSkill.TOTAL];
+  Self.MinZoom := 0;
+  Self.MaxZoom := 10;
+
+  inherited;
+end;
+
+procedure TRSWalker.AddMapAsRegion(map: string; mapBounds: TBox); overload; // Yoinked
+begin
+  Self.Map.Load(map, mapBounds, Self.Scaling);
+  Self.InternalSetup();
+end;        
+
+function SQIRK.GetLocation(): ELocation;
+begin
+  if (not RSClient.IsLoggedIn) then Exit;
+
+  MyPos := Self.RSW.GetMyPos;
+
+  if MyPos.InBox([8356, 3096, 9171, 4090]) then Exit(ALKAHID);
+  if MyPos.InBox([160, 60, 241, 119]) then Exit(GARDEN); // This is the garden maze
+  if MyPos.InBox([156, 123, 208, 183]) then Exit(GARDENLOBBY); // Garden Lobby
+end;
+
+procedure SQIRK.SetupNPCS();
+begin
+  with Apprentice do
+  begin
+    Setup([[8677, 3892]]);
+    Setup(['Apprentice']);
+    Apprentice.DotFilter.Setup(HOUSE_POLY, True);
+    Apprentice.ShapeArray.SetShape([1, 1, 6]);
+    Finder.Colors += CTS2(9547150, 20, 0.97, 0.34);
+  end;
+
+  with Selim do
+  begin
+    Setup(20, 7, [[8538, 3724]]);
+    Setup(['Selim']);
+    Finder.Colors += CTS2(2636090, 9, 0.12, 0.61);
+  end;
+end;
+
+procedure SQIRK.SetupObjects();
+begin
+  with GardenGate do
+  begin
+    Setup(5, [[176, 120]]);
+    Setup(['Gate']);
+    Finder.Colors += CTS2(5339027, 16, 0.03, 0.40);
+  end;
+
+  with Sqirktree do
+  begin
+    Setup(5, 10, [[197, 77]]);
+    Setup(['Sq''irk tree']);
+    Finder.ColorClusters += [CTS2(9421243, 11, 0.98, 0.89), CTS2(2109625, 14, 0.05, 1.42), 1];
+  end;
+
+  with Fountain do
+  begin
+    Setup(5, [[182, 156]]);
+    Setup(['Fountain']);
+    Finder.Colors += CTS2(12832194, 13, 1.90, 0.65);
+  end;
+end; 
+
+procedure SQIRK.CheckForRandomItems();
+var
+  itemsToKeep: TRSItemArray;
+  unwantedItems: TIntegerArray;
+begin
+  itemsToKeep := [PestleAndMortar, SummerSqirkJuice, SummerSqirk, BeerGlass, 'Stamina potion(1)'];
+  unwantedItems := Inventory.FindRandomItems(itemsToKeep);
+  if Length(unwantedItems) > 0 then
+  begin
+    WriteLn('Dropping unwanted items...');
+    Inventory.ShiftDrop(unwantedItems);
+  end;
+  Wait(Random(200, 500));
+end;
+
+procedure SQIRK.TELEPORT_TO_GARDEN();
+begin
+  writeln('Attempting to Teleport to Garden.');
+  repeat
+    Apprentice.WalkSelectOption(['Teleport']);
+  until Mainscreen.DidRedClick() or Chat.HasContinue;
+
+  if Chat.HasContinue then
+  begin
+    Chat.ClickContinue(True);
+    Wait(RandomRange(600, 1200));
+    Chat.ClickContinue(True);
+  end;
+  
+  writeln('Teleporting to Garden.');
+  WaitUntil(Self.GetLocation() = GARDENLOBBY, 120, 10000);
+end;
+
+procedure SQIRK.ENTER_GARDEN();
+begin
+  WriteLn('Looking for garden gate.');
+  repeat
+    GardenGate.Click();
+  until Mainscreen.DidRedClick();
+  WaitUntil(Self.GetLocation() = GARDEN, 120, 10000);
+end;
+
+procedure SQIRK.MAKE_JUICE();
+begin
+  CheckForRandomItems();
+  if (Inventory.CountItem(SummerSqirk) >= 2) then
+  begin
+    writeln('Making Summer Sqirk!');
+    Inventory.Use(PestleAndMortar, SummerSqirk);
+    XPBar.WaitXP(3000, 80);
+    Wait(RandomRange(400, 600));
+  end;
+end;
+
+procedure SQIRK.EXIT_GARDEN();
+begin
+  WriteLn('Attempting to exit garden.');
+  repeat
+    Fountain.WalkClick();
+  until Mainscreen.DidRedClick();
+  WaitUntil(Self.GetLocation() = ALKAHID, 120, 10000);
+  writeln('Should be out of garden');
+end;
+
+procedure SQIRK.GIVE_SQIRKS();
+begin
+  writeln('No empty glasses and we have juice to hand-in, moving to Selim to hand-in.');
+  repeat
+    Selim.WalkClick();
+  until Mainscreen.DidRedClick() or Chat.HasContinue;
+  if WaitUntil(Chat.HasContinue, 50, 30000) then
+  begin
+    writeln('Talking to NPC, Handling dialog');
+    Chat.ChatToOption('I''d like to talk about sq''irks');
+    Chat.ClickOption('I''d like to talk about sq''irks', TRUE);
+    WaitUntil(Chat.HasContinue, 50, 4000);
+    Chat.ClickContinue(True);
+    WaitUntil(Chat.HasContinue, 50, 4000);
+    Chat.ClickContinue(True);
+  end;
+end;
+
+procedure SQIRK.OUT_SUPPLIES();
+begin
+  MainScreen.CloseInterface(True);
+  writeln('Out of Supplies or lost?, Terminating.');
+  Logout.ClickLogout();
+  TerminateScript();
+end;
+
+procedure SQIRK.DO_BANKING();
+var
+  FreeSlots: Integer;
+begin
+  writeln('Heading to bank.');
+  Bank.WalkOpen();
+  WaitUntil(Bank.IsOpen(), 375, 30000);
+  if Bank.IsOpen() then
+  begin
+    if not Inventory.ContainsItem(PestleAndMortar) then
+    begin
+      writeln('No Pestal and Mortar found in Inventory, Withdrawing Pestle and Mortar from bank.');
+      Bank.WithdrawItem(PestleAndMortarBank, TRUE);
+      WaitUntil(Inventory.ContainsItem(PestleAndMortar), 375, 4000);
+    end;
+
+    FreeSlots := Inventory.CountEmptySlots();
+    FreeSlots -= 2;
+    BeerGlassBank := TRSBankItem.Setup(BeerGlass, FreeSlots, FALSE);
+    writeln('Withdrawing ' + IntToStr(FreeSlots) + ' Empty beer glass for SQIRKIN!');
+    Bank.WithdrawItem(BeerGlassBank, TRUE);
+    WaitUntil(Inventory.ContainsItem(BeerGlass), 375, 4000);
+    FreeSlots := Inventory.CountEmptySlots();
+    if FreeSlots < 2 then
+    begin
+      writeln('Less than 2 free slots after banking, Terminating.'); // Placeholder for now, we may need a failsafe?
+      Bank.Close();
+      Logout.ClickLogout();
+      TerminateScript();
+    end;
+    if Bank.IsOpen() then
+      Bank.Close();
+  end;
+end;
+
+procedure SQIRK.DO_SQIRK();
+begin
+  CheckForRandomItems();
+  
+  if Minimap.GetRunEnergy() > MINENERGY then
+  begin
+    Minimap.EnableRun();
+  end
+
+  writeln('Looking for SQIRKIN Tree');
+  repeat
+    Sqirktree.Click();
+  until Mainscreen.DidRedClick();
+
+  Wait(RandomRange(100, 200));
+  
+  WaitUntil(Self.GetLocation() = GARDENLOBBY, 120, 50000);
+end;
+
+procedure SQIRK.doAction();
+begin
+  case Self.GetState() of
+    STATE_ENTER_GARDEN:
+      ENTER_GARDEN();
+    STATE_MAKE_JUICE:
+      MAKE_JUICE;
+    STATE_DO_SQIRK:
+      DO_SQIRK();
+    STATE_EXIT_GARDEN:
+      EXIT_GARDEN;
+    STATE_GIVE_SQIRKS:
+      GIVE_SQIRKS();
+    STATE_DO_BANKING:
+      DO_BANKING;
+    STATE_OUT_SUPPLIES:
+      OUT_SUPPLIES;
+    STATE_TELEPORT_TO_GARDEN:
+      TELEPORT_TO_GARDEN();
+  end;
+end;
+
+function SQIRK.GetState(): EState;
+begin
+  if (Self.GetLocation() = ALKAHID) and Inventory.ContainsItem(BeerGlass) and Inventory.ContainsItem(PestleAndMortar) and (Inventory.CountEmptySlots() >= 2) then
+    Exit(STATE_TELEPORT_TO_GARDEN)
+  else if (Self.GetLocation() = ALKAHID) and (Inventory.CountItem(SummerSqirkJuice) >= 1) and not Inventory.ContainsItem(BeerGlass) then
+    Exit(STATE_GIVE_SQIRKS)
+  else if (Self.GetLocation() = ALKAHID) and (not Inventory.ContainsItem(BeerGlass) or not Inventory.ContainsItem(SummerSqirkJuice) or not Inventory.ContainsItem(PestleAndMortar)) then
+    Exit(STATE_DO_BANKING)
+  else if (Inventory.CountItem(SummerSqirk) >= 2) and Inventory.ContainsItem(BeerGlass) then
+    Exit(STATE_MAKE_JUICE)
+  else if (Self.GetLocation() = GARDENLOBBY) and not Inventory.ContainsItem(BeerGlass) then
+    Exit(STATE_EXIT_GARDEN)
+  else if (Self.GetLocation() = GARDENLOBBY) and Inventory.ContainsItem(BeerGlass) and Inventory.ContainsItem(PestleAndMortar) then
+    Exit(STATE_ENTER_GARDEN)
+  else if (Self.GetLocation() = GARDEN) and Inventory.ContainsItem(BeerGlass) and Inventory.ContainsItem(PestleAndMortar) then
+    Exit(STATE_DO_SQIRK)
+  else
+    Exit(STATE_OUT_SUPPLIES);
+end;
+
+function FormatRoundedNumber(Number: Integer): String;
+begin
+  // If the number is >= 1 million, format it with 1 decimal place and add "M" suffix
+  if Number >= 1000000 then
+    Result := FormatFloat('0.0M', Number / 1000000)
+  // If the number is >= 1 thousand, format it with no decimal places and add "K" suffix
+  else if Number >= 1000 then
+    Result := FormatFloat('0K', Number / 1000)
+  // For smaller numbers, use the regular SRL.FormatNumber function
+  else
+    Result := SRL.FormatNumber(Number);
+end;
+
+procedure SQIRK.Report();
+var
+  Runtime: Integer;
+  XPPerHour: Integer;
+  CurrentXP: Integer;
+  GainedXP: Integer;
+  CurrentSqirks: Integer;
+  ExpectedXP: Integer;
+begin
+  ClearDebug();
+  CurrentXP := XPBar.Read();
+  GainedXP := CurrentXP - StartXP;
+  Runtime := Timer.ElapsedTime;
+  XPPerHour := Round(((CurrentXP - StartXP) / Runtime) * 3600);
+  CurrentSqirks := Inventory.CountItem('Summer sq''irkjuice');
+  ExpectedXP := CurrentSqirks * 3000; // Each Summer Sqirk is worth 3000 XP
+
+  WriteLn('========================================');
+  WriteLn('     BigAussies Sqirkin      ');
+  WriteLn('========================================');
+  WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short));
+  WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
+  WriteLn('----------------------------------------');
+  WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
+  WriteLn('   Expected XP: ' + FormatRoundedNumber(ExpectedXP));
+  WriteLn('   Expected XP/Hour: ' + FormatRoundedNumber(Round((ExpectedXP) / (GetTimeRunning() / 3600000))));
+  WriteLn('========================================');
+  WriteLn('     BigAussies Sqirkin      ');
+  WriteLn('       Version: ' + {$MACRO SCRIPT_REVISION});
+  WriteLn('========================================');
+end;
+
+procedure SQIRK.Init(MaxActions: UInt32; MaxTime: UInt64); override;
+begin
+  inherited;
+  rsw.Setup([[7917, 3246, 8880, 3946]]);
+
+  SetupNPCS();
+  RSObjects.Setup();
+  RSNpcs.Setup();
+
+  rsw.AddMapAsRegion('sorcg', [0,0, 370, 350]);
+  SetupObjects();
+
+  SummerSqirk := ('Summer Sq''irk');
+  PestleAndMortar := ('Pestle and mortar');
+  BeerGlass := ('Beer glass');
+  SummerSqirkJuice := ('Summer sq''irkjuice');
+  PestleAndMortarBank := TRSBankItem.Setup(PestleAndMortar, 1, FALSE);
+  Mouse.Speed := Random(22, 28);
+
+  MINENERGY := Round(Antiban.GetUniqueNumber(50, 20, 60));
+  EnergyHandler.MinInvPoints := 80;
+
+  Options.SetZoomLevel(0);
+  StartXP := XPBar.Read();
+end;
+
+procedure SQIRK.Run(MaxActions: UInt32; MaxTime: UInt64);
+begin
+  Self.Init(MaxActions, MaxTime);
+  repeat
+    Self.doAction();
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
+    Self.DoAntiban;
+    Self.Report();
+  until Self.ShouldStop();
+end;
+
+var
+  Script: SQIRK;
+
+{$IFDEF SCRIPT_GUI}
+type
+  TConfig = record(TScriptForm)
+    PlaceHolder: TLabeledCombobox;
+  end;
+
+procedure TConfig.Run(); override;
+var
+  tab: TTabSheet;
+begin
+  Self.Setup("BigAussies Sqirkin");
+  Self.Start.SetOnClick(@Self.StartScript);
+
+  Self.AddTab('Sqirk Settings');
+  tab := Self.Tabs[High(Self.Tabs)];
+
+  Self.CreateAccountManager(tab);
+
+  Self.CreateVersionPanel(tab);
+
+  Self.CreateAntibanManager();
+
+  Self.CreateWaspLibSettings();
+
+  Self.CreateAPISettings();
+
+  inherited;
+end;
+
+var
+  Config: TConfig;
+{$ENDIF}
+
+begin
+  if (not FileExists(AppPath+'\Includes\WaspLib\osr\walker\maps\sorcg.png')) then
+  begin
+    WriteLn('Sorceress''s Garden Map not found. Downloading now........');
+    DownloadToFile('https://i.imgur.com/we1Zrxz.png', AppPath+'\Includes\WaspLib\osr\walker\maps\sorcg.png');
+  end;
+  {$IFDEF SCRIPT_GUI}
+  Sync(@Config.Run);
+  {$ENDIF}
+  Script.Run(WLSettings.MaxActions, WLSettings.MaxTime);
+end.
