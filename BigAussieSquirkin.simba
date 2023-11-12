@@ -1,12 +1,8 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
-var
-  RSW: TRSWalker;
-  MINENERGY: Integer                         = 50;
-
 
 begin
   Login.PlayerIndex := 1;
@@ -14,7 +10,8 @@ end;
 
 const
   HOUSE_POLY: TPointArray = [[8662, 3883], [8662, 3901], [8688, 3901], [8688, 3883]];
-
+  REAL_ENERGY: TRSItemArray = ['White tree fruit', 'Bandages', 'Guthix rest(1..4)', 'Papaya fruit', 'Energy potion(1..4)', 'Purple sweets', 'Summer pie(1..2)', 'Super energy(1..4)', 'Stamina potion(1..4)', 'Strange fruit', 'Mint cake', 'Gout tuber'];
+  /// We had to Redo the energy array to not consume Sqirks, Thanks CJ for the tips with this.
 type
   EState = (
     STATE_TELEPORT_TO_GARDEN,
@@ -37,6 +34,7 @@ type
     CurrentState: EState;
 
     StartXP: Integer;
+    MINENERGY: Integer;
 
     Apprentice: TRSNPC;
     Selim: TRSNPC;
@@ -58,6 +56,54 @@ end;
 
 var
   Timer: TStopWatch;
+  ENERGYPOINTS: Integer;
+  RSW: TRSWalker;
+
+function TConsumableHandler.FindInBank(): TRSConsumableArray; override;
+var
+  consumable: TRSConsumable;
+  item: TRSItem;
+begin
+  Self.DebugLn('Setting up consumable of type: ' + ToStr(Self.ConsumableType));
+
+  for item in REAL_ENERGY do
+  begin
+    if Self.ConsumableArray.Contains(item) then //avoid resetting items.
+      Continue;
+
+    if Bank.ContainsItem(item.Reorder(False)) then
+    begin
+      Self.DebugLn('Consumable found: ' + ToStr(item));
+      consumable := Self.Setup(item);
+      consumable.BankItem.Tab := Bank.GetCurrentTab(); //TODO: Search parent maybe?
+      consumable.BankItem.Scroll := Bank.GetScrollPosition();
+
+      Result += consumable;
+    end;
+  end;
+end; 
+
+function TConsumableHandler.FindInInventory(): TRSConsumableArray; override;
+var
+  consumable: TRSConsumable;
+  item: TRSItem;
+begin
+  Self.DebugLn('Setting up consumable of type: ' + ToStr(Self.ConsumableType));
+
+  for item in REAL_ENERGY do
+  begin
+    if Self.ConsumableArray.Contains(item) then //avoid resetting leftover items.
+      Continue;
+
+    if Inventory.ContainsItem(item) then
+    begin
+      Self.DebugLn('Consumable found: ' + ToStr(item));
+      consumable := Self.Setup(item);
+
+      Result += consumable;
+    end;
+  end;
+end; 
 
 procedure TAntiban.Setup(); override;
 begin
@@ -201,7 +247,7 @@ begin
   repeat
     GardenGate.Click();
   until Mainscreen.DidRedClick();
-  WaitUntil(Self.GetLocation() = GARDEN, 120, 10000);
+  WaitUntil(Self.GetLocation() = GARDEN, 120, 15000);
 end;
 
 procedure SQIRK.MAKE_JUICE();
@@ -229,7 +275,7 @@ end;
 
 procedure SQIRK.GIVE_SQIRKS();
 begin
-  writeln('No empty glasses and we have juice to hand-in, moving to Selim to hand-in.');
+  writeln('No empty glasses and we have juice to hand-in, moving to hand-in.');
   repeat
     Selim.WalkClick();
   until Mainscreen.DidRedClick() or Chat.HasContinue;
@@ -352,8 +398,8 @@ begin
       Bank.WithdrawItem(PestleAndMortarBank, TRUE);
       WaitUntil(Inventory.ContainsItem(PestleAndMortar), 375, 4000);
     end;
-//    Bank.WithdrawConsumableAmount(ENERGY_CONSUMABLE); 
-//    Bank.WithdrawConsumable(ENERGY_CONSUMABLE);
+    Bank.WithdrawConsumableAmount(ENERGY_CONSUMABLE); 
+    Bank.WithdrawConsumable(ENERGY_CONSUMABLE);
 
     FreeSlots := Inventory.CountEmptySlots();
     FreeSlots -= 2;
@@ -383,10 +429,10 @@ begin
     Minimap.EnableRun();
   end
 
-//  if not Minimap.HasStamina then
-//  begin
-//    Inventory.Consume(ENERGY_CONSUMABLE);
-//  end; 
+  if not Minimap.HasStamina then
+  begin
+    Inventory.Consume(ENERGY_CONSUMABLE);
+  end; 
 
   writeln('Looking for SQIRKIN Tree');
   repeat
@@ -503,7 +549,7 @@ begin
   Mouse.Speed := Random(22, 28);
 
   MINENERGY := Round(Antiban.GetUniqueNumber(50, 20, 60));
-  EnergyHandler.MinInvPoints := 300;
+  EnergyHandler.MinInvPoints := ENERGYPOINTS;
 
   Options.SetZoomLevel(0);
   StartXP := XPBar.Read();
@@ -530,8 +576,15 @@ var
 {$IFDEF SCRIPT_GUI}
 type
   TConfig = record(TScriptForm)
-    PlaceHolder: TLabeledCombobox;
+    ConsumablePoints: TLabeledEdit;
+    ConsumablePointsLabel, ConsumablePointsLabel2: TLabel;
   end;
+
+procedure TConfig.StartScript(sender: TObject); override; 
+begin
+  ENERGYPOINTS := StrToInt(Self.ConsumablePoints.GetText);
+  inherited;
+end;
 
 procedure TConfig.Run(); override;
 var
@@ -542,6 +595,25 @@ begin
 
   Self.AddTab('Sqirk Settings');
   tab := Self.Tabs[High(Self.Tabs)];
+
+  with Self.ConsumablePoints do
+  begin
+    Create(tab);
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(TControl.AdjustToDPI(160));
+    SetCaption('Energy Points To Consume');
+    SetHint('Sets the amount of consumable points you wish to withdraw and use.');
+    SetWidth(150);
+    SetText('100');
+  end;
+
+  with Self.ConsumablePointsLabel do
+  begin
+    Create(tab);
+    SetLeft(Self.ConsumablePoints.GetLeft());
+    SetTop(Self.ConsumablePoints.GetTop() + TControl.AdjustToDPI(50));
+    SetCaption('Ensure Stamina potions are on the top row of your bank if you wish to use them.');
+  end;
 
   Self.CreateAccountManager(tab);
 
