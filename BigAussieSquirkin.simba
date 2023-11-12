@@ -176,7 +176,9 @@ end;
 procedure SQIRK.TELEPORT_TO_GARDEN();
 begin
   writeln('Attempting to Teleport to Garden.');
-  RSMouseZoom.SetZoomLevel(45);
+  Apprentice.WalkSelectOption(['Teleport']);
+  if not Apprentice.IsVisible() then
+    RSMouseZoom.SetZoomLevel(Random(40, 50));
   repeat
     Apprentice.WalkSelectOption(['Teleport']);
   until Mainscreen.DidRedClick() or Chat.HasContinue;
