@@ -460,7 +460,7 @@ var
   CurrentSqirks: Integer;
   ExpectedXP: Integer;
 begin
-  //ClearDebug();
+  ClearDebug();
   CurrentXP := XPBar.Read();
   GainedXP := CurrentXP - StartXP;
   Runtime := Timer.ElapsedTime;
