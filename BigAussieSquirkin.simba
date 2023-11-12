@@ -176,6 +176,7 @@ end;
 procedure SQIRK.TELEPORT_TO_GARDEN();
 begin
   writeln('Attempting to Teleport to Garden.');
+  RSMouseZoom.SetZoomLevel(45);
   repeat
     Apprentice.WalkSelectOption(['Teleport']);
   until Mainscreen.DidRedClick() or Chat.HasContinue;
@@ -188,7 +189,8 @@ begin
   end;
   
   writeln('Teleporting to Garden.');
-  WaitUntil(Self.GetLocation() = GARDENLOBBY, 120, 10000);
+  WaitUntil(Fountain.IsVisible, 120, 10000);
+  RSMouseZoom.SetZoomLevel(0);
 end;
 
 procedure SQIRK.ENTER_GARDEN();
@@ -197,7 +199,7 @@ begin
   repeat
     GardenGate.Click();
   until Mainscreen.DidRedClick();
-  WaitUntil(Fountain.IsVisible, 120, 10000);
+  WaitUntil(Self.GetLocation() = GARDEN, 120, 10000);
 end;
 
 procedure SQIRK.MAKE_JUICE();
