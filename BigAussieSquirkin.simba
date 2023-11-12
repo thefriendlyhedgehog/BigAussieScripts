@@ -226,7 +226,6 @@ begin
   if not Apprentice.IsVisible() then
     RSMouseZoom.SetZoomLevel(Random(40, 50));
   repeat
-    writeln('Apprentice loop');
     Apprentice.WalkSelectOption(['Teleport']);
   until Mainscreen.DidRedClick() or Chat.HasContinue;
 
