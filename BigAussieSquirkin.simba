@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -9,7 +9,7 @@ begin
 end;
 
 const
-  HOUSE_POLY: TPointArray = [[8662, 3883], [8662, 3901], [8688, 3901], [8688, 3883]];
+  HOUSE_POLY: TPointArray = [[8663, 3901], [8662, 3883], [8690, 3884], [8690, 3904]];
   REAL_ENERGY: TRSItemArray = ['White tree fruit', 'Bandages', 'Guthix rest(1..4)', 'Papaya fruit', 'Energy potion(1..4)', 'Purple sweets', 'Summer pie(1..2)', 'Super energy(1..4)', 'Stamina potion(1..4)', 'Strange fruit', 'Mint cake', 'Gout tuber'];
   /// We had to Redo the energy array to not consume Sqirks, Thanks CJ for the tips with this.
 type
@@ -226,6 +226,7 @@ begin
   if not Apprentice.IsVisible() then
     RSMouseZoom.SetZoomLevel(Random(40, 50));
   repeat
+    writeln('Apprentice loop');
     Apprentice.WalkSelectOption(['Teleport']);
   until Mainscreen.DidRedClick() or Chat.HasContinue;
 
@@ -237,7 +238,8 @@ begin
   end;
   
   writeln('Teleporting to Garden.');
-  WaitUntil(Fountain.IsVisible, 120, 10000);
+  WaitUntil(Fountain.IsVisible and (Self.GetLocation() = GARDENLOBBY), 120, 20000);
+  Wait(RandomRange(1000, 1200));
   RSMouseZoom.SetZoomLevel(0);
 end;
 
@@ -259,7 +261,7 @@ begin
     Inventory.Use(PestleAndMortar, SummerSqirk);
     WL.Activity.Restart();
     XPBar.WaitXP(3000, 80);
-    Wait(RandomRange(400, 600));
+    Wait(RandomRange(700, 900));
   end;
 end;
 
@@ -532,7 +534,7 @@ end;
 procedure SQIRK.Init(MaxActions: UInt32; MaxTime: UInt64); override;
 begin
   inherited;
-  rsw.Setup([[7917, 3246, 8880, 3946]]);
+  rsw.Setup([[7751, 2824, 9251, 4324]]);
 
   SetupNPCS();
   RSObjects.Setup();
@@ -565,8 +567,8 @@ begin
       WriteLn('No activity detected in 5 minutes! Shutting down.');
       Break;
     end;
-    Self.DoAntiban;
     Self.Report();
+    Self.DoAntiban;
   until Self.ShouldStop();
 end;
 
