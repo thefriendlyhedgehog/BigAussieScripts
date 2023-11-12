@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -99,7 +99,7 @@ begin
   with Selim do
   begin
     Setup(20, 7, [[8538, 3724]]);
-    Setup(['Selim']);
+    Setup(['Selim', 'Osman']);
     Finder.Colors += CTS2(2636090, 9, 0.12, 0.61);
   end;
 end;
@@ -133,7 +133,37 @@ var
   itemsToKeep: TRSItemArray;
   unwantedItems: TIntegerArray;
 begin
-  itemsToKeep := [PestleAndMortar, SummerSqirkJuice, SummerSqirk, BeerGlass, 'Stamina potion(1)'];
+  itemsToKeep := [
+    PestleAndMortar, 
+    SummerSqirkJuice, 
+    SummerSqirk, 
+    BeerGlass, 
+    'Stamina potion(1)', 
+    'Stamina potion(2)', 
+    'Stamina potion(3)', 
+    'Stamina potion(4)', 
+    'White tree fruit', 
+    'Bandages', 
+    'Guthix rest(1)', 
+    'Guthix rest(2)', 
+    'Guthix rest(3)', 
+    'Guthix rest(4)', 
+    'Papaya fruit', 
+    'Energy potion(1)', 
+    'Energy potion(2)', 
+    'Energy potion(3)', 
+    'Energy potion(4)', 
+    'Purple sweets', 
+    'Summer pie(1)', 
+    'Summer pie(2)', 
+    'Super energy(1)', 
+    'Super energy(2)', 
+    'Super energy(3)', 
+    'Super energy(4)', 
+    'Strange fruit', 
+    'Mint cake', 
+    'Gout tuber'
+  ];
   unwantedItems := Inventory.FindRandomItems(itemsToKeep);
   if Length(unwantedItems) > 0 then
   begin
@@ -167,7 +197,7 @@ begin
   repeat
     GardenGate.Click();
   until Mainscreen.DidRedClick();
-  WaitUntil(Self.GetLocation() = GARDEN, 120, 10000);
+  WaitUntil(Fountain.IsVisible, 120, 10000);
 end;
 
 procedure SQIRK.MAKE_JUICE();
@@ -177,6 +207,7 @@ begin
   begin
     writeln('Making Summer Sqirk!');
     Inventory.Use(PestleAndMortar, SummerSqirk);
+    WL.Activity.Restart();
     XPBar.WaitXP(3000, 80);
     Wait(RandomRange(400, 600));
   end;
@@ -189,7 +220,7 @@ begin
     Fountain.WalkClick();
   until Mainscreen.DidRedClick();
   WaitUntil(Self.GetLocation() = ALKAHID, 120, 10000);
-  writeln('Should be out of garden');
+  Wait(RandomRange(1000, 1400));
 end;
 
 procedure SQIRK.GIVE_SQIRKS();
@@ -218,6 +249,90 @@ begin
   TerminateScript();
 end;
 
+// Had to redo this because the trash array was a constant and we need to NOT drop Beer Glasses.....
+function TRSInventory.Consume(consumableType: ERSConsumable; out slots: TIntegerArray): Boolean;  override;
+var
+  consumableHandler, tmp: PConsumableHandler;
+  foundConsumables: TRSConsumableArray;
+  startingPoints: Int32;
+  trashSlots: TIntegerArray;
+  TRASH_ARRAY2: TRSItemArray;
+begin
+  TRASH_ARRAY2 := ['Cocktail glass', 'Jug', 'Bowl', 'Pie dish', 'Vial', 'Empty cup'];
+  consumableHandler := TConsumableHandler.GetHandler(consumableType);
+  if not consumableHandler^.IsSetup then
+    Exit;
+
+  case consumableType of
+
+    ERSConsumable.ENERGY_CONSUMABLE:
+      startingPoints := Minimap.GetRunEnergy();
+  end;
+
+  slots := Self.FindConsumable(consumableType, foundConsumables);
+
+  if slots.Len() = 0 then
+    Exit;
+
+  if not Antiban.BioDice(EBioBehavior.CONSUME_IN_BANK) and
+     MainScreen.HasInterface() then
+     MainScreen.CloseInterface();
+
+  if (consumableHandler^.Delay.Length > 0) then
+    while not consumableHandler^.Delay.IsFinished() do
+      Wait(50, 100);
+
+  Result := Self.ClickSlot(slots[0], ['Eat', 'Drink']);
+
+  if Result then
+    case consumableType of
+
+      ERSConsumable.ENERGY_CONSUMABLE:
+        Result := WaitUntil(startingPoints < Minimap.GetRunEnergy(), 100, 3000);
+      else
+        BioWait(1000, 2000, wdLeft);
+    end;
+
+  if Result then
+  begin
+    case consumableType of
+      ERSConsumable.FOOD_CONSUMABLE:
+        begin
+          if foundConsumables[0].Item = 'Cooked karambwan' then
+            consumableHandler^.Delay.Init(1200)
+          else
+            consumableHandler^.Delay.Init(1800);
+        end;
+      else
+        for tmp in CONSUMABLE_HANDLER_ARRAY do
+            tmp^.Delay.Init(600);
+    end;
+
+    if foundConsumables[0].Timer > 0 then
+    begin
+      if consumableHandler^.Timer.Length <> foundConsumables[0].Timer then
+        consumableHandler^.Timer.Setup(foundConsumables[0].Timer);
+
+      if consumableType = ERSConsumable.ANTI_FIRE_CONSUMABLE then
+        consumableHandler^.Timer.Restart(Random(-50000, -20000))
+      else
+        consumableHandler^.Timer.Restart(Random(-3000, 3000));
+    end;
+
+    TotalConsumableCost += foundConsumables[0].Cost;
+
+    if Self.FindItems(TRASH_ARRAY2, trashSlots) then
+    begin
+      if Bank.IsOpen() then
+        Bank.DepositSlot([trashSlots[0], -1], False)
+      else
+        Self.ShiftDrop(trashSlots.Intersection(Self.RandomPattern()));
+
+      slots := slots.Difference(trashSlots); //Delete trashSlots from slots.
+    end;
+  end;
+end;
+
 procedure SQIRK.DO_BANKING();
 var
   FreeSlots: Integer;
@@ -233,6 +348,8 @@ begin
       Bank.WithdrawItem(PestleAndMortarBank, TRUE);
       WaitUntil(Inventory.ContainsItem(PestleAndMortar), 375, 4000);
     end;
+//    Bank.WithdrawConsumableAmount(ENERGY_CONSUMABLE); 
+//    Bank.WithdrawConsumable(ENERGY_CONSUMABLE);
 
     FreeSlots := Inventory.CountEmptySlots();
     FreeSlots -= 2;
@@ -261,6 +378,11 @@ begin
   begin
     Minimap.EnableRun();
   end
+
+//  if not Minimap.HasStamina then
+//  begin
+//    Inventory.Consume(ENERGY_CONSUMABLE);
+//  end; 
 
   writeln('Looking for SQIRKIN Tree');
   repeat
@@ -336,7 +458,7 @@ var
   CurrentSqirks: Integer;
   ExpectedXP: Integer;
 begin
-  ClearDebug();
+  //ClearDebug();
   CurrentXP := XPBar.Read();
   GainedXP := CurrentXP - StartXP;
   Runtime := Timer.ElapsedTime;
@@ -377,7 +499,7 @@ begin
   Mouse.Speed := Random(22, 28);
 
   MINENERGY := Round(Antiban.GetUniqueNumber(50, 20, 60));
-  EnergyHandler.MinInvPoints := 80;
+  EnergyHandler.MinInvPoints := 300;
 
   Options.SetZoomLevel(0);
   StartXP := XPBar.Read();
