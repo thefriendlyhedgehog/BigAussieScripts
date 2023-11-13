@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -138,7 +138,7 @@ begin
     Setup([[8677, 3892]]);
     Setup(['Apprentice']);
     Apprentice.DotFilter.Setup(HOUSE_POLY, True);
-    Apprentice.ShapeArray.SetShape([1, 1, 6]);
+    Apprentice.ShapeArray.SetShape([1, 1, 7]); 
     Finder.Colors += CTS2(9547150, 20, 0.97, 0.34);
   end;
 
@@ -222,14 +222,13 @@ end;
 procedure SQIRK.TELEPORT_TO_GARDEN();
 begin
   writeln('Attempting to Teleport to Garden.');
-  Apprentice.WalkSelectOption(['Teleport']);
-  if not Apprentice.IsVisible() then
-    RSMouseZoom.SetZoomLevel(Random(40, 50));
   repeat
     if Self.GetLocation() = GARDENLOBBY then
       break;
     Apprentice.WalkSelectOption(['Teleport']);
-  until Mainscreen.DidRedClick() or Chat.HasContinue or (Self.GetLocation() = GARDENLOBBY);
+    if Mainscreen.DidRedClick() then
+      break;
+  until Chat.HasContinue or (Self.GetLocation() = GARDENLOBBY);
 
   if Chat.HasContinue then
   begin
@@ -513,11 +512,11 @@ var
 begin
   ClearDebug();
   CurrentXP := XPBar.Read();
-  GainedXP := CurrentXP - StartXP;
-  Runtime := Timer.ElapsedTime;
-  XPPerHour := Round(((CurrentXP - StartXP) / Runtime) * 3600);
   CurrentSqirks := Inventory.CountItem('Summer sq''irkjuice');
   ExpectedXP := CurrentSqirks * 3000; // Each Summer Sqirk is worth 3000 XP
+  GainedXP := (CurrentXP - StartXP) + ExpectedXP;
+  Runtime := Timer.ElapsedTime;
+  XPPerHour := Round(((CurrentXP - StartXP + ExpectedXP) / Runtime) * 3600);
 
   WriteLn('========================================');
   WriteLn('     BigAussies Sqirkin      ');
