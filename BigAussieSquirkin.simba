@@ -238,9 +238,9 @@ begin
   end;
   
   writeln('Teleporting to Garden.');
+
   WaitUntil(Fountain.IsVisible and (Self.GetLocation() = GARDENLOBBY), 120, 20000);
   Wait(RandomRange(1000, 1200));
-  RSMouseZoom.SetZoomLevel(0);
 end;
 
 procedure SQIRK.ENTER_GARDEN();
