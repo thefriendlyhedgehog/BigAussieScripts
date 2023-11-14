@@ -264,7 +264,10 @@ end;
 
 procedure SQIRK.ENTER_GARDEN();
 begin
-
+  if not Minimap.HasStamina and (ENERGYPOINTS > 0 = True) and (Minimap.GetRunEnergy() < MINENERGY) then
+  begin
+    Inventory.Consume(ENERGY_CONSUMABLE);
+  end; 
   WriteLn('Looking for garden gate.');
   repeat
     GardenGate.Click();
@@ -476,7 +479,7 @@ begin
     Minimap.EnableRun();
   end
 
-  if not Minimap.HasStamina and (ENERGYPOINTS > 0 = True) and (Minimap.GetRunEnergy() < MINENERGY = True) then
+  if not Minimap.HasStamina and (ENERGYPOINTS > 0 = True) and (Minimap.GetRunEnergy() < MINENERGY) then
   begin
     Inventory.Consume(ENERGY_CONSUMABLE);
   end; 
@@ -595,7 +598,7 @@ begin
   PestleAndMortarBank := TRSBankItem.Setup(PestleAndMortar, 1, FALSE);
   Mouse.Speed := Random(22, 28);
 
-  MINENERGY := Round(Antiban.GetUniqueNumber(50, 20, 60));
+  MINENERGY := Round(Antiban.GetUniqueNumber(50, 35, 55));
   EnergyHandler.MinInvPoints := ENERGYPOINTS;
 
   Options.SetZoomLevel(0);
