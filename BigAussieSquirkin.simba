@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '8 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -419,24 +419,49 @@ begin
       writeln('No Pestal and Mortar found in Inventory, Withdrawing Pestle and Mortar from bank.');
       Bank.WithdrawItem(PestleAndMortarBank, TRUE);
       WaitUntil(Inventory.ContainsItem(PestleAndMortar), 375, 4000);
+      Bank.OpenTab(0);
     end;
-    Bank.WithdrawConsumableAmount(ENERGY_CONSUMABLE); 
-    Bank.WithdrawConsumable(ENERGY_CONSUMABLE);
+
+    if ENERGYPOINTS > 0 then
+    begin
+      Bank.WithdrawConsumableAmount(ENERGY_CONSUMABLE); 
+      Bank.WithdrawConsumable(ENERGY_CONSUMABLE);
+      WaitUntil(Inventory.ContainsConsumable(ENERGY_CONSUMABLE), 100, 10000);
+    end;
 
     FreeSlots := Inventory.CountEmptySlots();
     FreeSlots -= 2;
+
     BeerGlassBank := TRSBankItem.Setup(BeerGlass, FreeSlots, FALSE);
+    Wait(RandomRange(150, 200));
     writeln('Withdrawing ' + IntToStr(FreeSlots) + ' Empty beer glass for SQIRKIN!');
-    Bank.WithdrawItem(BeerGlassBank, TRUE);
+    Bank.WithdrawItem(BeerGlassBank, FALSE);
     WaitUntil(Inventory.ContainsItem(BeerGlass), 375, 4000);
+    if not Inventory.ContainsItem(BeerGlass) then
+    begin
+      writeln('No beer glasses found in inventory after withdrawal, Checking Bank again.');
+      if Bank.ContainsItem(BeerGlassBank) then
+      begin
+        writeln('Beer glasses found in bank, depositing and trying again.');
+        Bank.DepositAll();
+      end
+      else
+      begin
+        writeln('Out of beer glasses? Logout and terminate.');
+        Bank.Close();
+        Logout.ClickLogout();
+        TerminateScript();
+      end;
+    end;
+
     FreeSlots := Inventory.CountEmptySlots();
     if FreeSlots < 2 then
     begin
-      writeln('Less than 2 free slots after banking, Terminating.'); // Placeholder for now, we may need a failsafe?
-      Bank.Close();
-      Logout.ClickLogout();
-      TerminateScript();
+      writeln('Less than 2 free slots after banking, Depositing all.');
+      Bank.DepositAll();
+      Wait(Random(200, 300));
     end;
+
     if Bank.IsOpen() then
       Bank.Close();
   end;
@@ -451,7 +476,7 @@ begin
     Minimap.EnableRun();
   end
 
-  if not Minimap.HasStamina then
+  if not Minimap.HasStamina and (ENERGYPOINTS > 0 = True) and (Minimap.GetRunEnergy() < MINENERGY = True) then
   begin
     Inventory.Consume(ENERGY_CONSUMABLE);
   end; 
