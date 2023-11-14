@@ -489,11 +489,7 @@ end;
 
 procedure BallSmelter.Report();
 var
-  Runtime: Integer;
-  XPPerHour: Integer;
-  CurrentXP: Integer;
-  GainedXP: Integer;
-  Profit: Integer;
+  Runtime, XPPerHour, CurrentXP, GainedXP, Profit, ProfitAPI, PreviousProfit: Integer;
 begin
   ClearDebug();
   CurrentXP := XPBar.Read();
@@ -501,6 +497,12 @@ begin
   Runtime := Timer.ElapsedTime;
   XPPerHour := Round(((CurrentXP - StartXP) / Runtime) * 3600);
   Profit := ((CannonBallValue * 4) - SteelBarValue) * (BallsSmelted div 4);
+  
+  ProfitAPI := Profit - PreviousProfit; 
+  PreviousProfit := Profit;
+  StatsPayload.Update(0, ProfitAPI, 0);
+  if not APIClient.IsSetup or APIClient.Timer.IsFinished() then
+      APIClient.SubmitStats(APIClient.GetUUID());
 
   WriteLn('========================================');
   WriteLn('     BigAussies Cannonball Smelter      ');

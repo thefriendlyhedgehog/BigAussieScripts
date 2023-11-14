@@ -220,15 +220,31 @@ begin
 end;
 
 procedure SQIRK.TELEPORT_TO_GARDEN();
+var
+  attempts: Integer;
 begin
   writeln('Attempting to Teleport to Garden.');
-  repeat
+  for attempts := 0 to 3 do // "BORROWED" This attempts idea from ClubX the king <3
+  begin
     if Self.GetLocation() = GARDENLOBBY then
       break;
     Apprentice.WalkSelectOption(['Teleport']);
     if Mainscreen.DidRedClick() then
       break;
-  until Chat.HasContinue or (Self.GetLocation() = GARDENLOBBY);
+
+    if Chat.HasContinue or (Self.GetLocation() = GARDENLOBBY) then
+      break;
+
+    case attempts of
+      0: RSW.MakePointVisible(Apprentice.Coordinates);
+      1: RSMouseZoom.SetZoomLevel(50);
+      2: Antiban.RandomRotate();
+      3: begin
+           writeln('Failed to find Apprentice.');
+           Exit;
+         end;
+    end;
+  end;
 
   if Chat.HasContinue then
   begin
@@ -238,6 +254,9 @@ begin
   end;
   
   writeln('Teleporting to Garden.');
+  
+  if RSMouseZoom.GetZoomLevel() <> 0 then
+    RSMouseZoom.SetZoomLevel(0);
 
   WaitUntil(Fountain.IsVisible and (Self.GetLocation() = GARDENLOBBY), 120, 20000);
   Wait(RandomRange(1000, 1200));
@@ -245,6 +264,7 @@ end;
 
 procedure SQIRK.ENTER_GARDEN();
 begin
+
   WriteLn('Looking for garden gate.');
   repeat
     GardenGate.Click();
@@ -606,7 +626,7 @@ begin
     SetCaption('Energy Points To Consume');
     SetHint('Sets the amount of consumable points you wish to withdraw and use.');
     SetWidth(150);
-    SetText('100');
+    SetText('200');
   end;
 
   with Self.ConsumablePointsLabel do
