@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '8 BETA'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '9 BETA'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -81,7 +81,7 @@ begin
       Result += consumable;
     end;
   end;
-end; 
+end;
 
 function TConsumableHandler.FindInInventory(): TRSConsumableArray; override;
 var
@@ -103,7 +103,7 @@ begin
       Result += consumable;
     end;
   end;
-end; 
+end;
 
 procedure TAntiban.Setup(); override;
 begin
@@ -118,7 +118,7 @@ procedure TRSWalker.AddMapAsRegion(map: string; mapBounds: TBox); overload; // Y
 begin
   Self.Map.Load(map, mapBounds, Self.Scaling);
   Self.InternalSetup();
-end;        
+end;
 
 function SQIRK.GetLocation(): ELocation;
 begin
@@ -138,7 +138,7 @@ begin
     Setup([[8677, 3892]]);
     Setup(['Apprentice']);
     Apprentice.DotFilter.Setup(HOUSE_POLY, True);
-    Apprentice.ShapeArray.SetShape([1, 1, 7]); 
+    Apprentice.ShapeArray.SetShape([1, 1, 7]);
     Finder.Colors += CTS2(9547150, 20, 0.97, 0.34);
   end;
 
@@ -172,7 +172,7 @@ begin
     Setup(['Fountain']);
     Finder.Colors += CTS2(12832194, 13, 1.90, 0.65);
   end;
-end; 
+end;
 
 procedure SQIRK.CheckForRandomItems();
 var
@@ -180,34 +180,34 @@ var
   unwantedItems: TIntegerArray;
 begin
   itemsToKeep := [
-    PestleAndMortar, 
-    SummerSqirkJuice, 
-    SummerSqirk, 
-    BeerGlass, 
-    'Stamina potion(1)', 
-    'Stamina potion(2)', 
-    'Stamina potion(3)', 
-    'Stamina potion(4)', 
-    'White tree fruit', 
-    'Bandages', 
-    'Guthix rest(1)', 
-    'Guthix rest(2)', 
-    'Guthix rest(3)', 
-    'Guthix rest(4)', 
-    'Papaya fruit', 
-    'Energy potion(1)', 
-    'Energy potion(2)', 
-    'Energy potion(3)', 
-    'Energy potion(4)', 
-    'Purple sweets', 
-    'Summer pie(1)', 
-    'Summer pie(2)', 
-    'Super energy(1)', 
-    'Super energy(2)', 
-    'Super energy(3)', 
-    'Super energy(4)', 
-    'Strange fruit', 
-    'Mint cake', 
+    PestleAndMortar,
+    SummerSqirkJuice,
+    SummerSqirk,
+    BeerGlass,
+    'Stamina potion(1)',
+    'Stamina potion(2)',
+    'Stamina potion(3)',
+    'Stamina potion(4)',
+    'White tree fruit',
+    'Bandages',
+    'Guthix rest(1)',
+    'Guthix rest(2)',
+    'Guthix rest(3)',
+    'Guthix rest(4)',
+    'Papaya fruit',
+    'Energy potion(1)',
+    'Energy potion(2)',
+    'Energy potion(3)',
+    'Energy potion(4)',
+    'Purple sweets',
+    'Summer pie(1)',
+    'Summer pie(2)',
+    'Super energy(1)',
+    'Super energy(2)',
+    'Super energy(3)',
+    'Super energy(4)',
+    'Strange fruit',
+    'Mint cake',
     'Gout tuber'
   ];
   unwantedItems := Inventory.FindRandomItems(itemsToKeep);
@@ -252,9 +252,9 @@ begin
     Wait(RandomRange(600, 1200));
     Chat.ClickContinue(True);
   end;
-  
+
   writeln('Teleporting to Garden.');
-  
+
   if RSMouseZoom.GetZoomLevel() <> 0 then
     RSMouseZoom.SetZoomLevel(0);
 
@@ -266,8 +266,8 @@ procedure SQIRK.ENTER_GARDEN();
 begin
   if not Minimap.HasStamina and (ENERGYPOINTS > 0 = True) and (Minimap.GetRunEnergy() < MINENERGY) then
   begin
-    Inventory.Consume(ENERGY_CONSUMABLE);
-  end; 
+    Inventory.Consume(ERSConsumable.ENERGY);
+  end;
   WriteLn('Looking for garden gate.');
   repeat
     GardenGate.Click();
@@ -340,7 +340,7 @@ begin
 
   case consumableType of
 
-    ERSConsumable.ENERGY_CONSUMABLE:
+    ERSConsumable.ENERGY:
       startingPoints := Minimap.GetRunEnergy();
   end;
 
@@ -362,7 +362,7 @@ begin
   if Result then
     case consumableType of
 
-      ERSConsumable.ENERGY_CONSUMABLE:
+      ERSConsumable.ENERGY:
         Result := WaitUntil(startingPoints < Minimap.GetRunEnergy(), 100, 3000);
       else
         BioWait(1000, 2000, wdLeft);
@@ -371,7 +371,7 @@ begin
   if Result then
   begin
     case consumableType of
-      ERSConsumable.FOOD_CONSUMABLE:
+      ERSConsumable.FOOD:
         begin
           if foundConsumables[0].Item = 'Cooked karambwan' then
             consumableHandler^.Delay.Init(1200)
@@ -388,7 +388,7 @@ begin
       if consumableHandler^.Timer.Length <> foundConsumables[0].Timer then
         consumableHandler^.Timer.Setup(foundConsumables[0].Timer);
 
-      if consumableType = ERSConsumable.ANTI_FIRE_CONSUMABLE then
+      if consumableType = ERSConsumable.ANTI_FIRE then
         consumableHandler^.Timer.Restart(Random(-50000, -20000))
       else
         consumableHandler^.Timer.Restart(Random(-3000, 3000));
@@ -427,9 +427,8 @@ begin
 
     if ENERGYPOINTS > 0 then
     begin
-      Bank.WithdrawConsumableAmount(ENERGY_CONSUMABLE); 
-      Bank.WithdrawConsumable(ENERGY_CONSUMABLE);
-      WaitUntil(Inventory.ContainsConsumable(ENERGY_CONSUMABLE), 100, 10000);
+      Bank.WithdrawConsumable(ERSConsumable.ENERGY);
+      WaitUntil(Inventory.ContainsConsumable(ERSConsumable.ENERGY), 100, 10000);
     end;
 
     FreeSlots := Inventory.CountEmptySlots();
@@ -473,7 +472,7 @@ end;
 procedure SQIRK.DO_SQIRK();
 begin
   CheckForRandomItems();
-  
+
   if Minimap.GetRunEnergy() > MINENERGY then
   begin
     Minimap.EnableRun();
@@ -481,8 +480,8 @@ begin
 
   if not Minimap.HasStamina and (ENERGYPOINTS > 0 = True) and (Minimap.GetRunEnergy() < MINENERGY) then
   begin
-    Inventory.Consume(ENERGY_CONSUMABLE);
-  end; 
+    Inventory.Consume(ERSConsumable.ENERGY);
+  end;
 
   writeln('Looking for SQIRKIN Tree');
   repeat
@@ -490,7 +489,7 @@ begin
   until Mainscreen.DidRedClick();
 
   Wait(RandomRange(100, 200));
-  
+
   WaitUntil(Self.GetLocation() = GARDENLOBBY, 120, 50000);
 end;
 
@@ -630,7 +629,7 @@ type
     ConsumablePointsLabel, ConsumablePointsLabel2: TLabel;
   end;
 
-procedure TConfig.StartScript(sender: TObject); override; 
+procedure TConfig.StartScript(sender: TObject); override;
 begin
   ENERGYPOINTS := StrToInt(Self.ConsumablePoints.GetText);
   inherited;
