@@ -36,6 +36,9 @@ type
     CurrentXP: Integer;
     TotalBars: Integer;
 
+    ArdyDiary : Int32;
+    ArdyCape : String;
+
     IronRocks: TRSObject;
 end;
 
@@ -105,10 +108,8 @@ end;
 
 procedure ArdySuperIron.RETURNTOMINE();
 begin
-  WriteLn('Returning to mine!');
-  if Equipment.ContainsItem('Ardougne cloak 1') then
-    Equipment.ClickItem('Ardougne cloak 1', 'Kandarin Monastery'); 
-  writeln('Should have teleported');
+  if Equipment.ContainsItem(ArdyCape) then
+    Equipment.ClickItem(ArdyCape, 'Kandarin Monastery'); 
   WaitUntil(Self.RSW.InPoly(MINE_POLYGON), 120, 10000);
 end;
 
@@ -116,7 +117,7 @@ procedure ArdySuperIron.DEPOSIT();
 var
   itemsToKeep: TRSItemArray;
 begin
-  itemsToKeep := ['Nature rune', 'Adamant pickaxe', 'Rune pickaxe', 'Mithril pickaxe', 'Black pickaxe', 'Steel pickaxe', 'Iron pickaxe'];
+  itemsToKeep := ['Nature rune', 'Adamant pickaxe', 'Dragon pickaxe', 'Rune pickaxe', 'Mithril pickaxe', 'Black pickaxe', 'Steel pickaxe', 'Iron pickaxe'];
   Bank.WalkOpen();
   WaitUntil(Bank.IsOpen(), 120, 5000);
   if Bank.IsOpen then
@@ -135,6 +136,13 @@ begin
   
   while oreCount > 0 do
   begin
+    if not Magic.CanActivate(ERSSpell.SUPERHEAT_ITEM) then
+    begin
+      WriteLn('Cannot cast Superheat. Logging out.');
+      Logout.ClickLogout();
+      TerminateScript();
+    end;
+
     Magic.CastSpell(ERSSpell.SUPERHEAT_ITEM);
     WaitUntil(Inventory.IsOpen(), 100, 1250);
     Inventory.ClickItem('Iron ore', '>');
@@ -221,6 +229,12 @@ begin
   begin
     if Inventory.ContainsItem('Iron ore') then
     begin
+      if not Magic.CanActivate(ERSSpell.SUPERHEAT_ITEM) then
+      begin
+        WriteLn('Cannot cast Superheat. Logging out.');
+        Logout.ClickLogout();
+        TerminateScript();
+      end;
       Magic.CastSpell(ERSSpell.SUPERHEAT_ITEM);
       WaitUntil(Inventory.IsOpen(), 120, 1250);
       Inventory.ClickItem('Iron ore', '>');
@@ -230,6 +244,12 @@ begin
 
   if Magic.IsOpen then
   begin
+    if not Magic.CanActivate(ERSSpell.SUPERHEAT_ITEM) then
+    begin
+      WriteLn('Cannot cast Superheat. Logging out.');
+      Logout.ClickLogout();
+      TerminateScript();
+    end;
     Magic.CastSpell(ERSSpell.SUPERHEAT_ITEM);
     WaitUntil(Inventory.IsOpen(), 120, 1250);
     Inventory.ClickItem('Iron ore', '>');
@@ -282,6 +302,8 @@ begin
   RSW.OnWalkingEvent := @OnWalkEvent;
   Mouse.Speed := Random(22, 28);
   Options.SetZoomLevel(Random(25, 30));
+  ArdyDiary := Achievements.GetDiaryLevel(ERSAchievementDiary.Ardougne);
+  ArdyCape := 'Ardougne cloak ' + ToStr(ArdyDiary);
 
   StartXP := XPBar.Read();
 end;
