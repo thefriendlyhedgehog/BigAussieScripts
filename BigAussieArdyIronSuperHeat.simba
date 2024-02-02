@@ -142,13 +142,6 @@ begin
   
   while oreCount > 0 do
   begin
-    if not Magic.CanActivate(ERSSpell.SUPERHEAT_ITEM) then
-    begin
-      WriteLn('Cannot cast Superheat. Logging out.');
-      Logout.ClickLogout();
-      TerminateScript();
-    end;
-
     Magic.CastSpell(ERSSpell.SUPERHEAT_ITEM);
     WaitUntil(Inventory.IsOpen(), 100, 1250);
     Inventory.ClickItem('Iron ore', '>');
@@ -235,12 +228,6 @@ begin
   begin
     if Inventory.ContainsItem('Iron ore') then
     begin
-      if not Magic.CanActivate(ERSSpell.SUPERHEAT_ITEM) then
-      begin
-        WriteLn('Cannot cast Superheat. Logging out.');
-        Logout.ClickLogout();
-        TerminateScript();
-      end;
       Magic.CastSpell(ERSSpell.SUPERHEAT_ITEM);
       WaitUntil(Inventory.IsOpen(), 120, 1250);
       Inventory.ClickItem('Iron ore', '>');
@@ -250,12 +237,6 @@ begin
 
   if Magic.IsOpen then
   begin
-    if not Magic.CanActivate(ERSSpell.SUPERHEAT_ITEM) then
-    begin
-      WriteLn('Cannot cast Superheat. Logging out.');
-      Logout.ClickLogout();
-      TerminateScript();
-    end;
     Magic.CastSpell(ERSSpell.SUPERHEAT_ITEM);
     WaitUntil(Inventory.IsOpen(), 120, 1250);
     Inventory.ClickItem('Iron ore', '>');
