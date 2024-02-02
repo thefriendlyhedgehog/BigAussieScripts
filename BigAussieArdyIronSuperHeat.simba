@@ -109,7 +109,13 @@ end;
 procedure ArdySuperIron.RETURNTOMINE();
 begin
   if Equipment.ContainsItem(ArdyCape) then
-    Equipment.ClickItem(ArdyCape, 'Kandarin Monastery'); 
+    Equipment.ClickItem(ArdyCape, 'Kandarin Monastery')
+  else
+  begin
+    WriteLn('No cloak found for teleport. Logging out & Terminating.');
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
   WaitUntil(Self.RSW.InPoly(MINE_POLYGON), 120, 10000);
 end;
 
