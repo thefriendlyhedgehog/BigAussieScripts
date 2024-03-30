@@ -149,6 +149,8 @@ begin
       Inventory.ClickItem('Open gem bag', 'Empty');
     if Inventory.ContainsRandomItems(itemsToKeep) then
       Bank.DepositRandomItems(itemsToKeep);
+    if not Inventory.ContainsItem('Hammer') or not Inventory.ContainsItem('Imcando hammer') then
+      Bank.WithdrawItem(['Hammer', 1, False], True)
   end;
   Bank.Close();
 end;
