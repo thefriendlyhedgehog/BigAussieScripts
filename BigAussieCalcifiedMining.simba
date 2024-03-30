@@ -45,6 +45,7 @@ type
     CurrentXP: Integer;
     TotalShardsMined: Integer;
     TotalCalcifiedMoths: Integer;
+    CalcifiedMothValue: Integer;
 
     MyPos: TPoint;
     CalcifiedRocks: TRSObject;
@@ -253,7 +254,12 @@ begin
   InitialShards := Inventory.CountItemStack('Blessed bone shards');;
   while not Inventory.IsFull() do
   begin
-    if (Minimap.GetCompassAngle() < 5) or (Minimap.GetCompassAngle() > 95) then
+    if (not Inventory.ContainsItem('Hammer') and not Inventory.ContainsItem('Imcando hammer')) and not POWERMINING then
+    begin
+      OPENBANK();
+      Exit;
+    end;
+    if (Minimap.GetCompassAngle() < 10) or (Minimap.GetCompassAngle() > 95) then
       Minimap.SetCompassAngle(Random(15, 85));
     if (not IGNOREWATERFALLS) and WetCalcifiedRocks.Find(ATPA) and (not MiningWetRock) then
     begin
@@ -400,9 +406,13 @@ begin
   WriteLn('   Mining XP Gained: ' + FormatRoundedNumber(GainedXP));
   WriteLn('   Bone Shards: ' + IntToStr(BoneShardsCount));
   WriteLn('   Prayer XP: ' + FormatRoundedNumber(PrayerXP) + ' / Sunfire ' + FormatRoundedNumber(PrayerXP + (BoneShardsCount * 1)));
-  WriteLn('   Calcified Moths: ' + IntToStr(TotalCalcifiedMoths));
+  if TotalCalcifiedMoths > 0 then
+  begin
+    WriteLn('   Calcified Moths: ' + IntToStr(TotalCalcifiedMoths));
+    WriteLn('   Total Moth Profit: ' + FormatRoundedNumber(TotalCalcifiedMoths * CalcifiedMothValue));
+  end;
   WriteLn('----------------------------------------');
-  WriteLn('   XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
+  WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
   WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (GetTimeRunning() / 3600000))));
   WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (GetTimeRunning() / 3600000))));
   WriteLn('========================================');
@@ -427,6 +437,7 @@ begin
   Antiban.MaxZoom := 30;
   Antiban.Skills := [ERSSkill.MINING, ERSSkill.PRAYER, ERSSkill.TOTAL];
   Options.SetZoomLevel(RandomRange(10,24));
+  CalcifiedMothValue := ItemData.GetAverage(CalcifiedMoths);
 end;
 
 procedure CalcifiedMiner.Run(MaxActions: UInt32; MaxTime: UInt64);
