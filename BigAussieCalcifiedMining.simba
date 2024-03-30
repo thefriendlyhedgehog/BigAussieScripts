@@ -9,7 +9,6 @@ var
   IGNOREWATERFALLS: Boolean = False;
 
 begin
-  Login.Playerindex := 0;
   WLSettings.Antiban.Chat := False;
   Mouse.Speed := Random(22, 25);
   POWERMINING := False;
@@ -23,7 +22,8 @@ type
     STATE_WALKTOBLACKSMITH,
     STATE_WALKTOMINESITE,
     STATE_OPENBANK,
-    STATE_HANDLEBANKING
+    STATE_HANDLEBANKING,
+    STATE_DROPITEMS
   );
 
     ELocation = (
@@ -63,9 +63,9 @@ var
 procedure TRSWalker.InternalSetup(); override;
 begin
   inherited;
-  CamTorumMine.LoadNodesFromString('cQAAAHicJcvLEQAxCALQVighYNZPLZn038aa8eSDwWMekOoeiw9iDljR2AGGGtrgx8ZyUH6PMlHrHroh613Bu6disnrIV1jNB33wA83UGhA=');
-  CamTorumMine.LoadPathsFromString('QgAAAHicFcs5EQAxEANBKgNh5feMRSX+NM7OOmkrLlosetwYcWfGgxVPdrz4OPHVRhUfdI8KvaX8L0gQiw==');
-  CamTorumMine.LoadNamesFromString('NAAAAHici1Y2iI0mEQMAZxUNkA==');
+  CamTorumMine.LoadNodesFromString('hwAAAHicTczBDcAwCEPRVTwCARNglij7r1FQe+jt6WNxLATMuMciwPBBgT7FFTRrqIMiDRFY7Xu0CsberM0fdDU0vzKIKVywZCP0Q58o8T6k5H0APh8e7w==');
+  CamTorumMine.LoadPathsFromString('VQAAAHicHcvbDcAwEALBVrYE40cc14Lov41c/MdKjBU3eixG3JnxYMWTB1UsdvzwcuJaG7X4oGJqqKNit3T/+vUHhOUUpA==');
+  CamTorumMine.LoadNamesFromString('PAAAAHici1Y2iI0mEwMA3OUPpg=='); 
 
   Self.WebGraph := CamTorumMine;
 end;
@@ -75,28 +75,28 @@ begin
   writeln('Setting up objects');
   with self.CalcifiedRocks do
   begin
-    SetupEx([1, 1, 10], [[350, 236], [354, 224], [354, 228], [355, 211], [360, 211]]);
+    SetupEx([1, 1, 10], [[354, 483], [354, 496], [354, 487], [363, 468], [358, 468]]);
     SetupUpText(['Calcified rocks']);
     Finder.ColorClusters += [CTS2(4082774, 4, 0.14, 0.46), CTS2(3289654, 6, 0.01, 0.34), 5];
   end;
 
   with self.WetCalcifiedRocks do
   begin
-    SetupEx([1, 1, 10], [[350, 236], [354, 224], [354, 228], [355, 211], [360, 211]]);
+    SetupEx([1, 1, 10], [[354, 483], [354, 496], [354, 487], [363, 468], [358, 468]]);
     SetupUpText(['Calcified rocks']);
     Finder.Colors += CTS2(10388048, 13, 0.02, 1.02);
   end;
 
   with self.CamTorumAnvil do
   begin
-    Setup(2, [[151, 68]]);
+    Setup(2, [[150, 326]]);
     SetupUpText(['Anvil']);
     Finder.Colors += CTS2(4942722, 10, 0.06, 0.44);
   end;
 
   with self.BankersTable do
   begin
-    Setup(2, [[173, 118]]);
+    Setup(2, [[171, 377]]);
     SetupUpText(['Bank table']);
     Finder.ColorClusters += [CTS2(5138813, 5, 0.09, 0.08), CTS2(5412524, 7, 0.04, 0.75), 5];
   end;
@@ -108,31 +108,15 @@ begin
 
   MyPos := Self.RSW.GetMyPos;
 
-  if MyPos.InBox([137, 43, 189, 78]) then Exit(BLACKSMITH);
-  if MyPos.InBox([163, 115, 198, 139]) then Exit(BANKAREA);
-  if MyPos.InBox([334, 193, 451, 277]) then Exit(MINESITE);
+  if MyPos.InBox([136, 299, 191, 341]) then Exit(BLACKSMITH);
+  if MyPos.InBox([159, 369, 199, 402]) then Exit(BANKAREA);
+  if MyPos.InBox([342, 456, 465, 532]) then Exit(MINESITE);
 end;
 
 procedure CalcifiedMiner.WALKTOBLACKSMITH();
-var
-  attempts: Integer;
 begin
   writeln('Walking to blacksmith.');
-  attempts := 0;
-  repeat
-    Inc(attempts);
-    RSW.WebWalk([163, 63]);
-    if GetLocation() = BLACKSMITH then
-    begin
-      writeln('At blacksmith house.');
-      self.PROCESSDEPOSITS();
-    end
-    else if attempts >= 3 then
-    begin
-      Logout.ClickLogout;
-      TerminateScript('Failed to walk to blacksmith');
-    end;
-  until False;
+  RSW.WebWalk([156, 326]);
 end;
 
 procedure CalcifiedMiner.HANDLEBANKING();
@@ -159,12 +143,10 @@ end;
 procedure CalcifiedMiner.OPENBANK();
 begin
   writeln('Opening bank.');
-  RSW.WebWalk([173, 114]);
+  RSW.WebWalk([172, 382]);
   Bank.Walkopen(BankersTable);
-  if WaitUntil(Bank.IsOpen, 120, 3000) then
-  begin
+  WaitUntil(Bank.IsOpen, 120, 3000);
     HANDLEBANKING();
-  end
 end;
 
 procedure CalcifiedMiner.DROPITEMS();
@@ -179,59 +161,31 @@ begin
 end;
 
 procedure CalcifiedMiner.WALKTOMINESITE();
-var
-  attempts: Integer;
 begin
   writeln('Returning to mine site.');
-  attempts := 0;
-  repeat
-    Inc(attempts);
-    RSW.WebWalk([366, 224]);
-    if GetLocation() = MINESITE then
-    begin
-      writeln('Arrived at mine site.');
-      Exit;
-    end
-    else if attempts >= 3 then
-    begin
-      Logout.ClickLogout;
-      TerminateScript('Failed to walk to mine site');
-    end;
-  until False;
+  RSW.WebWalk([368, 486]);
 end;
 
 procedure CalcifiedMiner.PROCESSDEPOSITS();
 var
   ATPA: T2DPointArray;
   TPA: TPointArray;
-  attempts: Integer;
 begin
   Inventory.SetSelectedItem(CalcifiedDeposit);
-  attempts := 0;
-  repeat
-    Inc(attempts);
-    CamTorumAnvil.Find(ATPA);
-    if (ATPA.Len > 0) then
+  CamTorumAnvil.Find(ATPA);
+  if (ATPA.Len > 0) then
+  begin
+    TPA := ATPA[0];
+    Mouse.Move(TPA.Mean());
+    Mouse.Click(MOUSE_LEFT);
+    WaitUntil(Make.IsOpen, 100, 3000);
     begin
-      TPA := ATPA[0];
-      Mouse.HumanMove(TPA.Mean());
-      Mouse.Click(MOUSE_LEFT);
-      if WaitUntil(Make.IsOpen, 100, 3000) then
-      begin
-        Make.Select('Calcified deposit', Make.QUANTITY_ALL);
-        writeln('Smashing deposits!');
-        if WaitUntil(not Inventory.ContainsItem(CalcifiedDeposit), 100, 70000) then
-        begin
-          Exit;
-        end;
-      end;
+      Make.Select('Calcified deposit', Make.QUANTITY_ALL);
+      writeln('Smashing deposits!');
+      WaitUntil(not Inventory.ContainsItem(CalcifiedDeposit), 100, 70000);
+      writeln('We should have smashed all');
     end;
-    if attempts >= 3 then
-    begin
-      Logout.ClickLogout;
-      TerminateScript('Failed to process deposits');
-    end;
-  until False;
+  end;
 end;
 
 procedure CalcifiedMiner.MINECALCIFIEDROCKS();
@@ -264,7 +218,7 @@ begin
     begin
       WriteLn('Wet Calcified Rock spawned, switching target.');
       TPA := ATPA[0];
-      Mouse.HumanMove(TPA.Mean());
+      Mouse.Move(TPA.Mean());
       WetCalcifiedRocks.WalkClick();
       MiningWetRock := True;
       WaitUntil(Minimap.IsPlayerMoving, 120, 2000);
@@ -286,7 +240,7 @@ begin
       begin
         WriteLn('Wet Calcified Rock spawned, switching target.');
         TPA := ATPA[0];
-        Mouse.HumanMove(TPA.Mean());
+        Mouse.Move(TPA.Mean());
         WetCalcifiedRocks.WalkClick();
         MiningWetRock := True;
         WaitUntil(Minimap.IsPlayerMoving, 120, 2000);
@@ -341,13 +295,20 @@ begin
       OPENBANK();
     STATE_HANDLEBANKING:
       HANDLEBANKING();
+    STATE_DROPITEMS:
+      DROPITEMS();
   end;
 end;
 
 function CalcifiedMiner.GetState(): EState;
 begin
   if Inventory.IsFull() then
-    Exit(STATE_WALKTOBLACKSMITH)
+  begin
+    if POWERMINING then
+      Exit(STATE_DROPITEMS)
+    else
+      Exit(STATE_WALKTOBLACKSMITH);
+  end
   else if Inventory.ContainsItem(CalcifiedDeposit) and (Self.GetLocation() = BLACKSMITH) then
     Exit(STATE_PROCESSDEPOSITS)
   else if Inventory.ContainsItem(CalcifiedDeposit) and (Self.GetLocation() <> MINESITE) then
@@ -377,7 +338,7 @@ procedure CalcifiedMiner.Report();
 var
   Runtime: Integer;
   XPPerHour: Integer;
-  CurrentXP, GainedXP, BoneShardsCount, PrayerXP: Integer;
+  CurrentXP, GainedXP, BoneShardsCount, PrayerXP, SunfirePrayerXP: Integer;
   CurrentStateName: String;
 begin
   CurrentXP := XPBar.Read();
@@ -388,6 +349,7 @@ begin
 
   BoneShardsCount := Inventory.CountItemStack('Blessed bone shards');
   PrayerXP := BoneShardsCount * 5; // Each bone shard is worth 5 prayer XP
+  SunfirePrayerXP := BoneShardsCount * 6; // Each bone shard is worth 6 prayer XP with Sunfire wine
 
   case Self.CurrentState of
     STATE_MINECALCIFIEDROCKS: CurrentStateName := 'Mining Calcified Rocks';
@@ -405,16 +367,16 @@ begin
   WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short));
   WriteLn('   Mining XP Gained: ' + FormatRoundedNumber(GainedXP));
   WriteLn('   Bone Shards: ' + IntToStr(BoneShardsCount));
-  WriteLn('   Prayer XP: ' + FormatRoundedNumber(PrayerXP) + ' / Sunfire ' + FormatRoundedNumber(PrayerXP + (BoneShardsCount * 1)));
+  WriteLn('   Prayer XP: ' + FormatRoundedNumber(PrayerXP) + ' / Sunfire ' + FormatRoundedNumber(SunfirePrayerXP));
   if TotalCalcifiedMoths > 0 then
   begin
     WriteLn('   Calcified Moths: ' + IntToStr(TotalCalcifiedMoths));
     WriteLn('   Total Moth Profit: ' + FormatRoundedNumber(TotalCalcifiedMoths * CalcifiedMothValue));
   end;
   WriteLn('----------------------------------------');
-  WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(Round((GainedXP) / (GetTimeRunning() / 3600000))));
-  WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (GetTimeRunning() / 3600000))));
-  WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (GetTimeRunning() / 3600000))));
+  WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(XPPerHour));
+  WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (Runtime / 3600000))));
+  WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (Runtime / 3600000))) + ' / Sunfire ' + FormatRoundedNumber(Round((SunfirePrayerXP) / (Runtime / 3600000))));
   WriteLn('========================================');
   WriteLn('     BigAussies Calcified Mining      ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
@@ -427,7 +389,6 @@ begin
 
   RSW.AdaptiveWalk := True;
   RSW.Setup('CamTorumFull');
-  SetupObjects();
   CalcifiedDeposit := ('Calcified deposit');
   HammerItem := ('Hammer');
   CalcifiedMoths := ('Calcified moth');
@@ -436,6 +397,7 @@ begin
   Antiban.MaxZoom := 20;
   Antiban.MaxZoom := 30;
   Antiban.Skills := [ERSSkill.MINING, ERSSkill.PRAYER, ERSSkill.TOTAL];
+  SetupObjects();
   Options.SetZoomLevel(RandomRange(10,24));
   CalcifiedMothValue := ItemData.GetAverage(CalcifiedMoths);
 end;
@@ -523,7 +485,7 @@ begin
   if (not FileExists(AppPath+'\Includes\WaspLib\osr\walker\maps\CamTorumFull.png')) then
   begin
     WriteLn('CamTorum Map not found. Downloading now........');
-    DownloadToFile('https://i.imgur.com/iSUeNIZ.png', AppPath+'\Includes\WaspLib\osr\walker\maps\CamTorumFull.png');
+    DownloadToFile('https://i.imgur.com/GwrnRhI.png', AppPath+'\Includes\WaspLib\osr\walker\maps\CamTorumFull.png');
   end
   else
   begin
