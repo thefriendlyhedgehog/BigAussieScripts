@@ -121,7 +121,7 @@ begin
   attempts := 0;
   repeat
     Inc(attempts);
-    RSW.WebWalk([156, 67]);
+    RSW.WebWalk([163, 63]);
     if GetLocation() = BLACKSMITH then
     begin
       writeln('At blacksmith house.');
@@ -252,7 +252,6 @@ begin
   XP := XPBar.Read();
   ReportTimer.Start();
   InitialShards := Inventory.CountItemStack('Blessed bone shards');;
-  while not Inventory.IsFull() do
   begin
     if (not Inventory.ContainsItem('Hammer') and not Inventory.ContainsItem('Imcando hammer')) and not POWERMINING then
     begin
@@ -322,6 +321,7 @@ begin
       end;
     end;
     MiningWetRock := False;
+    Self.DoAntiban;
   end;
   Self.TotalShardsMined += Inventory.CountItemStack('Blessed bone shards') - InitialShards;
 end;
