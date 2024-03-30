@@ -285,6 +285,7 @@ procedure ArdySuperIron.Init(MaxActions: UInt32; MaxTime: UInt64); override;
 begin
   inherited;
   Self.RSW.SetupRegions([[5545, 3173, 6234, 3966]]);
+  RSW.AdaptiveWalk := True;
   Self.Setup();
   RSW.OnWalkingEvent := @OnWalkEvent;
   Mouse.Speed := Random(22, 28);
