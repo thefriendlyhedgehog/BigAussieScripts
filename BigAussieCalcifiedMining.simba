@@ -1,8 +1,10 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := 'BETA 1.2'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
+
+// Fix hammer withdraw its not working.
 
 var
   POWERMINING: Boolean = False;
@@ -27,7 +29,8 @@ type
     ELocation = (
     BLACKSMITH,
     BANKAREA,
-    MINESITE
+    EASTMINESITE,
+    WESTMINESITE
   );
 
   CalcifiedMiner = record (TBaseBankScript)
@@ -36,6 +39,7 @@ type
     CalcifiedDeposit: TRSitem;
     HammerItem: TRSitem;
     CalcifiedMoths: TRSitem;
+    HammerBank: TRSBankItem;
 
     ItemsToKeep: TRSItemArray;
 
@@ -61,9 +65,9 @@ var
 procedure TRSWalker.InternalSetup(); override;
 begin
   inherited;
-  CamTorumMine.LoadNodesFromString('hwAAAHicTczBDcAwCEPRVTwCARNglij7r1FQe+jt6WNxLATMuMciwPBBgT7FFTRrqIMiDRFY7Xu0CsberM0fdDU0vzKIKVywZCP0Q58o8T6k5H0APh8e7w==');
-  CamTorumMine.LoadPathsFromString('VQAAAHicHcvbDcAwEALBVrYE40cc14Lov41c/MdKjBU3eixG3JnxYMWTB1UsdvzwcuJaG7X4oGJqqKNit3T/+vUHhOUUpA==');
-  CamTorumMine.LoadNamesFromString('PAAAAHici1Y2iI0mEwMA3OUPpg=='); 
+  CamTorumMine.LoadNodesFromString('xgAAAHicTY3BDcQwCARbcQkG1gfUYqX/NrIbR7r8RsMAG94D2deGrYE2whTIwI+JtmMi5wfqGbHJKaM7QSjGSw1oQqOIgVnX9u4D5vWH6EXgrygQEgcUB9T8aJAvuL1bjxHw+w3F/C2g');
+  CamTorumMine.LoadPathsFromString('iwAAAHicJYzRFQQxCAJbmRKCm2ySWnz238bh3pcgDCmeykFUimlVGSx25eStXJxWh1u5+7GRKxfJwEDNCT3IiAJ5o93ymeglurj+mbfkgUt443Pny2M08AMgryD8');
+  CamTorumMine.LoadNamesFromString('WAAAAHici1Y2iI2mAQYA/MUW8w==');  
 
   Self.WebGraph := CamTorumMine;
 end;
@@ -73,14 +77,14 @@ begin
   writeln('Setting up objects');
   with self.CalcifiedRocks do
   begin
-    SetupEx([1, 1, 10], [[354, 483], [354, 496], [354, 487], [363, 468], [358, 468]]);
+    SetupEx([1, 1, 10], [[354, 483], [354, 496], [354, 487], [363, 468], [358, 468], {East Wall} [452, 486], [452, 490], [452, 482], [436, 470], [432, 470], [424, 470]]);
     SetupUpText(['Calcified rocks']);
     Finder.ColorClusters += [CTS2(4082774, 4, 0.14, 0.46), CTS2(3289654, 6, 0.01, 0.34), 5];
   end;
 
   with self.WetCalcifiedRocks do
   begin
-    SetupEx([1, 1, 10], [[354, 483], [354, 496], [354, 487], [363, 468], [358, 468]]);
+    SetupEx([1, 1, 10], [[354, 483], [354, 496], [354, 487], [363, 468], [358, 468], {East Wall} [452, 486], [452, 490], [452, 482], [436, 470], [432, 470], [424, 470]]);
     SetupUpText(['Calcified rocks']);
     Finder.Colors += CTS2(10388048, 13, 0.02, 1.02);
   end;
@@ -108,7 +112,8 @@ begin
 
   if MyPos.InBox([136, 299, 191, 341]) then Exit(BLACKSMITH);
   if MyPos.InBox([159, 369, 199, 402]) then Exit(BANKAREA);
-  if MyPos.InBox([342, 456, 465, 532]) then Exit(MINESITE);
+  if MyPos.InBox([413, 455, 468, 514]) then Exit(EASTMINESITE);
+  if MyPos.InBox([350, 460, 388, 515]) then Exit(WESTMINESITE);
 end;
 
 procedure CalcifiedMiner.WALKTOBLACKSMITH();
@@ -122,19 +127,18 @@ begin
   if not Bank.IsOpen then
   begin
     Bank.Walkopen(BankersTable);
+    if not WaitUntil(Bank.IsOpen, 120, 3000) then Exit;
   end;
 
-  if Bank.IsOpen then
-  begin
-    TotalCalcifiedMoths += Inventory.CountItem(CalcifiedMoths);
-    writeln('Depositing items.');
-    if Inventory.ContainsItem('Open gem bag') then
-      Inventory.ClickItem('Open gem bag', 'Empty');
-    if Inventory.ContainsRandomItems(itemsToKeep) then
-      Bank.DepositRandomItems(itemsToKeep);
-    if not Inventory.ContainsItem('Hammer') or not Inventory.ContainsItem('Imcando hammer') then
-      Bank.WithdrawItem(['Hammer', 1, False], True)
-  end;
+  TotalCalcifiedMoths += Inventory.CountItemStack(CalcifiedMoths);
+  writeln('Depositing items.');
+  if Inventory.ContainsItem('Open gem bag') then
+    Inventory.ClickItem('Open gem bag', 'Empty');
+  if Inventory.ContainsRandomItems(itemsToKeep) then
+    Bank.DepositRandomItems(itemsToKeep);
+  if not Inventory.ContainsItem(HammerItem) or not Inventory.ContainsItem('Imcando hammer') then
+    Bank.WithdrawItem(HammerBank, TRUE);
+
   Bank.Close();
 end;
 
@@ -142,9 +146,10 @@ procedure CalcifiedMiner.OPENBANK();
 begin
   writeln('Opening bank.');
   RSW.WebWalk([172, 382]);
-  Bank.Walkopen(BankersTable);
-  WaitUntil(Bank.IsOpen, 120, 3000);
-    HANDLEBANKING();
+  if not Bank.Walkopen(BankersTable) then Exit;
+  if not WaitUntil(Bank.IsOpen, 120, 3000) then Exit;
+
+  HANDLEBANKING();
 end;
 
 procedure CalcifiedMiner.DROPITEMS();
@@ -159,33 +164,58 @@ begin
 end;
 
 procedure CalcifiedMiner.WALKTOMINESITE();
+var
+  destination: TPoint;
 begin
   writeln('Returning to mine site.');
-  RSW.WebWalk([368, 486]);
+  if Antiban.BioDice() then
+    destination := Point(436, 486) // West Mine Site
+  else
+    destination := Point(368, 486); // East Mine Site
+
+  RSW.WebWalk(destination);
 end;
 
+// It's a meme but thanks club and student for helping me tidy up this (Oh also CJ said check uptext which was a good idea to)
 procedure CalcifiedMiner.PROCESSDEPOSITS();
 var
   ATPA: T2DPointArray;
   TPA: TPointArray;
 begin
-  Inventory.SetSelectedItem(CalcifiedDeposit);
+  if not Inventory.SetSelectedItem(CalcifiedDeposit) then
+    Exit;
+
   CamTorumAnvil.Find(ATPA);
-  if (ATPA.Len > 0) then
-  begin
-    TPA := ATPA[0];
-    Mouse.Move(TPA.Mean());
-    Mouse.Click(MOUSE_LEFT);
-    WaitUntil(Make.IsOpen, 100, 3000);
-    begin
-      Make.Select('Calcified deposit', Make.QUANTITY_ALL);
-      writeln('Smashing deposits!');
-      WaitUntil(not Inventory.ContainsItem(CalcifiedDeposit), 100, 70000);
-      writeln('We should have smashed all');
-    end;
-  end;
+  if (ATPA.Len <= 0) then
+    Exit;
+
+  TPA := ATPA[0];
+  Mouse.Move(TPA.Mean());
+
+  if not MainScreen.IsUpText('Anvil', 250) then
+    Exit;
+
+  Mouse.Click(MOUSE_LEFT);
+
+  if not WaitUntil(Make.IsOpen, 100, 3000) then
+    Exit;
+
+  if Make.Select('Calcified deposit', Make.QUANTITY_ALL) then
+    WaitUntil(not Inventory.ContainsItem(CalcifiedDeposit), 100, 70000);
 end;
-// West Side [350, 460, 388, 515]
+
+// full Credits to SkunkGUIworks
+procedure TRSMinimap.RotateWithinAngles(min, max: Int32);
+var
+  minMaxAvg: Int32 := Floor((min + max) div 2);
+  preferredAngle: Int32 := SRL.SkewedRand(minMaxAvg, min, max);
+begin
+  if preferredAngle < 0 then
+    preferredAngle := preferredAngle + 360;
+
+  Minimap.SetCompassAngle(preferredAngle);
+end;
+
 procedure CalcifiedMiner.MINECALCIFIEDROCKS();
 var
   PlayerBox: TBox;
@@ -207,11 +237,17 @@ begin
   begin
     if (not Inventory.ContainsItem('Hammer') and not Inventory.ContainsItem('Imcando hammer')) and not POWERMINING then
     begin
+      writeln('No hammer in inventory, attempting to withdraw.')
       OPENBANK();
       Exit;
     end;
-    if (Minimap.GetCompassAngle() < 10) or (Minimap.GetCompassAngle() > 95) then
-      Minimap.SetCompassAngle(Random(15, 85));
+    
+    if (Self.GetLocation() = WESTMINESITE) and ((Minimap.GetCompassAngle() < 10) or (Minimap.GetCompassAngle() > 95)) then
+      Minimap.RotateWithinAngles(15, 85);
+
+    if (Self.GetLocation() = EASTMINESITE) and ((Minimap.GetCompassAngle() > 10) or (Minimap.GetCompassAngle() < 267)) then
+      Minimap.RotateWithinAngles(-93, 10);
+
     if (not IGNOREWATERFALLS) and WetCalcifiedRocks.Find(ATPA) and (not MiningWetRock) then
     begin
       WriteLn('Wet Calcified Rock spawned, switching target.');
@@ -315,11 +351,11 @@ begin
     else
       Exit(STATE_WALKTOBLACKSMITH);
   end
-  else if Inventory.ContainsItem(CalcifiedDeposit) and (Self.GetLocation() <> MINESITE) then
+  else if Inventory.ContainsItem(CalcifiedDeposit) and not (Self.GetLocation() in [EASTMINESITE, WESTMINESITE]) then
     Exit(STATE_WALKTOBLACKSMITH)
-  else if (not Inventory.ContainsItem(CalcifiedDeposit)) and Inventory.ContainsRandomItems(itemsToKeep) and (Self.GetLocation() <> MINESITE) then
+  else if (not Inventory.ContainsItem(CalcifiedDeposit)) and Inventory.ContainsRandomItems(itemsToKeep) and not (Self.GetLocation() in [EASTMINESITE, WESTMINESITE]) then
     Exit(STATE_OPENBANK)
-  else if (Self.GetLocation() = MINESITE) then
+  else if (Self.GetLocation() = WESTMINESITE) or (Self.GetLocation() = EASTMINESITE) then
     Exit(STATE_MINECALCIFIEDROCKS)
   else
     Exit(STATE_WALKTOMINESITE);
@@ -395,6 +431,7 @@ begin
   RSW.Setup('CamTorumFull');
   CalcifiedDeposit := ('Calcified deposit');
   HammerItem := ('Hammer');
+  HammerBank := TRSBankItem.Setup(HammerItem, 1, FALSE);
   CalcifiedMoths := ('Calcified moth');
   itemsToKeep := ['Blessed bone shards', 'Open gem bag', 'Hammer', 'Imcando hammer', 'Gem bag', 'Bronze pickaxe', 'Adamant pickaxe', 'Crystal pickaxe', 'Dragon pickaxe', 'Rune pickaxe', 'Mithril pickaxe', 'Black pickaxe', 'Steel pickaxe', 'Iron pickaxe', 'Gilded pickaxe', 'Dragon pickaxe (or)', 'Infernal pickaxe (or)', '3rd age pickaxe', 'Infernal pickaxe'];
   StartXP := XPBar.Read();
