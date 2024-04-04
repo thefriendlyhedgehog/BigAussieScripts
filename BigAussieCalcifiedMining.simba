@@ -237,7 +237,7 @@ begin
   begin
     if (not Inventory.ContainsItem('Hammer') and not Inventory.ContainsItem('Imcando hammer')) and not POWERMINING then
     begin
-      writeln('No hammer in inventory, attempting to withdraw.')
+      writeln('No hammer in inventory, attempting to withdraw.');
       OPENBANK();
       Exit;
     end;
