@@ -9,7 +9,7 @@ var
   IGNOREWATERFALLS: Boolean      = False;
   ENABLEWEBHOOKS: Boolean        = True; 
   WEBHOOKURL: String             = '';
-  DISCORDID: String              = ''; 
+  DiscordUID: String              = ''; 
   PINGONTERMINATED: Boolean      = True; 
 
 begin
@@ -75,25 +75,39 @@ begin
   Self.WebGraph := CamTorumMine;
 end;
 
-// Credit to acow - https://villavu.com/forum/showthread.php?t=118374
-// & Reldnac Who did this idea first <3
 procedure CalcifiedMiner.SendWebhook(msg: String; FilePath: String = '');
 var
   HTTP: Int32;
   Response, Payload: String;
 begin
   if WEBHOOKURL = "" then
-    Exit();
-  if DISCORDID <> '' then
-    msg := '<@' + DISCORDID + '> ' + msg;
+    Exit;
+  if DiscordUID <> '' then
+    msg := '<@' + DiscordUID + '> ' + msg;
 
+  // First attempt with JSON payload
   Payload := '{"content": "' + msg + '"}';
-
   HTTP := InitializeHTTPClient(False);
   try
     SetHTTPHeader(HTTP, 'Content-Type', 'application/json');
     Response := PostHTTPPage(HTTP, WEBHOOKURL, Payload);
-   // WriteLn('Webhook sent successfully. Response: ', Response);
+    if Response = '' then
+      WriteLn('Webhook successfully sent with JSON payload.')
+    else
+      WriteLn('Webhook sent with JSON payload. Response: ', Response);
+
+    // Fallback to FORMS if JSON Fails - We had to fallback as some users had issues with JSON Thanks @Chandler for all the help testing this.
+    if Pos('"code": 50006', Response) > 0 then
+    begin
+      FreeHTTPClient(HTTP);
+      HTTP := InitializeHTTPClient(False);
+      AddPostVariable(HTTP, 'content', msg);
+      Response := PostHTTPPageEx(HTTP, WEBHOOKURL);
+      if Response = '' then
+        WriteLn('Webhook fallback successfully sent with form data after code 50006 error.')
+      else
+        WriteLn('Webhook fallback sent with form data after code 50006 error. Response: ', Response);
+    end;
   finally
     FreeHTTPClient(HTTP);
   end;
@@ -501,8 +515,8 @@ type
   TConfig = record(TScriptForm)
     PowerMineCheckbox: TLabeledCheckBox;
     IgnoreWaterfallsCheckBox, PingOnTerminatedCheckBox, EnableWebhooksCheckBox: TLabeledCheckBox;
-    WebhookLabel , DiscordIDLabel, WebhookInfo, DiscordIDInfo: TLabel;
-    WebHookInput, DiscordIDInput: TLabeledEdit;
+    WebhookLabel , DiscordUIDLabel, WebhookInfo, DiscordUIDInfo: TLabel;
+    WebHookInput, DiscordUIDInput: TLabeledEdit;
   end;
 
 procedure TConfig.StartScript(sender: TObject); override;
@@ -510,11 +524,11 @@ begin
   POWERMINING := Self.PowerMineCheckbox.IsChecked();
   IGNOREWATERFALLS := Self.IgnoreWaterfallsCheckBox.IsChecked();
   ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
-  DISCORDID := Self.DiscordIDInput.GetText();
+  DiscordUID := Self.DiscordUIDInput.GetText();
   WEBHOOKURL := Self.WebHookInput.GetText();
   PINGONTERMINATED := Self.PingOnTerminatedCheckBox.IsChecked();
 
-  WriteINI('Webhook Settings', 'DiscordID', DISCORDID, 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
   WriteINI('Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
   WriteINI('Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI('Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
@@ -526,15 +540,15 @@ procedure TConfig.OpenURL(Sender: TObject);
 begin
   if Sender = Self.WebhookInfo then
     OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks')
-  else if Sender = Self.DiscordIDInfo then
+  else if Sender = Self.DiscordUIDInfo then
     OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
 end;
 
 procedure TConfig.WebhooksCheckboxChanged(Sender: TObject);
 begin
   Self.WebhookInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
-  Self.DiscordIDInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
-  Self.DiscordIDInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   Self.PingOnTerminatedCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
 end;
@@ -543,13 +557,12 @@ procedure TConfig.Run(); override;
 var
   tab: TTabSheet;
   SavedPingOnTerminated, SavedEnableWebhooks: Boolean;
-  SavedDiscordID, SavedWebhookURL: String;
-  RandomNames: array of String = ['BigAussie', 'Torwent', 'Flight', 'Garrett', 'Student', 'Crabby', 'N0ll', 'CanadianJames', 'Olly', 'Prush', 'Reldnahc', 'SimonK', 'Red', 'Andrew', 'Deets', 'Saml1991', 'Skunkworks', 'Taze', 'XJ(ZMI AT THE BOTTOM FOREVER)', 'Slacky', 'Sebastiaan', 'Rubix', 'Georgie', 'Chandler', 'Kila', 's3nsation', 'Treeman', 'Rejuiced'];
+  SavedDiscordUID, SavedWebhookURL: String;
 begin
   Self.Setup("BigAussies Calcified Mining");
   Self.Start.SetOnClick(@Self.StartScript);
 
-  SavedDiscordID := ReadINI('Webhook Settings', 'DiscordID', 'Configs/BASettings.ini');
+  SavedDiscordUID := ReadINI('Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
   SavedWebhookURL := ReadINI('Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
   SavedEnableWebhooks := StrToBoolDef(ReadINI('Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
   SavedPingOnTerminated := StrToBoolDef(ReadINI('Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'), True); 
@@ -603,25 +616,22 @@ begin
     SetFontSize(TControl.AdjustToDPI(7));
   end;
 
-  with DiscordIDInput do
+  with DiscordUIDInput do
   begin
     Create(tab);
     SetLeft(Self.WebhookInfo.GetLeft());
     SetTop(Self.WebhookInfo.GetTop() + TControl.AdjustToDPI(26));
-    SetCaption('Discord ID (Optional)');
+    SetCaption('Discord UID (Optional)');
     SetHint('This will mention you in the discord message.');
     SetWidth(TControl.AdjustToDPI(140));
-    if SavedDiscordID = '' then
-      SetText(RandomNames[RandomRange(0, High(RandomNames))])
-    else
-      SetText(SavedDiscordID);
+    SetText(SavedDiscordUID);
   end;
 
-  with DiscordIDInfo do
+  with DiscordUIDInfo do
   begin
     Create(tab);
-    SetLeft(Self.DiscordIDInput.GetLeft() + Self.DiscordIDInput.GetWidth() + TControl.AdjustToDPI(10));
-    SetTop(Self.DiscordIDInput.GetTop() + TControl.AdjustToDPI(18));
+    SetLeft(Self.DiscordUIDInput.GetLeft() + Self.DiscordUIDInput.GetWidth() + TControl.AdjustToDPI(10));
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(18));
     SetCaption('Click here to learn how to find your Discord User ID');
     SetHint('Click here to learn how to find your Discord User ID');
     setOnClick(@OpenURL);
@@ -631,8 +641,8 @@ begin
   with WebHookInput do
   begin
     Create(tab);
-    SetLeft(Self.DiscordIDInput.GetLeft());
-    SetTop(Self.DiscordIDInput.GetTop() + TControl.AdjustToDPI(45));
+    SetLeft(Self.DiscordUIDInput.GetLeft());
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(45));
     SetCaption('Discord Webhook URL');
     SetHint('Discord Webhook URL');
     SetWidth(TControl.AdjustToDPI(180));
