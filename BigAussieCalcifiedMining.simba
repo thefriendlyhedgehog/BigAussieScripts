@@ -541,8 +541,8 @@ begin
 
   SavedDiscordID := ReadINI('Webhook Settings', 'DiscordID', 'Configs/BASettings.ini');
   SavedWebhookURL := ReadINI('Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
-  SavedEnableWebhooks := StrToBoolDef(ReadINI('Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), True);
-  SavedPingOnTerminated := StrToBool(ReadINI('Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'));  
+  SavedEnableWebhooks := StrToBoolDef(ReadINI('Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+  SavedPingOnTerminated := StrToBoolDef(ReadINI('Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'), True); 
   
   Self.AddTab('Script Settings');
   tab := Self.Tabs[High(Self.Tabs)];
