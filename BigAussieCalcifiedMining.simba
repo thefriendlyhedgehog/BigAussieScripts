@@ -50,6 +50,7 @@ type
     TotalShardsMined: Integer;
     TotalCalcifiedMoths: Integer;
     CalcifiedMothValue: Integer;
+    StartingShards: Integer;
 
     MyPos: TPoint;
     CalcifiedRocks: TRSObject;
@@ -405,17 +406,19 @@ end;
 procedure CalcifiedMiner.Report();
 var
   Runtime: Integer;
-  CurrentXP, GainedXP, BoneShardsCount, PrayerXP, SunfirePrayerXP: Integer;
+  CurrentXP, GainedXP, PrayerXP, SunfirePrayerXP, Currentshards, Totalshards: Integer;
   CurrentStateName: String;
 begin
   CurrentXP := XPBar.Read();
   GainedXP := CurrentXP - startXP;
   ClearDebug();
   Runtime := Timer.ElapsedTime;
+  Totalshards := 0;
+  Currentshards := Inventory.CountItemStack('Blessed bone shards');
+  Totalshards := Currentshards - StartingShards;
 
-  BoneShardsCount := Inventory.CountItemStack('Blessed bone shards');
-  PrayerXP := BoneShardsCount * 5; // Each bone shard is worth 5 prayer XP
-  SunfirePrayerXP := BoneShardsCount * 6; // Each bone shard is worth 6 prayer XP with Sunfire wine
+  PrayerXP := Totalshards * 5; // Each bone shard is worth 5 prayer XP
+  SunfirePrayerXP := Totalshards * 6; // Each bone shard is worth 6 prayer XP with Sunfire wine
 
   case Self.CurrentState of
     STATE_MINECALCIFIEDROCKS: CurrentStateName := 'Mining Calcified Rocks';
@@ -432,7 +435,7 @@ begin
   WriteLn('   Current State: ' + CurrentStateName);
   WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short));
   WriteLn('   Mining XP Gained: ' + FormatRoundedNumber(GainedXP));
-  WriteLn('   Bone Shards: ' + IntToStr(BoneShardsCount));
+  WriteLn('   Bone Shards: ' + IntToStr(Totalshards));
   WriteLn('   Prayer XP: ' + FormatRoundedNumber(PrayerXP) + ' / Sunfire ' + FormatRoundedNumber(SunfirePrayerXP));
   if TotalCalcifiedMoths > 0 then
   begin
@@ -441,7 +444,7 @@ begin
   end;
   WriteLn('----------------------------------------');
   WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(Round((GainedXP / (GetTimeRunning / 3600000)))));
-  WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (GetTimeRunning / 3600000))));
+  WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((Totalshards) / (GetTimeRunning / 3600000))));
   WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (GetTimeRunning / 3600000))) + ' / Sunfire ' + FormatRoundedNumber(Round((SunfirePrayerXP) / (GetTimeRunning / 3600000))));
   WriteLn('========================================');
   WriteLn('     BigAussies Calcified Mining      ');
@@ -467,6 +470,7 @@ begin
   SetupObjects();
   Options.SetZoomLevel(RandomRange(10,24));
   CalcifiedMothValue := ItemData.GetAverage(29090);
+  StartingShards := Inventory.CountItemStack('Blessed bone shards');
   if PINGONTERMINATED then
     AddOnTerminate(@Self.SendTerminationNotification);
 end;
