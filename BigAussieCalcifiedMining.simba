@@ -442,7 +442,7 @@ begin
   WriteLn('----------------------------------------');
   WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(Round((GainedXP / (GetTimeRunning / 3600000)))));
   WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (GetTimeRunning / 3600000))));
-  WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (GetTimeRunning / 3600000))) + ' / Sunfire ' + FormatRoundedNumber(Round((SunfirePrayerXP) / (Runtime / 3600000))));
+  WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (GetTimeRunning / 3600000))) + ' / Sunfire ' + FormatRoundedNumber(Round((SunfirePrayerXP) / (GetTimeRunning / 3600000))));
   WriteLn('========================================');
   WriteLn('     BigAussies Calcified Mining      ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
