@@ -4,11 +4,13 @@
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 
-// Fix hammer withdraw its not working.
-
 var
-  POWERMINING: Boolean = False;
-  IGNOREWATERFALLS: Boolean = False;
+  POWERMINING: Boolean           = False;
+  IGNOREWATERFALLS: Boolean      = False;
+  ENABLEWEBHOOKS: Boolean        = True; 
+  WEBHOOKURL: String             = '';
+  DISCORDID: String              = ''; 
+  PINGONTERMINATED: Boolean      = True; 
 
 begin
   WLSettings.Antiban.Chat := False;
@@ -70,6 +72,32 @@ begin
   CamTorumMine.LoadNamesFromString('WAAAAHici1Y2iI2mAQYA/MUW8w==');  
 
   Self.WebGraph := CamTorumMine;
+end;
+
+// Credit to acow - https://villavu.com/forum/showthread.php?t=118374
+// & Reldnac the man <3
+procedure CalcifiedMiner.SendWebhook(msg: String; FilePath: String = '');
+var
+  HTTP: Int32;
+begin
+  if WEBHOOKURL = "" then
+    Exit();
+  if DISCORDID then
+    msg := ' <@' + DISCORDID + '>' + LineEnding + msg;
+  HTTP := InitializeHTTPClient(False);
+  AddPostVariable(HTTP, 'content', msg);
+  try
+    PostHTTPPageEx(HTTP, WEBHOOKURL);
+    if filePath then
+      PostHTTPForm(HTTP, WEBHOOKURL, 'Attachments', FilePath);
+  finally
+    FreeHTTPClient(HTTP);
+  end;
+end;
+
+procedure CalcifiedMiner.SendTerminationNotification();
+begin
+  Self.SendWebhook('Calcified Miner has terminated or crashed.');
 end;
 
 procedure CalcifiedMiner.SetupObjects();
@@ -441,6 +469,8 @@ begin
   SetupObjects();
   Options.SetZoomLevel(RandomRange(10,24));
   CalcifiedMothValue := ItemData.GetAverage(29090);
+  if PINGONTERMINATED then
+    AddOnTerminate(@Self.SendTerminationNotification);
 end;
 
 procedure CalcifiedMiner.Run(MaxActions: UInt32; MaxTime: UInt64);
@@ -464,24 +494,56 @@ var
 type
   TConfig = record(TScriptForm)
     PowerMineCheckbox: TLabeledCheckBox;
-    IgnoreWaterfallsCheckBox: TLabeledCheckBox;
+    IgnoreWaterfallsCheckBox, PingOnTerminatedCheckBox, EnableWebhooksCheckBox: TLabeledCheckBox;
+    WebhookLabel , DiscordNameLabel, WebhookInfo: TLabel;
+    WebHookInput, DiscordNameInput: TLabeledEdit;
   end;
 
 procedure TConfig.StartScript(sender: TObject); override;
 begin
   POWERMINING := Self.PowerMineCheckbox.IsChecked();
   IGNOREWATERFALLS := Self.IgnoreWaterfallsCheckBox.IsChecked();
+  ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
+  DISCORDID := Self.DiscordNameInput.GetText();
+  WEBHOOKURL := Self.WebHookInput.GetText();
+  PINGONTERMINATED := Self.PingOnTerminatedCheckBox.IsChecked();
+
+  WriteINI('Webhook Settings', 'DiscordID', DISCORDID, 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
 
   inherited;
+end;
+
+procedure OpenURL(Sender: TObject);
+begin
+  OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks');
+end;
+
+procedure TConfig.WebhooksCheckboxChanged(Sender: TObject);
+begin
+  Self.WebhookInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordNameInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.PingOnTerminatedCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
 end;
 
 procedure TConfig.Run(); override;
 var
   tab: TTabSheet;
+  SavedPingOnTerminated, SavedEnableWebhooks: Boolean;
+  SavedDiscordID, SavedWebhookURL: String;
+  RandomNames: array of String = ['BigAussie', 'Torwent', 'Flight', 'Garrett', 'Student', 'Crabby', 'N0ll', 'CanadianJames', 'Olly', 'Prush', 'Reldnahc', 'SimonK', 'Red', 'Andrew', 'Deets', 'Saml1991', 'Skunkworks', 'Taze', 'XJ(ZMI AT THE BOTTOM FOREVER)', 'Slacky', 'Sebastiaan', 'Rubix', 'Georgie', 'Chandler', 'Kila', 's3nsation', 'Treeman', 'Rejuiced'];
 begin
   Self.Setup("BigAussies Calcified Mining");
   Self.Start.SetOnClick(@Self.StartScript);
 
+  SavedDiscordID := ReadINI('Webhook Settings', 'DiscordID', 'Configs/BASettings.ini');
+  SavedWebhookURL := ReadINI('Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
+  SavedEnableWebhooks := StrToBoolDef(ReadINI('Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), True);
+  SavedPingOnTerminated := StrToBool(ReadINI('Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'));  
+  
   Self.AddTab('Script Settings');
   tab := Self.Tabs[High(Self.Tabs)];
 
@@ -489,25 +551,84 @@ begin
 
   Self.CreateVersionPanel(tab);
 
-  with Self.PowerMineCheckbox do
-  begin
-    Create(tab);
-    SetCaption("Power Mining mode.");
-    SetLeft(TControl.AdjustToDPI(37));
-    SetTop(TControl.AdjustToDPI(180));
-    SetHint('Disables banking and breaking of deposits.');
-    SetChecked(POWERMINING);
-  end;
-
   with Self.IgnoreWaterfallsCheckBox do
   begin
     Create(tab);
     SetCaption("Ignore Waterfalls.");
-    SetLeft(Self.PowerMineCheckbox.GetLeft());
-    SetTop(Self.PowerMineCheckbox.GetTop() - TControl.AdjustToDPI(22));
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(TControl.AdjustToDPI(140));
     SetHint('When enabled, waterfalls will be ignored.');
     SetChecked(IGNOREWATERFALLS);
   end;
+
+  with Self.PowerMineCheckbox do
+  begin
+    Create(tab);
+    SetCaption("Power Mining mode.");
+    SetLeft(Self.IgnoreWaterfallsCheckBox.GetLeft());
+    SetTop(Self.IgnoreWaterfallsCheckBox.GetTop() + TControl.AdjustToDPI(20));
+    SetHint('Disables banking and breaking of deposits.');
+    SetChecked(POWERMINING);
+  end;
+
+  with Self.EnableWebhooksCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Discord Webhooks notifications.");
+    SetLeft(Self.PowerMineCheckbox.GetLeft());
+    SetTop(Self.PowerMineCheckbox.GetTop() + TControl.AdjustToDPI(20));
+    SetHint('Enable or Disable Discord Webhooks.');
+    SetChecked(SavedEnableWebhooks);
+    CheckBox.SetOnChange(@WebhooksCheckboxChanged);
+  end;
+
+  with Self.WebhookInfo do
+  begin
+    Create(tab);
+    SetLeft(Self.EnableWebhooksCheckBox.GetLeft());
+    SetTop(Self.EnableWebhooksCheckBox.GetTop() + TControl.AdjustToDPI(20));
+    SetCaption('Click here to learn how to generate your own Discord webhook URL');
+    SetHint('Click here to learn how to generate your own Discord webhook URL');
+    setOnClick(@OpenURL);
+    SetFontSize(TControl.AdjustToDPI(7));
+  end;
+
+  with DiscordNameInput do
+  begin
+    Create(tab);
+    SetLeft(Self.WebhookInfo.GetLeft());
+    SetTop(Self.WebhookInfo.GetTop() + TControl.AdjustToDPI(30));
+    SetCaption('Discord ID To Ping');
+    SetHint('Just enter your username no need for @ or #');
+    SetWidth(TControl.AdjustToDPI(120));
+    if SavedDiscordID = '' then
+      SetText(RandomNames[RandomRange(0, High(RandomNames))])
+    else
+      SetText(SavedDiscordID);
+  end;
+
+  with WebHookInput do
+  begin
+    Create(tab);
+    SetLeft(Self.DiscordNameInput.GetLeft());
+    SetTop(Self.DiscordNameInput.GetTop() + TControl.AdjustToDPI(45));
+    SetCaption('Discord Webhook URL');
+    SetHint('Discord Webhook URL');
+    SetWidth(TControl.AdjustToDPI(180));
+    SetText(savedWebhookURL);
+  end;
+
+  with PingOnTerminatedCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Ping on script termination");
+    SetLeft(Self.WebHookInput.GetLeft());
+    SetTop(Self.WebHookInput.GetTop() + TControl.AdjustToDPI(50));
+    SetHint('Enable to ping when the script terminates cleanly');
+    SetChecked(SavedPingOnTerminated);
+  end; 
+
+  WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
 
   Self.CreateAntibanManager();
 
