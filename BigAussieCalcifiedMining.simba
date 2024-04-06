@@ -405,7 +405,6 @@ end;
 procedure CalcifiedMiner.Report();
 var
   Runtime: Integer;
-  XPPerHour: Integer;
   CurrentXP, GainedXP, BoneShardsCount, PrayerXP, SunfirePrayerXP: Integer;
   CurrentStateName: String;
 begin
@@ -413,7 +412,6 @@ begin
   GainedXP := CurrentXP - startXP;
   ClearDebug();
   Runtime := Timer.ElapsedTime;
-  XPPerHour := Round(((GainedXP) / Runtime) * 3600000);
 
   BoneShardsCount := Inventory.CountItemStack('Blessed bone shards');
   PrayerXP := BoneShardsCount * 5; // Each bone shard is worth 5 prayer XP
@@ -442,9 +440,9 @@ begin
     WriteLn('   Total Moth Profit: ' + FormatRoundedNumber(TotalCalcifiedMoths * CalcifiedMothValue));
   end;
   WriteLn('----------------------------------------');
-  WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(XPPerHour));
-  WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (Runtime / 3600000))));
-  WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (Runtime / 3600000))) + ' / Sunfire ' + FormatRoundedNumber(Round((SunfirePrayerXP) / (Runtime / 3600000))));
+  WriteLn('   Mining XP/Hour: ' + FormatRoundedNumber(Round((GainedXP / (GetTimeRunning / 3600000)))));
+  WriteLn('   Shards/Hour: ' + FormatRoundedNumber(Round((BoneShardsCount) / (GetTimeRunning / 3600000))));
+  WriteLn('   Prayer XP/Hour: ' + FormatRoundedNumber(Round((PrayerXP) / (GetTimeRunning / 3600000))) + ' / Sunfire ' + FormatRoundedNumber(Round((SunfirePrayerXP) / (Runtime / 3600000))));
   WriteLn('========================================');
   WriteLn('     BigAussies Calcified Mining      ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
