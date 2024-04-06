@@ -1,5 +1,5 @@
 {$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -344,7 +344,7 @@ function CalcifiedMiner.GetState(): EState;
 begin
   if Inventory.ContainsItem(CalcifiedDeposit) and (Self.GetLocation() = BLACKSMITH) then
     Exit(STATE_PROCESSDEPOSITS)
-  else if Inventory.CountEmptySlots <= 1 then
+  else if (Inventory.CountEmptySlots <= 1) and Inventory.ContainsItem(CalcifiedDeposit) then
   begin
     if POWERMINING then
       Exit(STATE_DROPITEMS)
@@ -440,7 +440,7 @@ begin
   Antiban.Skills := [ERSSkill.MINING, ERSSkill.PRAYER, ERSSkill.TOTAL];
   SetupObjects();
   Options.SetZoomLevel(RandomRange(10,24));
-  CalcifiedMothValue := ItemData.GetAverage(CalcifiedMoths);
+  CalcifiedMothValue := ItemData.GetAverage(29090);
 end;
 
 procedure CalcifiedMiner.Run(MaxActions: UInt32; MaxTime: UInt64);
