@@ -9,7 +9,7 @@ var
   IGNOREWATERFALLS: Boolean      = False;
   ENABLEWEBHOOKS: Boolean        = True; 
   WEBHOOKURL: String             = '';
-  DiscordUID: String              = ''; 
+  DiscordUID: String             = ''; 
   PINGONTERMINATED: Boolean      = True; 
 
 begin
