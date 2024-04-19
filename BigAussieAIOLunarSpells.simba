@@ -1,5 +1,5 @@
-{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '18'}
+{$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
+{$DEFINE SCRIPT_REVISION := '18'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -10,7 +10,31 @@
 // If you wish to use the Rune Pouch you MUST start with it in your inventory.
 // The grand exchange features will Buy/Sell at Above/Below market prices, if an order is not filled the script will not cancel/relist you need to do this manually.
 // 
-// SRL-T V2.7.8 / WaspLib - 14.12.2
+// SRL-T V4.7.0 / WaspLib - V18.4.8
+//
+// Birdhouse include provided by CanadianJames - https://github.com/GBScripts
+//
+
+{$IFHASFILE Includes/Farm/BirdHouseInclude.simba}
+begin
+  WriteLn('We have the birdhouse run files!');
+end
+{$ELSE}
+begin
+  WriteLn('Required birdhouse file is missing. Downloading it, please re-run the script once this is done!');
+
+  if (not DirectoryExists(AppPath+'\Includes\Farm')) then
+    CreateDirectory(AppPath+'\Includes\Farm');
+
+  DownloadToFile('https://raw.githubusercontent.com/GBScripts/SimbaScripts/main/BirdhouseInclude/BirdhouseInclude.simba', AppPath+'\Includes\Farm\BirdHouseInclude.simba');
+
+  WriteLn('Download complete. Please start the script again.');
+  Exit;
+end.
+{$ENDIF}
+begin end;
+
+{$I Farm/BirdHouseInclude.simba}
 
 type
   ScriptSpeedTypes = (SLOW, NORMAL, FAST, TURBO);
@@ -24,13 +48,18 @@ var
   STAFFCHECK: Boolean                         = True; // Set to "False" to disable the checking of required staffs.
   STOP_AT_LEVEL: Integer                      = 99; // Script will Logout and stop when this level is reached.
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
-  SELECTEDITEM: string;                       //= Berry Pie
+  SELECTEDITEM: string                        = 'Berry Pie';
   SCRIPTSPEED: ScriptSpeedTypes               = NORMAL; // Values Accepted SLOW/NORMAL/FAST/TURBO - This affects mouse speed + waitimes.
   BUYRUNESCHECK: Boolean                      = False; // If you have no Astral Runes in your inventory or bank the script will buy more.
   BUYRAWMATERIALS: Boolean                    = False; // If you have no Raw Items in your inventory or bank the script will buy the amount below in the QuantityInput.
   SELLNOTEDITEMCHECK: Boolean                 = False; // If True the script will sell all finished items before any of the other shopping methods.
   QUANTITYINPUT: Integer                      = 10000;// When you run out of raw items this is how many the script should buy.
   BANKFILLERSCHECK: Boolean                   = False; // Enable this if you have setup bank fillers correctly. 
+  BIRDHOUSEENABLED: Boolean                   = False;
+  WEBHOOKURL: String                          = '';
+  DiscordUID: String                          = '';
+  ENABLEWEBHOOKS: Boolean                     = True; 
+  PINGONTERMINATED: Boolean                   = True; 
 //===========================================
 
 begin
@@ -86,7 +115,6 @@ type
 end;
 
 var
-
   FocusState: TFocusState;
   Items: array of TItem;
   StaffNames: Array of String;
@@ -105,7 +133,6 @@ var
   AstralRunesToBuy,
   Array5QuantityToBuy,
   RawPurchased,
-  RawPurchased2,
   WithdrawnCount,
   RawItemCount,
   RawItemToBuy,
@@ -129,6 +156,8 @@ var
 
   CoinsChecked: Boolean;
   HasRunePouch: Boolean;
+
+  Script: AIOLunarSpells;
 
 procedure TAntiban.Setup(); override;
 begin
@@ -342,7 +371,6 @@ begin
 function DisableSpellFiltering(var GameTabs: TRSGameTabs; Tab: ERSGameTab): Boolean;
 var
   i: Int32;
-  FilterButton: TRSButton;
 begin
 
   for i := 1 to 3 do
@@ -363,9 +391,53 @@ begin
   end;
 end;
 
+procedure AIOLunarSpells.SendWebhook(msg: String);
+var
+  HTTP: Int32;
+  Response, Payload: String;
+begin
+  if WEBHOOKURL = "" then
+    Exit;
+  if DiscordUID <> '' then
+    msg := '<@' + DiscordUID + '> ' + msg;
+
+  // First attempt with JSON payload
+  Payload := '{"content": "' + msg + '"}';
+  HTTP := InitializeHTTPClient(False);
+  try
+    SetHTTPHeader(HTTP, 'Content-Type', 'application/json');
+    Response := PostHTTPPage(HTTP, WEBHOOKURL, Payload);
+    if Response = '' then
+      WriteLn('Webhook successfully sent with JSON payload.')
+    else
+      WriteLn('Webhook sent with JSON payload. Response: ', Response);
+
+    // Fallback to FORMS if JSON Fails - We had to fallback as some users had issues with JSON Thanks @Chandler for all the help testing this.
+    if Pos('"code": 50006', Response) > 0 then
+    begin
+      FreeHTTPClient(HTTP);
+      HTTP := InitializeHTTPClient(False);
+      AddPostVariable(HTTP, 'content', msg);
+      Response := PostHTTPPageEx(HTTP, WEBHOOKURL);
+      if Response = '' then
+        WriteLn('Webhook fallback successfully sent with form data after code 50006 error.')
+      else
+        WriteLn('Webhook fallback sent with form data after code 50006 error. Response: ', Response);
+    end;
+  finally
+    FreeHTTPClient(HTTP);
+  end;
+end;
+
+procedure AIOLunarSpells.SendTerminationNotification();
+begin
+  Self.SendWebhook('BigAussie AIO Lunar has terminated or crashed.');
+end;
+
 procedure AIOLunarSpells.Init(MaxActions: UInt32; MaxTime: UInt64); override;
 var
   i: Integer;
+  MyPos: TPoint;
 begin
   inherited;
 
@@ -379,6 +451,11 @@ begin
 
   StatsPayload.Setup({$macro SCRIPT_ID});
   APIClient.TimeStamp := GetTickCount();
+
+  if PINGONTERMINATED and ENABLEWEBHOOKS then
+    AddOnTerminate(@Self.SendTerminationNotification);
+  if BIRDHOUSEENABLED then
+    BirdhouseRunner.Init();
 
   SetLength(Items, 59);          // Rawitem, ProcessedItem, NotedItem, AstralRune, ItemArray5(Nature Rune/Sand), Coins(6th array only used on MAKE PLANK)
   Items[0].Name := 'Berry Pie';
@@ -555,18 +632,8 @@ begin
     ItemArray5Value := ItemData.GetAverage(ItemArray5);
   end;
 
-  WriteLn('Current brightness level: ' + IntToStr(Options.GetBrightnessLevel));
-  if Options.GetBrightnessLevel < 100 then
-    Options.SetMaxBrightness;
-    
-  if RSClient.DetectClientMode() <> ERSClientMode.FIXED then
-  begin
-    WriteLn('The client must be running in FIXED mode. Please change the mode and restart the script.');
-    TerminateScript();
-  end;
+  Self.RSW.Setup([RSRegions.GRAND_EXCHANGE]);
 
-  Self.RSW.SetupNamedRegion();
-  Self.RSW.AdaptiveWalk := True;
   case SCRIPTSPEED of
     SLOW: Mouse.Speed := Random(12, 14);
     NORMAL: Mouse.Speed += Random(17, 21);
@@ -590,11 +657,16 @@ begin
   Timer.Start();
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   ClearDebug();
-  if Inventory.ContainsItem(RunePouch) then
+if Inventory.ContainsItem(RunePouch) then
+begin
+  HasRunePouch := True;
+  WriteLn('Rune Pouch Found. Ensure your pouch is full.');
+  if BUYRUNESCHECK then
   begin
-    HasRunePouch := True;
-    WriteLn('Rune Pouch Found, Will use pouch instead of runes. Ensure your pouch is full.');
+    BUYRUNESCHECK := False;
+    WriteLn('Rune buying is not supported with Rune Pouch - Disabling buying runes.');
   end;
+end;
   if STAFFCHECK then
   begin
     ItemFinder.Similarity := 0.989; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
@@ -793,7 +865,6 @@ end;
 procedure AIOLunarSpells.WithdrawAstralRunes();
 begin
   ItemFinder.Similarity := 0.999;
-  
   if HasRunePouch then
   begin
     if not Inventory.ContainsItem('Rune pouch') then
@@ -1307,7 +1378,6 @@ end;
 
 function AIOLunarSpells.ClickItem(item: TRSItem; option: String = ''): Boolean; // Thanks CanadianJames for the tip on this <3
 var
-  i: Int32;
   upText: String;
 begin
   if Inventory.MouseItem(item) then
@@ -1323,15 +1393,6 @@ begin
     if (option = '') or upText.Contains(option) then
     begin
       Mouse.Click(MOUSE_LEFT);
-      //Wait(RandomRange(350, 400));
-//      if (Random < Antiban.GetUniqueNumber(0.07, 0.05, 0.1)) then
-//      for i := 0 to Round(Antiban.GetUniqueNumber(2, 1, 3)) do
-//      begin
-//        Mouse.Click(Mouse.Position(), MOUSE_LEFT);
-//
-//        Wait(0, 100, wdLeft);
-//      end;
-
       Exit(True);
     end;
 
@@ -1341,7 +1402,6 @@ end;
 
 function AIOLunarSpells.ClickSlot(slot: Int32; option: String = ''): Boolean;
 var
-  i: Int32;
   upText: String;
 begin
   if Inventory.MouseSlot(slot) then
@@ -1357,15 +1417,6 @@ begin
     if (option = '') or upText.Contains(option) then
     begin
       Mouse.Click(MOUSE_LEFT);
-      //Wait(RandomRange(350, 400));
-//      if (Random < Antiban.GetUniqueNumber(0.07, 0.05, 0.1)) then
-//      for i := 0 to Round(Antiban.GetUniqueNumber(2, 1, 3)) do
-//      begin
-//        Mouse.Click(Mouse.Position(), MOUSE_LEFT);
-//
-//        Wait(0, 100, wdLeft);
-//      end;
-
       Exit(True);
     end;
 
@@ -1431,7 +1482,7 @@ end;
 
 procedure AIOLunarSpells.FastCastingStandardOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: String; waitTimeCasting: Integer);
 var
-  i, failCount: Integer;
+failCount: Integer;
 begin
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 375, 2100); 
@@ -1619,7 +1670,7 @@ begin
 end;
 
 
-function Join(const Delimiter: String; const List: array of String): String;
+function BAJoin(const Delimiter: String; const List: array of String): String;
 var
   i: Integer;
 begin
@@ -1716,7 +1767,7 @@ begin
     end;
   end;
 
-  StaffList := Join(', ', StaffNames);
+  StaffList := BAJoin(', ', StaffNames);
   WriteLn('No valid staff found equipped, in inventory, or in bank. Supported staffs/items are: ' + StaffList);
   TerminateScript()
 end;
@@ -1747,6 +1798,8 @@ begin
       WriteLn('No activity detected in 5 minutes! Shutting down.');
       Break;
     end;
+    if BIRDHOUSEENABLED and BirdHouseRunner.CanDoBirdHouseRun() then
+        BirdHouseRunner.DoBirdHouseRun();
     if not MainScreen.HasInterface() or not Bank.IsOpen() then
     begin
       case SCRIPTSPEED of
@@ -1764,6 +1817,96 @@ begin
       Self.DoAntiban();
   until Self.ShouldStop();
 end;
+
+// ON START FOR CJ BIRDHOUSE INCLUDE
+function TBirdHouseInclude.OnStart() : Boolean; override;
+var
+  i : Int32;
+  VarrockTab: TRSItem;
+  VarrockTabBank: TRSBankItem;
+begin
+  ItemFinder.Similarity := 0.999;
+  VarrockTab := ('Varrock teleport');
+  VarrockTabBank := TRSBankItem.Setup(VarrockTab, 1, FALSE);
+
+  if Self.AlwaysUseBestLog then
+  begin
+    Self.SuggestedLogType := BirdhouseRunner.GetLogForHunterLevel(Stats.GetLevel(ERSSkill.HUNTER));
+    if Self.LogType <> Self.SuggestedLogType then
+      Self.LogType := Self.SuggestedLogType;
+  end;
+
+  Bank.WalkOpen(RSObjects.GEBank);
+
+  if not Bank.IsOpen() then
+  begin
+    Self.DebugLn("Failed to get to bank");
+    Exit(false);
+  end;
+
+  if Inventory.CountEmptySlots() < 28 then
+  begin
+    Bank.DepositAll();
+    WaitUntil(Inventory.CountEmptySlots() = 28, 150, 2000);
+
+    if not Self.WithdrawNextRun() then
+    begin
+      writeln('Failed to get birdhouse run items from bank, disabling birdhouse runs.');
+      BirdhouseRunner.IsDisabled := true;
+      Bank.DepositAll();
+      Exit(false);
+    end;
+
+    if not Bank.WithdrawItem(VarrockTabBank, true) then
+    begin
+      writeln('Failed to get Varrock teleport from bank, disabling birdhouse runs.');
+      BirdhouseRunner.IsDisabled := true;
+      Bank.DepositAll();
+      Exit(false);
+    end;
+    Bank.Close();
+    Options.SetZoomLevel(Random(21));
+  end;
+
+  Result := true;
+end;
+
+// ON COMPLETE FOR CJ BIRDHOUSE INCLUDE
+procedure TBirdHouseInclude.OnComplete(); override;
+var
+  i : Int32;
+  timeout : TCountDown;
+  MyPos: TPoint;
+begin
+  MyPos := Script.RSW.GetMyPos();
+
+  ScriptWalker := @Script.RSW;
+
+  if Script.RSW.Regions.Find(RSRegions.VARROCK) = -1 then
+    Script.RSW.AddRegion(RSRegions.VARROCK);
+
+  if not Inventory.ClickItem('Varrock teleport') then
+  begin
+    Writeln("Teleport to varrock failed");
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
+
+  Wait(2000, 3000);
+
+  if not WaitUntil(RSRegions.VARROCK.Contains(Script.RSW.GetMyPos()), 250, 4000) then
+  begin
+    Writeln("Failed to teleport");
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
+  
+  Bank.WalkOpen(RSObjects.GEBank); // We need this or else we wander to crafting guild bank.
+  Bank.DepositAll();
+
+  ItemFinder.Similarity := 0.989
+end;            
+// ON COMPLETE FOR CJ BIRDHOUSE INCLUDE
 
 function FormatRoundedNumber(Number: Integer): String;
 begin
@@ -1835,6 +1978,8 @@ var
   CurrentXP, GainedXP, Profit, ProfitAPI: Integer;
   FocusStateStr: String;
   RemainingFocusTime: Int64;
+  BirdHouseReport: TStringArray;
+  i: Integer;
 begin
   ClearDebug();
   if not MainScreen.HasInterface() then
@@ -1845,7 +1990,7 @@ begin
   PreviousProfit := Profit;
 
   XPBar.EarnedXP();
-  StatsPayload.Update(0, ProfitAPI, 0);
+  StatsPayload.Update(0, 0, 0);
   if not APIClient.IsSetup or APIClient.Timer.IsFinished() then
       APIClient.SubmitStats(APIClient.GetUUID());
     
@@ -1854,7 +1999,6 @@ begin
   if (Length(Antiban.Sleeps) > 0) then
     NextSleepTime := SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - GetTimeRunning)), TIME_BARE);
 
-  // Determine the current focus state and remaining time
   if FocusState = fsFocused then
     FocusStateStr := 'Focused'
   else
@@ -1889,6 +2033,7 @@ begin
   if Profit = 0 then
     WriteLn('   Profit/Hour: Calculating')
   else
+
   WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
 
   if BUYRAWMATERIALS then
@@ -1897,8 +2042,7 @@ begin
       WriteLn('Total ' + RawItem + ' Purchased: ' + IntToStr(RawPurchased))
     else
       WriteLn('   Will attempt to purchase ' + IntToStr(QUANTITYINPUT) + ' ' + RawItem);
-    end;
-
+  end;
 
   if BUYRUNESCHECK then
   begin
@@ -1908,32 +2052,26 @@ begin
       WriteLn('   Purchase Runes is Enabled.');
   end;
 
-if SELLNOTEDITEMCHECK then
-begin
-  if NotedTotal > 0 then
-    WriteLn('   Total ' + ProcessedItem + ' Sold: ' + IntToStr(NotedTotal))
-  else
-    WriteLn('   Sell Finished item is Enabled.');
-end;
-
-
+  if SELLNOTEDITEMCHECK then
+  begin
+    if NotedTotal > 0 then
+      WriteLn('   Total ' + ProcessedItem + ' Sold: ' + IntToStr(NotedTotal))
+    else
+      WriteLn('   Sell Finished item is Enabled.');
+  end;
   WriteLn('========================================');
   WriteLn('     BigAussies AIO Lunar Spells      ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
   WriteLn('========================================');
-// This is just debug shit because math is stupid and hard
-//      WriteLn('RawTotal: ' + IntToStr(RawTotal));
-//      WriteLn('Processed Total: ' + IntToStr(ProcessedTotal));
-//      WriteLn('RawItemValue: ' + IntToStr(RawItemValue));
-//      WriteLn('ProcessedItemValue: ' + IntToStr(ProcessedItemValue));
-//      WriteLn('RawTotalSand: ' + IntToStr(RawTotalSand));
-//      WriteLn('ItemArray5Value: ' + IntToStr(ItemArray5Value));
-//      WriteLn('RuneValue: ' + IntToStr(RuneValue));    
-//      WriteLn('CoinCostPerCast: ' + IntToStr(CoinCostPerCast));  
-end;
 
-var
-  Script: AIOLunarSpells;
+  // Birdhouse include by CJ - Report function.
+  if BIRDHOUSEENABLED then
+  begin
+    BirdHouseReport := BirdHouseRunner.GetReportStrings();
+    for i := Low(BirdHouseReport) to High(BirdHouseReport) do
+      WriteLn(BirdHouseReport[i]);
+  end;
+end;
 
 {$IFDEF SCRIPT_GUI}
 type
@@ -1941,10 +2079,26 @@ type
     Message, Message2, QuantityLabel, BankFillersInfoLabel, ScriptSpeedLabel, GEInfoLabel, GEInfoLabel2, StopAtLevelLabel, ItemSelectorLabel, LunarSpellLabel: TLabel;
     QuantityInputBox, StopAtLevelInputBox: TEdit;
     ScriptSpeedSelector: TLabeledCombobox;
-    SELLNOTEDITEMCHECKBox, BUYRUNESCHECKBox, BankFillersCheckBox: TLabeledCheckBox;
+    SELLNOTEDITEMCHECKBox, BUYRUNESCHECKBox, BUYRAWMATERIALSCheckbox, BankFillersCheckBox, BirdHouseSettingsCheckbox: TLabeledCheckBox;
     LunarSpellSelector: TComboBox;
     ItemSelector: TComboBox;
+    // Discord Webhooks
+    PingOnTerminatedCheckBox, EnableWebhooksCheckBox: TLabeledCheckBox;
+    WebhookLabel , DiscordUIDLabel, WebhookInfo, DiscordUIDInfo: TLabel;
+    WebHookInput, DiscordUIDInput: TLabeledEdit;
+    SavedDiscordUID, SavedWebhookURL: String;
+    SavedPingOnTerminated, SavedEnableWebhooks: Boolean;
+    // End Discord Webhooks
   end;
+
+function StringToScriptSpeed(const S: String): ScriptSpeedTypes;
+begin
+  if S = 'Slow' then Result := SLOW
+  else if S = 'Normal' then Result := NORMAL
+  else if S = 'Fast' then Result := FAST
+  else if S = 'Turbo' then Result := TURBO
+  else Result := NORMAL;
+end;
 
 procedure TConfig.StartScript(sender: TObject); override; 
 begin
@@ -1953,10 +2107,66 @@ begin
   SCRIPTSPEED := ScriptSpeedTypes(Self.ScriptSpeedSelector.GetItemIndex());
   SELLNOTEDITEMCHECK := Self.SELLNOTEDITEMCHECKBox.IsChecked();
   BUYRUNESCHECK := Self.BUYRUNESCHECKBox.IsChecked();
+  BUYRAWMATERIALS := Self.BUYRAWMATERIALSCheckbox.IsChecked();
   BANKFILLERSCHECK := Self.BankFillersCheckBox.IsChecked();
-  QUANTITYINPUT := StrToInt(Self.QuantityInputBox.GetText); // This should finally give text, took me longer than I care to admit.....
+  QUANTITYINPUT := StrToInt(Self.QuantityInputBox.GetText);
   STOP_AT_LEVEL := StrToInt(Self.StopAtLevelInputBox.GetText);
+  DiscordUID := Self.DiscordUIDInput.GetText;
+  WEBHOOKURL := Self.WebHookInput.GetText;
+  ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
+  PINGONTERMINATED := Self.PingOnTerminatedCheckBox.IsChecked();
+  BIRDHOUSEENABLED := Self.BirdHouseSettingsCheckbox.IsChecked();
+  WriteINI('Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'CHOSENSPELL', SpellToString(CHOSENSPELL), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'SELECTEDITEM', SELECTEDITEM, 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'SCRIPTSPEED', ScriptSpeedToString(SCRIPTSPEED), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'SELLNOTEDITEMCHECK', BoolToStr(SELLNOTEDITEMCHECK, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'BUYRUNESCHECK', BoolToStr(BUYRUNESCHECK, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'BUYRAWMATERIALS', BoolToStr(BUYRAWMATERIALS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'BANKFILLERSCHECK', BoolToStr(BANKFILLERSCHECK, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'QUANTITYINPUT', IntToStr(QUANTITYINPUT), 'Configs/BASettings.ini');
+  WriteINI('AIO Lunar Settings', 'STOP_AT_LEVEL', IntToStr(STOP_AT_LEVEL), 'Configs/BASettings.ini');
+  WriteINI('Birdhouse Settings', 'Enabled', BoolToStr(BIRDHOUSEENABLED, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('Birdhouse Settings', 'LogType', IntToStr(Ord(BirdHouseRunner.LogType)), 'Configs/BASettings.ini');
+  WriteINI('Birdhouse Settings', 'Seed', BirdHouseRunner.Seed, 'Configs/BASettings.ini');
+  WriteINI('Birdhouse Settings', 'RunIntervalMinutes', ToStr(BirdHouseRunner.TaskInterval), 'Configs/BASettings.ini');
+  WriteINI('Birdhouse Settings', 'UseBestLog', BoolToStr(BirdHouseRunner.AlwaysUseBestLog, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI('Birdhouse Settings', 'CraftWhileNav', BoolToStr(BirdHouseRunner.NeedClockworks, 'true', 'false'), 'Configs/BASettings.ini');
+
   inherited;
+end;
+
+procedure TConfig.OpenURL(Sender: TObject);
+begin
+  if Sender = Self.WebhookInfo then
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks')
+  else if Sender = Self.DiscordUIDInfo then
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
+end;
+
+procedure TConfig.WebhooksCheckboxChanged(Sender: TObject);
+begin
+  Self.WebhookInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.PingOnTerminatedCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+end;
+
+function StringToSpell(const S: String): ELunarSpell;
+begin
+  if S = 'Bake Pie' then Result := BAKE_PIE
+  else if S = 'Humidify' then Result := HUMIDIFY
+  else if S = 'Spin Flax' then Result := SPIN_FLAX
+  else if S = 'Superglass Make' then Result := SUPERGLASS_MAKE
+  else if S = 'Tan Leather' then Result := TAN_LEATHER
+  else if S = 'String Jewellery' then Result := STRING_JEWELLERY
+  else if S = 'Plank Make' then Result := PLANK_MAKE
+  else if S = 'Recharge Dragonstone' then Result := RECHARGE_DRAGONSTONE
+  else Result := BAKE_PIE;
 end;
 
 procedure TConfig.LunarSpellSelectorOnChange(Sender: TObject);
@@ -2039,12 +2249,61 @@ begin
   Self.ItemSelector.SetItemIndex(0);
 end;
 
+procedure TConfig.Init();
+begin
+  writeln('Reading previous settings.');
+  SavedDiscordUID := ReadINI('Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
+  SavedWebhookURL := ReadINI('Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
+  SavedEnableWebhooks := StrToBoolDef(ReadINI('Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+  SavedPingOnTerminated := StrToBoolDef(ReadINI('Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'), True); 
+  CHOSENSPELL := StringToSpell(ReadINI('AIO Lunar Settings', 'CHOSENSPELL', 'Configs/BASettings.ini'));
+  SELECTEDITEM := ReadINI('AIO Lunar Settings', 'SELECTEDITEM', 'Configs/BASettings.ini');
+  SCRIPTSPEED := StringToScriptSpeed(ReadINI('AIO Lunar Settings', 'SCRIPTSPEED', 'Configs/BASettings.ini'));
+  SELLNOTEDITEMCHECK := StrToBoolDef(ReadINI('AIO Lunar Settings', 'SELLNOTEDITEMCHECK', 'Configs/BASettings.ini'), False);
+  BUYRUNESCHECK := StrToBoolDef(ReadINI('AIO Lunar Settings', 'BUYRUNESCHECK', 'Configs/BASettings.ini'), False);
+  BUYRAWMATERIALS := StrToBoolDef(ReadINI('AIO Lunar Settings', 'BUYRAWMATERIALS', 'Configs/BASettings.ini'), False);
+  BANKFILLERSCHECK := StrToBoolDef(ReadINI('AIO Lunar Settings', 'BANKFILLERSCHECK', 'Configs/BASettings.ini'), False);
+  QUANTITYINPUT := StrToIntDef(ReadINI('AIO Lunar Settings', 'QUANTITYINPUT', 'Configs/BASettings.ini'), 0);
+  STOP_AT_LEVEL := StrToIntDef(ReadINI('AIO Lunar Settings', 'STOP_AT_LEVEL', 'Configs/BASettings.ini'), -1);
+  BIRDHOUSEENABLED := StrToBoolDef(ReadINI('Birdhouse Settings', 'Enabled', 'Configs/BASettings.ini'), True);
+  BHIncludeGUILogType := ERSLogType(StrToIntDef(ReadINI('Birdhouse Settings', 'LogType', 'Configs/BASettings.ini'), 0));
+  BHIncludeGUISeed := ReadINI('Birdhouse Settings', 'Seed', 'Configs/BASettings.ini');
+  BHIncludeGUIRunIntervalMinutes := StrToIntDef(ReadINI('Birdhouse Settings', 'RunIntervalMinutes', 'Configs/BASettings.ini'), 0) div 60000; // We need to div because the read is MS
+  BHIncludeGUIUseBestLog := StrToBoolDef(ReadINI('Birdhouse Settings', 'UseBestLog', 'Configs/BASettings.ini'), False);
+  BHIncludeGUICraftWhileNav := StrToBoolDef(ReadINI('Birdhouse Settings', 'CraftWhileNav', 'Configs/BASettings.ini'), False);
+end;
+
+// Thanks to Torwent for the help <3
+procedure TConfig.ToggleBirdhouseTabVisibility(Sender: TObject);
+var
+  i: Int32;
+  tab: TTabSheet;
+begin
+  for i := 0 to High(Self.Tabs) do
+    if Self.Tabs[i].getCaption() = 'Birdhouse Settings' then
+    begin
+      Self.Tabs[i].SetTabVisible(TCheckbox(Sender).IsChecked());
+      Break;
+    end;
+end;
+
+procedure TConfig.BUYRAWMATERIALSCheckboxChanged(Sender: TObject);
+begin
+  Self.QuantityInputBox.SetVisible(Self.BUYRAWMATERIALSCheckbox.IsChecked());
+end;
+
+procedure TConfig.BankFillersCheckBoxChanged(Sender: TObject);
+begin
+  Self.Message2.SetVisible(Self.BankFillersCheckBox.IsChecked());
+end;
+
 procedure TConfig.Run(); override;
 var
   tab: TTabSheet;
   spells: array of string;
   i: integer;
 begin
+  Self.Init();
   Self.Setup("BigAussies AIO Lunar Spells");
   Self.Start.SetOnClick(@Self.StartScript);
 
@@ -2053,15 +2312,13 @@ begin
 
   Self.CreateAccountManager(tab);
 
-  Self.CreateVersionPanel(tab);
-
   Self.ItemSelector.Create(tab);
 
   with Self.LunarSpellLabel do
   begin
     Create(tab);
     SetLeft(TControl.AdjustToDPI(37));
-    SetTop(TControl.AdjustToDPI(160));
+    SetTop(TControl.AdjustToDPI(155));
     SetCaption('Lunar spell to cast');
     SetHint('Select a Lunar Spell to cast.');
   end;
@@ -2079,16 +2336,15 @@ begin
   with Self.ItemSelectorLabel do
   begin
     Create(tab);
-    SetLeft(TControl.AdjustToDPI(37));
-    SetTop(Self.LunarSpellSelector.GetTop() + TControl.AdjustToDPI(30));
+    SetLeft(Self.LunarSpellSelector.GetLeft() + Self.LunarSpellSelector.GetWidth() + TControl.AdjustToDPI(14));
+    SetTop(Self.LunarSpellLabel.GetTop());
     SetCaption('Item to process');
     SetHint('Select what item to process');
   end;
 
-  Self.ItemSelector.SetLeft(TControl.AdjustToDPI(37));
-  Self.ItemSelector.SetTop(Self.ItemSelectorLabel.GetTop() + TControl.AdjustToDPI(15));
+  Self.ItemSelector.SetLeft(Self.ItemSelectorLabel.GetLeft());
+  Self.ItemSelector.SetTop(Self.LunarSpellSelector.GetTop());
   Self.ItemSelector.SetWidth(130);
-  
 
   Self.LunarSpellSelectorOnChange(Self.LunarSpellSelector);
 
@@ -2103,15 +2359,15 @@ begin
     SetHint('This affects wait times and mouse speed.');
   end;
 
-
   with Self.StopAtLevelInputBox do
   begin
     Create(tab);
-    SetLeft(TControl.AdjustToDPI(37));
-    SetTop(Self.ScriptSpeedSelector.GetTop() + TControl.AdjustToDPI(55));
+    SetLeft(Self.ScriptSpeedSelector.GetLeft() + Self.ScriptSpeedSelector.GetWidth() + TControl.AdjustToDPI(16));
+    SetTop(Self.ScriptSpeedSelector.GetTop());
     SetWidth(50);
-    SetText('-1');
-    SetHint('Enter -1 to never stop.');
+    SetText('100');
+    SetHint('Enter 100+ to never stop.');
+    SetOnKeyPress(@NumberField);
   end;
 
   with Self.StopAtLevelLabel do
@@ -2120,7 +2376,7 @@ begin
     SetLeft(Self.StopAtLevelInputBox.GetLeft());
     SetTop(Self.StopAtLevelInputBox.GetTop() - TControl.AdjustToDPI(16));
     SetCaption('Stop at Magic Level');
-    SetHint('Enter -1 to never stop.');
+    SetHint('Enter 100 to never stop.');
   end;
 
   with Self.ScriptSpeedLabel do
@@ -2132,85 +2388,175 @@ begin
     SetHint('This affects wait times and mouse speed.');
   end;
 
-  with Self.Message2 do
+  {with Self.Message do
   begin
     Create(tab);
-    SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.ScriptSpeedSelector.GetTop() + TControl.AdjustToDPI(45));
-    SetCaption('Only enable this if you have bank fillers setup correctly.');
-    SetFontColor(clRed);
+    SetLeft(TControl.AdjustToDPI(340));
+    SetTop(TControl.AdjustToDPI(155));
+    SetCaption('Auto Buys/Sells at Above/Below market rate.');
+    SetFontColor(clNavy);
+  end;}
+
+  with Self.BUYRAWMATERIALSCheckbox do
+  begin
+    Create(tab);
+    SetCaption("Buy Raw Materials");
+    SetLeft(TControl.AdjustToDPI(340));
+    SetTop(Self.LunarSpellLabel.GetTop() + TControl.AdjustToDPI(1));
+    SetHint('Buy raw materials when we run out?');
+    CheckBox.SetOnChange(@BUYRAWMATERIALSCheckboxChanged);
   end;
 
-  with Self.Message do
+  with Self.QuantityInputBox do
   begin
     Create(tab);
-    SetLeft(TControl.AdjustToDPI(300));
-    SetTop(TControl.AdjustToDPI(160));
-    SetCaption('Auto Buys/Sells at Above/Below market rate for faster sales.');
-    SetFontColor(clNavy);
+    SetLeft(Self.BUYRAWMATERIALSCheckbox.GetLeft() + Self.BUYRAWMATERIALSCheckbox.GetWidth() + TControl.AdjustToDPI(20));
+    SetTop(Self.LunarSpellLabel.GetTop() + TControl.AdjustToDPI(0));
+    SetWidth(100);
+    SetText('0');
   end;
 
   with Self.SELLNOTEDITEMCHECKBox do
   begin
     Create(tab);
     SetCaption("Sell Finished Item");
-    SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.Message.GetTop() + TControl.AdjustToDPI(25));
+    SetLeft(TControl.AdjustToDPI(340));
+    SetTop(Self.BUYRAWMATERIALSCheckbox.GetTop() + TControl.AdjustToDPI(25));
     SetHint('Will sell all processed items.');
   end;
 
   with Self.BUYRUNESCHECKBox do
   begin
     Create(tab);
-    SetCaption("Buy Runes - Will not work with Rune Pouch");
-    SetLeft(TControl.AdjustToDPI(300));
+    SetCaption("Buy Runes");
+    SetLeft(TControl.AdjustToDPI(340));
     SetTop(Self.SELLNOTEDITEMCHECKBox.GetTop() + TControl.AdjustToDPI(25));
-    SetHint('Will buy required runes for each spell, will only buy what is needed.');
-  end;
-
-  with Self.QuantityInputBox do
-  begin
-    Create(tab);
-    SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.BUYRUNESCHECKBox.GetTop() + TControl.AdjustToDPI(25));
-    SetWidth(100);
-    SetText('0');
-  end;
-
-  with Self.QuantityLabel do
-  begin
-    Create(tab);
-    SetLeft(Self.QuantityInputBox.GetLeft() + Self.QuantityInputBox.GetWidth() + TControl.AdjustToDPI(10));
-    SetTop(Self.QuantityInputBox.GetTop() + TControl.AdjustToDPI(3));
-    SetCaption('Amount of Raw Materials to buy?');
+    SetHint('Will buy required runes for each spell, Does not work with Rune Pouch');
   end;
 
   with Self.BankFillersCheckBox do
   begin
     Create(tab);
     SetCaption("Use Bank Fillers");
-    SetLeft(TControl.AdjustToDPI(300));
-    SetTop(Self.QuantityInputBox.GetTop() + TControl.AdjustToDPI(60));
+    SetLeft(TControl.AdjustToDPI(340));
+    SetTop(Self.BUYRUNESCHECKBox.GetTop() + TControl.AdjustToDPI(24));
     SetChecked(BANKFILLERSCHECK);
     SetHint('Enable this if you have bank fillers setup correctly.');
+    CheckBox.SetOnChange(@BankFillersCheckBoxChanged);
   end;
 
-  with BankFillersInfoLabel do
+  with Self.Message2 do
   begin
     Create(tab);
-    SetLeft(Self.BankFillersCheckBox.GetLeft() + Self.BankFillersCheckBox.GetWidth() + TControl.AdjustToDPI(10));
+    SetLeft(Self.BankFillersCheckBox.GetLeft() + Self.BankFillersCheckBox.GetWidth() + TControl.AdjustToDPI(6));
     SetTop(Self.BankFillersCheckBox.GetTop());
-    SetCaption('');
+    SetCaption('You MUST have bank fillers setup correctly.');
     SetFontColor(clRed);
+    SetVisible(BANKFILLERSCHECK);
   end;
 
-  Self.CreateBankSettings();
+  with BirdHouseSettingsCheckbox do
+  begin
+    Create(Self.Tabs[0]);
+    SetCaption('Enable Birdhouse Runs');
+    SetLeft(Self.ScriptSpeedSelector.GetLeft());
+    SetTop(Self.ScriptSpeedSelector.GetTop() + TControl.AdjustToDPI(35));
+    SetChecked(True);
+    SetHint('Enables CJ Birdhouse Runs, Settings are at the top of this tab when enabled..');
+    CheckBox.SetOnChange(@ToggleBirdhouseTabVisibility);
+  end;
+
+  with Self.EnableWebhooksCheckBox do
+  begin
+    Create(tab);
+    SetCaption('Enable discord webhooks');
+    SetLeft(Self.BirdHouseSettingsCheckbox.GetLeft());
+    SetTop(Self.BirdHouseSettingsCheckbox.GetTop() + TControl.AdjustToDPI(25));
+    SetHint('Enable or Disable Discord Webhooks notifications.');
+    SetChecked(SavedEnableWebhooks);
+    CheckBox.SetOnChange(@WebhooksCheckboxChanged);
+  end;
+
+  with Self.WebhookInfo do
+  begin
+    Create(tab);
+    SetLeft(Self.EnableWebhooksCheckBox.GetLeft());
+    SetTop(Self.EnableWebhooksCheckBox.GetTop() + TControl.AdjustToDPI(25));
+    SetCaption('Click here to learn how to generate your own Discord webhook URL');
+    SetHint('Click here to learn how to generate your own Discord webhook URL');
+    setOnClick(@OpenURL);
+    //SetFontSize(TControl.AdjustToDPI(7));
+  end;
+
+  with Self.DiscordUIDInput do
+  begin
+    Create(tab);
+    SetLeft(Self.WebhookInfo.GetLeft());
+    SetTop(Self.WebhookInfo.GetTop() + TControl.AdjustToDPI(18));
+    SetCaption('Discord UID (Optional)');
+    SetHint('This will mention you in the discord message.');
+    SetWidth(TControl.AdjustToDPI(140));
+    SetText(SavedDiscordUID);
+  end;
+
+  with Self.DiscordUIDInfo do
+  begin
+    Create(tab);
+    SetLeft(Self.DiscordUIDInput.GetLeft() + Self.DiscordUIDInput.GetWidth() + TControl.AdjustToDPI(10));
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(18));
+    SetCaption('Click here to learn how to find your Discord User ID');
+    SetHint('Click here to learn how to find your Discord User ID');
+    setOnClick(@OpenURL);
+    //SetFontSize(TControl.AdjustToDPI(7));
+  end;
+
+  with Self.WebHookInput do
+  begin
+    Create(tab);
+    SetLeft(Self.DiscordUIDInput.GetLeft());
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(45));
+    SetCaption('Discord Webhook URL');
+    SetHint('Discord Webhook URL');
+    SetWidth(TControl.AdjustToDPI(180));
+    SetText(savedWebhookURL);
+  end;
+
+  with Self.PingOnTerminatedCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Ping on script termination");
+    SetLeft(Self.WebHookInput.GetLeft());
+    SetTop(Self.WebHookInput.GetTop() + TControl.AdjustToDPI(50));
+    SetHint('Enable to ping when the script terminates cleanly');
+    SetChecked(SavedPingOnTerminated);
+  end; 
+
+  Self.CreateBirdhouseRunSettings();
+
+  WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
+
+  //Self.CreateBankSettings(); // Removed because GE is easier/less clutter
+
 
   Self.CreateAntibanManager();
 
   Self.CreateWaspLibSettings();
 
   Self.CreateAPISettings();
+
+  // Reload GUI values if they are in the .ini
+  Self.ItemSelector.SetText(SELECTEDITEM);
+  Self.ScriptSpeedSelector.SetItemIndex(Ord(SCRIPTSPEED));
+  Self.StopAtLevelInputBox.SetText(IntToStr(STOP_AT_LEVEL));
+  Self.SELLNOTEDITEMCHECKBox.SetChecked(SELLNOTEDITEMCHECK);
+  Self.BUYRUNESCHECKBox.SetChecked(BUYRUNESCHECK);
+  Self.BUYRAWMATERIALSCheckbox.SetChecked(BUYRAWMATERIALS);
+  Self.BankFillersCheckBox.SetChecked(BANKFILLERSCHECK);
+  Self.QuantityInputBox.SetText(IntToStr(QUANTITYINPUT));
+  Self.BirdHouseSettingsCheckbox.SetChecked(BIRDHOUSEENABLED);
+  
+  BUYRAWMATERIALSCheckboxChanged(Self.BUYRAWMATERIALSCheckbox.CheckBox);
+  Self.ToggleBirdhouseTabVisibility(Self.BirdHouseSettingsCheckbox.CheckBox);
 
   inherited;
 end;
