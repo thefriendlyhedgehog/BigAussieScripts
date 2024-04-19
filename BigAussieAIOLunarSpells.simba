@@ -14,6 +14,12 @@
 //
 // Birdhouse include provided by CanadianJames - https://github.com/GBScripts
 //
+//REV 18
+//Added birdhouse runs - Inclued created by CJ.
+//Added discord webhook notification support
+//Script Settings are now saved.
+//Minor code clean-up
+//GUI Rework.
 
 {$IFHASFILE Includes/Farm/BirdHouseInclude.simba}
 begin
