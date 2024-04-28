@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '18'}  
+{$DEFINE SCRIPT_REVISION := '23'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -13,13 +13,7 @@
 // SRL-T V4.7.0 / WaspLib - V18.4.8
 //
 // Birdhouse include provided by CanadianJames - https://github.com/GBScripts
-//
-//REV 18
-//Added birdhouse runs - Inclued created by CJ.
-//Added discord webhook notification support
-//Script Settings are now saved.
-//Minor code clean-up
-//GUI Rework.
+
 
 {$IFHASFILE Includes/Farm/BirdHouseInclude.simba}
 begin
@@ -454,10 +448,6 @@ begin
   else
     Exit;
   end;
-
-  StatsPayload.Setup({$macro SCRIPT_ID});
-  APIClient.TimeStamp := GetTickCount();
-
   if PINGONTERMINATED and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
   if BIRDHOUSEENABLED then
@@ -575,7 +565,7 @@ begin
   HasRunePouch := False;
   RunePouch := ('Rune pouch');
 
-  BUYRAWMATERIALS := QUANTITYINPUT > 0;
+  //BUYRAWMATERIALS := QUANTITYINPUT > 0;
 
   if SELECTEDITEM in ['Soda Ash', 'Seaweed', 'Swamp Weed'] then
   begin
@@ -1870,6 +1860,7 @@ begin
       Bank.DepositAll();
       Exit(false);
     end;
+    WaitUntil(Inventory.ContainsItem(VarrockTab), 375, RandomRange(800, 1500));
     Bank.Close();
     Options.SetZoomLevel(Random(21));
   end;
@@ -1883,13 +1874,13 @@ var
   i : Int32;
   timeout : TCountDown;
   MyPos: TPoint;
+  attemptCount: Integer;
+  bankTimeout : TCountdown;
 begin
+  attemptCount := 0;
   MyPos := Script.RSW.GetMyPos();
 
   ScriptWalker := @Script.RSW;
-
-  if Script.RSW.Regions.Find(RSRegions.VARROCK) = -1 then
-    Script.RSW.AddRegion(RSRegions.VARROCK);
 
   if not Inventory.ClickItem('Varrock teleport') then
   begin
@@ -1898,7 +1889,12 @@ begin
     TerminateScript();
   end;
 
-  Wait(2000, 3000);
+  if Script.RSW.Regions.Find(RSRegions.GRAND_EXCHANGE) = -1 then
+    Script.RSW.AddRegion(RSRegions.GRAND_EXCHANGE);
+
+  Wait(3000, 4000);
+
+  bankTimeout.Init(60000);
 
   if not WaitUntil(RSRegions.VARROCK.Contains(Script.RSW.GetMyPos()), 250, 4000) then
   begin
@@ -1906,9 +1902,20 @@ begin
     Logout.ClickLogout();
     TerminateScript();
   end;
+
+  while not bankTimeOut.IsFinished() and not Bank.IsOpen() do
+  begin
+    writeln('Attempting to open bank');
+    Bank.WalkOpen(RSObjects.GEBank);
+  end;
   
-  Bank.WalkOpen(RSObjects.GEBank); // We need this or else we wander to crafting guild bank.
+  if bankTimeout.IsFinished() and not Bank.IsOpen() then
+  begin
+    TerminateScript("Failed to open the bank after birdrun.");
+  end;
+
   Bank.DepositAll();
+  WaitUntil(not Inventory.IsFull(), 315, 5000);
 
   ItemFinder.Similarity := 0.989
 end;            
@@ -1988,6 +1995,7 @@ var
   i: Integer;
 begin
   ClearDebug();
+  XPBar.EarnedXP();
   if not MainScreen.HasInterface() then
     CurrentXP := XPBar.Read();
   GainedXP := CurrentXP - startXP;
@@ -1995,10 +2003,8 @@ begin
   ProfitAPI := Profit - PreviousProfit; 
   PreviousProfit := Profit;
 
-  XPBar.EarnedXP();
-  StatsPayload.Update(0, 0, 0);
-  if not APIClient.IsSetup or APIClient.Timer.IsFinished() then
-      APIClient.SubmitStats(APIClient.GetUUID());
+  APICLient.UpdatePayload(0, Profit, 0);
+  APIClient.SubmitStats(APIClient.GetUUID());
     
   if (Length(Antiban.Breaks) > 0) then
     NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
@@ -2572,6 +2578,13 @@ var
 {$ENDIF}
 
 begin
+
+  if FileExists(AppPath+'\Includes\Farm\BHouseInclude.simba') then
+  begin
+    DeleteFile(AppPath+'\Includes\Farm\BHouseInclude.simba');
+    DownloadToFile('https://raw.githubusercontent.com/GBScripts/SimbaScripts/main/BirdhouseInclude/BirdhouseInclude.simba', AppPath+'\Includes\Farm\BHouseInclude.simba');
+  end;
+
   {$IFDEF SCRIPT_GUI}
   if ENABLE_GUI then
     Sync(@Config.Run);
