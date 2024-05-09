@@ -1,12 +1,11 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '24'}  
+{$DEFINE SCRIPT_REVISION := '25'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 
 // =NOTE=
 // Ensure the item you want to process is at the top of your inventory.
-// Start with the staff you will use equipped.
 // If you wish to use the Rune Pouch you MUST start with it in your inventory.
 // The grand exchange features will Buy/Sell at Above/Below market prices, if an order is not filled the script will not cancel/relist you need to do this manually.
 // 
@@ -45,7 +44,6 @@ var
 
   // You ONLY need to edit these if you are not going to use the GUI //
   ENABLE_GUI: Boolean                         = True; // Enable or Disable the use of a GUI - NOTE: Some settings can only be changed in the GUI
-  STAFFCHECK: Boolean                         = True; // Set to "False" to disable the checking of required staffs.
   STOP_AT_LEVEL: Integer                      = 99; // Script will Logout and stop when this level is reached.
   CHOSENSPELL: ELunarSpell                    = BAKE_PIE;
   SELECTEDITEM: string                        = 'Berry Pie';
@@ -91,15 +89,12 @@ type
     ProcessedItemBankNoted,
     AstralRuneBank,
     ItemArray5Bank,
-    StaffBank,
-    MysticStaffBank,
     RawItemSandBank,
     CoinsBank,
     ProcessedItemBank,
-    RunePouchBank: TRSBankItem;
+    RunePouchBank,
+    DivineRunePouchBank: TRSBankItem;
 
-    StaffName,
-    MysticStaffName,
     RawItem,
     RawItem2,
     ProcessedItem,
@@ -107,7 +102,8 @@ type
     AstralRune,
     ItemArray5,
     CoinsItem,
-    RunePouch: TRSitem;
+    RunePouch,
+    DivineRunePouch: TRSitem;
 
     ShutDownTime,
     waitTimeCasting: Int64;
@@ -117,7 +113,6 @@ end;
 var
   FocusState: TFocusState;
   Items: array of TItem;
-  StaffNames: Array of String;
 
   RuneValue,
   ItemArray5Value,
@@ -156,6 +151,7 @@ var
 
   CoinsChecked: Boolean;
   HasRunePouch: Boolean;
+  HasDivineRunePouch: Boolean;
 
   Script: AIOLunarSpells;
 
@@ -564,8 +560,7 @@ begin
   end;
   HasRunePouch := False;
   RunePouch := ('Rune pouch');
-
-  //BUYRAWMATERIALS := QUANTITYINPUT > 0;
+  DivineRunePouch := ('Divine Rune Pouch');
 
   if SELECTEDITEM in ['Soda Ash', 'Seaweed', 'Swamp Weed'] then
   begin
@@ -611,6 +606,7 @@ begin
   end;
 
   RunePouchBank := TRSBankItem.Setup(RunePouch, 1, FALSE);
+  DivineRunePouchBank := TRSBankItem.Setup(DivineRunePouch, 1, FALSE);
   ProcessedItemBank := TRSBankItem.Setup(ProcessedItem, ProcessedItemQuantity, FALSE);
   RawItemBank := TRSBankItem.Setup(RawItem, RawItemQuantity, FALSE);
   ProcessedItemBankNoted := TRSBankItem.Setup(ProcessedItem, Bank.QUANTITY_ALL, True);
@@ -653,34 +649,32 @@ begin
   Timer.Start();
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   ClearDebug();
-if Inventory.ContainsItem(RunePouch) then
-begin
-  HasRunePouch := True;
-  WriteLn('Rune Pouch Found. Ensure your pouch is full.');
-  if BUYRUNESCHECK then
+  if Inventory.ContainsItem(RunePouch) then
   begin
-    BUYRUNESCHECK := False;
-    WriteLn('Rune buying is not supported with Rune Pouch - Disabling buying runes.');
+    HasRunePouch := True;
+    WriteLn('Rune Pouch Found. Ensure your pouch is full.');
+    if BUYRUNESCHECK then
+    begin
+      BUYRUNESCHECK := False;
+      WriteLn('Rune buying is not supported with Rune Pouch - Disabling buying runes.');
+    end;
   end;
-end;
-  if STAFFCHECK then
+
+  if Inventory.ContainsItem(DivineRunePouch) then
   begin
-    ItemFinder.Similarity := 0.989; // Smoke battlestaff was having Itemfinder issues. Thanks 3Garrett3 for the help fixing this bug!
-    Self.EquipmentCheck();
+    HasDivineRunePouch := True;
+    WriteLn('Divine Rune Pouch Found. Ensure your pouch is full.');
+    if BUYRUNESCHECK then
+    begin
+      BUYRUNESCHECK := False;
+      WriteLn('Rune buying is not supported with Rune Pouch - Disabling buying runes.');
+    end;
   end;
   Bank.WalkOpen();
   WaitUntil(Bank.IsOpen(), 375, 2150);
   MoveItemToTop(RawItem);
   if CHOSENSPELL = SUPERGLASS_MAKE then
     MoveItemToTop(ItemArray5);
-  if Bank.IsOpen() then
-  begin
-    if not ((Inventory.Count() = 1) and Inventory.ContainsItem('Rune Pouch')) then
-    begin
-      Bank.DepositAll();
-      WaitUntil(Inventory.Count() = 0, 375, 2150);
-    end;
-  end;
 end;
 
 // Thank you flight for this TakeScreenshot procedure 
@@ -843,10 +837,6 @@ begin
         Bank.DepositItem(item, True);
         WaitUntil(not Inventory.ContainsItem(ProcessedItem), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
       end;
-      if WaitUntil(not Inventory.ContainsItem(item.Item), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed)) then
-      begin
-        WL.Activity.Restart;
-      end;
     end;
   end
   else
@@ -860,32 +850,55 @@ end;
 
 procedure AIOLunarSpells.WithdrawAstralRunes();
 begin
-  ItemFinder.Similarity := 0.999;
+  if HasDivineRunePouch then
+  begin
+    if Inventory.ContainsItem('Divine Rune Pouch') then
+      Exit
+    else
+    begin
+      WriteLn('Looking for Divine Rune Pouch');
+      if not bank.IsOpen() then
+        Bank.WalkOpen(RSObjects.GEBank);
+      WaitUntil(Bank.IsOpen(), 375, 2150);
+
+      Bank.WithdrawItem(DivineRunePouchBank, True);
+      WaitUntil(Inventory.ContainsItem('Divine Rune Pouch'), 358, 1250);
+
+      if not Inventory.ContainsItem('Divine Rune Pouch') then
+      begin
+        WriteLn('Divine Rune Pouch not found in the bank.');
+        HasDivineRunePouch := False;
+      end
+      else
+        Exit;
+    end;
+  end;
+
   if HasRunePouch then
   begin
-    if not Inventory.ContainsItem('Rune pouch') then
+    if Inventory.ContainsItem('Rune pouch') then
+      Exit
+    else
     begin
-      WriteLn('Looking for RunePouch');
+      WriteLn('Looking for Rune Pouch');
+      if not bank.IsOpen() then
+        Bank.WalkOpen(RSObjects.GEBank);
+      WaitUntil(Bank.IsOpen(), 375, 2150);
+
       Bank.WithdrawItem(RunePouchBank, True);
       WaitUntil(Inventory.ContainsItem('Rune pouch'), 358, 1250);
-      
+
       if not Inventory.ContainsItem('Rune pouch') then
       begin
         WriteLn('Rune Pouch not found in the bank.');
         HasRunePouch := False;
       end
       else
-      begin
-        exit;
-      end;
-    end
-    else
-    begin
-      exit;
+        Exit;
     end;
   end;
 
-  if Inventory.CountItemStack(AstralRune) < 30 then // We need to make sure we have enough runes for every cast, This is a crude workaround but the easiest option
+  if Inventory.CountItemStack(AstralRune) < 30 then
   begin
     WriteLn('Looking for ' + AstralRune);
     Bank.WithdrawItem(AstralRuneBank, True);
@@ -908,7 +921,6 @@ begin
       WriteLn('We are out of ' + AstralRune + '. Will purchase ' + IntToStr(AstralRunesToBuy) + ' runes.');
     end;
   end;
-  ItemFinder.Similarity := 0.989;
 end;
 
 procedure AIOLunarSpells.WithdrawRawItem(RawItem: TRSitem; RawItemBank: TRSBankItem; QuantityInput: integer; BUYRAWMATERIALS: boolean);
@@ -916,7 +928,6 @@ var
   attempts: Int32;
   requiredQuantity: Int32;
 begin
-  ItemFinder.Similarity := 0.989;
   if RawItem = 'Giant seaweed' then
     requiredQuantity := 3
   else
@@ -1001,7 +1012,7 @@ var
 begin
   astralRunesCount := Inventory.CountItemStack(AstralRune);
 
-  if not HasRunePouch then
+  if not HasRunePouch and not HasDivineRunePouch then
   begin  
     if (CHOSENSPELL = TAN_LEATHER) or (CHOSENSPELL = RECHARGE_DRAGONSTONE) or (CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = PLANK_MAKE) then
       itemArray5Count := Inventory.CountItemStack(ItemArray5)
@@ -1030,7 +1041,7 @@ end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
-  if HasRunePouch and (CHOSENSPELL <> SUPERGLASS_MAKE) then
+  if HasRunePouch or HasDivineRunePouch and (CHOSENSPELL <> SUPERGLASS_MAKE) then
   begin
     exit;
   end;
@@ -1118,6 +1129,8 @@ begin
     CastCount += 1;
     TotalActions += 1;
   end;
+
+  XPBar.EarnedXP(); // This should activity.reset our timer
 
   if (Chat.FindLastMessage('You do not have enough', [CHAT_COLOR_BLACK])) or 
     ((CHOSENSPELL = PLANK_MAKE) and Chat.FindLastMessage('coins', [CHAT_COLOR_BLACK])) or
@@ -1679,95 +1692,6 @@ begin
   end;
 end;
 
-procedure AIOLunarSpells.EquipmentCheck();
-var
-  StaffList: String;
-  StaffBankItem: TRSBankItem;
-begin
-  if not Magic.IsSpellBook(ERSSpellBook.LUNAR) then
-  begin
-    TerminateScript('You must be on the Lunar Spellbook, Script stopping.');
-    Exit;
-  end;
-
-  case CHOSENSPELL of
-    BAKE_PIE, HUMIDIFY:
-      StaffNames := ['Steam battlestaff', 'Mystic steam staff'];
-    SPIN_FLAX:
-      StaffNames := ['Staff of air', 'Mist battlestaff', 'Mystic mist staff', 'Smoke battlestaff', 'Mystic smoke staff', 'Dust battlestaff', 'Mystic dust staff'];
-    SUPERGLASS_MAKE:
-      StaffNames := ['Smoke battlestaff', 'Mystic smoke staff', 'Staff of air', 'Tome of fire'];
-    TAN_LEATHER:
-      StaffNames := ['Staff of fire', 'Steam battlestaff', 'Mystic steam staff', 'Lava battlestaff', 'Mystic lava staff', 'Smoke battlestaff', 'Mystic smoke staff'];
-    STRING_JEWELLERY:
-      StaffNames := ['Mud battlestaff', 'Mystic mud staff'];
-    PLANK_MAKE:
-      StaffNames := ['Staff of earth', 'Dust battlestaff', 'Mystic dust staff', 'Mud battlestaff', 'Mystic mud staff', 'Lava battlestaff', 'Mystic lava staff'];
-    RECHARGE_DRAGONSTONE:
-      StaffNames := ['Staff of water', 'Mist battlestaff', 'Mystic mist staff', 'Mud battlestaff', 'Mystic mud staff', 'Steam battlestaff', 'Mystic steam staff', 'Kodai wand', 'Tome of water'];
-  end;
-  // Open the equipment screen
-  Equipment.Open();
-  WaitUntil(Equipment.IsOpen(), 375, 2100);
-  WriteLn('Looking for ' + StaffName + ' Equipped.');
-  for StaffName in StaffNames do
-  begin
-    if Equipment.ContainsItem(StaffName) then
-    begin
-      WriteLn('Found ' + StaffName + ' Equipped');
-      Exit;
-    end;
-  end;
-
-  WriteLn('Looking for staff in inventory.');
-  Inventory.Open();
-  WaitUntil(Inventory.IsOpen(), 375, 2100);
-  for StaffName in StaffNames do
-  begin
-    if Inventory.ContainsItem(StaffName) then
-    begin
-      WriteLn('Found ' + StaffName + ' In Inventory, Equipping.');
-      Inventory.ClickItem(StaffName);
-      Exit;
-    end;
-  end;
-
-  if not Bank.IsOpen() then
-    Bank.Open();
-    WaitUntil(Bank.IsOpen, 375, 2150);
-
-  if Bank.IsOpen() then
-  begin
-    ItemFinder.Similarity := 0.989;
-    WaitUntil(Bank.IsOpen, 375, 2150);
-    for StaffName in StaffNames do
-    begin
-      WriteLn('Looking for ' + StaffName + ' In bank.');
-      StaffBankItem := TRSBankItem.Setup(StaffName, 1, False);
-      
-      if Bank.ContainsItem(StaffBankItem) then
-      begin
-        Bank.WithdrawItem(StaffBankItem, True);
-        WaitUntil(Inventory.ContainsItem(StaffName), 385, RandomRange(1200, 1500));
-        if Inventory.ContainsItem(StaffName) then    
-        begin
-          WriteLn('Found ' + StaffName + '.');
-          MainScreen.CloseInterface(True);
-          WaitUntil(not Mainscreen.HasInterface(), 100, 2000);
-          WriteLn('Equipping ' + StaffName + '.');
-          Inventory.ClickItem(StaffName);
-          Wait(Random(200, 500));
-          Exit;
-        end;
-      end;
-    end;
-  end;
-
-  StaffList := BAJoin(', ', StaffNames);
-  WriteLn('No valid staff found equipped, in inventory, or in bank. Supported staffs/items are: ' + StaffList);
-  TerminateScript()
-end;
-
 procedure AIOLunarSpells.doAction();
 begin
   case ChosenSpell of
@@ -1824,7 +1748,6 @@ var
   VarrockTab: TRSItem;
   VarrockTabBank: TRSBankItem;
 begin
-  ItemFinder.Similarity := 0.999;
   VarrockTab := ('Varrock teleport');
   VarrockTabBank := TRSBankItem.Setup(VarrockTab, 1, FALSE);
 
@@ -1863,11 +1786,12 @@ begin
       Bank.DepositAll();
       Exit(false);
     end;
+
     WaitUntil(Inventory.ContainsItem(VarrockTab), 375, RandomRange(800, 1500));
     Bank.Close();
-    Options.SetZoomLevel(Random(21));
+    Options.SetNPCAttackOption(ERSAttackOption.HIDDEN);
+    Options.SetZoomLevel(Random(10));
   end;
-
   Result := true;
 end;
 
@@ -1920,8 +1844,6 @@ begin
   Bank.DepositAll();
   WaitUntil(not Inventory.IsFull(), 315, 5000);
   CoinsChecked := False; // This resets the coincheck so we withdraw again if plankmake
-
-  ItemFinder.Similarity := 0.989
 end;            
 // ON COMPLETE FOR CJ BIRDHOUSE INCLUDE
 
