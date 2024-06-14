@@ -657,6 +657,7 @@ procedure DraynorAgility.ProcessObstacles();
 var
   TRes: ResultEx;
   Recal, StartOver: Boolean;
+  TargetMinAngle, TargetMaxAngle: Int32;
 begin
   Recal := False;
   StartOver := False;
@@ -672,7 +673,18 @@ begin
         Self.HandleFailedObstacle();
         Exit;
       end;
-      Antiban.RandomRotate();
+
+      if (Self.Obstacles[Index].AngleMin <> 0) and (Self.Obstacles[Index].AngleMax <> 0) then
+      begin
+        TargetMinAngle := Self.Obstacles[Index].AngleMin;
+        TargetMaxAngle := Self.Obstacles[Index].AngleMax;
+        Minimap.RotateWithinAngles(TargetMinAngle, TargetMaxAngle);
+      end
+      else
+      begin
+        Antiban.RandomRotate();
+      end;
+
       Recal := True;
     end;
     if Recal then Break;
