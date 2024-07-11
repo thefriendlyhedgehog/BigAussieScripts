@@ -59,14 +59,6 @@ Type
     
   end;
 
-procedure TMouse.Move(Destination: TPoint); override;
-begin
-  if TELEPORTMOUSE then
-    Mouse.Teleport(Destination)
-  else
-    inherited;
-end;
-
 procedure DraynorAgility.HighlightRect(Rect: TRectangle; Color, Opacity: Integer);
 begin
     RSClient.Image.Clear(MainScreen.Bounds);
@@ -317,7 +309,10 @@ begin
   Self.HighlightRect(Minimap.PointToMsRect(TrueDot), clRed, 80);
   for TPA in ATPA do
   begin
-    Mouse.Move(TPA.Mean);
+    if TELEPORTMOUSE then
+      Mouse.Teleport(TPA.Mean)
+    else
+      Mouse.Move(TPA.Mean);
     if MainScreen.IsUpText(['Take Ma', 'ark of Gr'], 75) then Break;
   end;
 
@@ -377,7 +372,10 @@ begin
           if Length(ATPA) < 1 then Continue;
           for TPA in ATPA do
           begin
-            Mouse.Move(TPA.Mean);
+            if TELEPORTMOUSE then
+              Mouse.Teleport(TPA.Mean)
+            else
+              Mouse.Move(TPA.Mean);
             if MainScreen.IsUpText(Obs.UpText, 75) then Exit(True);
           end;
         end;
@@ -386,7 +384,10 @@ begin
         for i := 1 to SRL.NormalRange(2, 4) do
         begin
           Pt := SRL.RandomPoint(MSRect);
-          Mouse.Move(Pt);
+          if TELEPORTMOUSE then
+            Mouse.Teleport(Pt)
+          else
+            Mouse.Move(Pt);
           if MainScreen.IsUpText(Obs.UpText, 75) then Exit(True);
         end;
       end;
