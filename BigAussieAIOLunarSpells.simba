@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '30'}  
+{$DEFINE SCRIPT_REVISION := '31'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -58,6 +58,7 @@ var
   DiscordUID: String                          = '';
   ENABLEWEBHOOKS: Boolean                     = True; 
   PINGONTERMINATED: Boolean                   = True; 
+  BHOPENNESTS: Boolean                        = False;
 //===========================================
 
 begin
@@ -1815,6 +1816,7 @@ var
   MyPos: TPoint;
   attemptCount: Integer;
   bankTimeout : TCountdown;
+  Nests: TRSItemArray;
 begin
   attemptCount := 0;
   MyPos := Script.RSW.GetMyPos();
@@ -1840,6 +1842,24 @@ begin
     Writeln("Failed to teleport");
     Logout.ClickLogout();
     TerminateScript();
+  end;
+
+  if BHOPENNESTS then
+  begin
+    while Inventory.ContainsAny(Nests) do
+    begin
+      for i := 0 to High(Nests) do
+      begin
+        if Inventory.ContainsItem(Nests[i]) then
+        begin
+          writeln('Searching birds nests');
+          Wait(100, 200);
+          Inventory.ClickItem(Nests[i]);
+          if Inventory.IsFull() then
+            Exit;
+        end;
+      end;
+    end;
   end;
 
   while not bankTimeOut.IsFinished() and not Bank.IsOpen() do
@@ -2033,6 +2053,7 @@ type
     SELLNOTEDITEMCHECKBox, BUYRUNESCHECKBox, BUYRAWMATERIALSCheckbox, BankFillersCheckBox, BirdHouseSettingsCheckbox: TLabeledCheckBox;
     LunarSpellSelector: TComboBox;
     ItemSelector: TComboBox;
+    OpenNestsCheckBox: TLabeledCheckBox;
     // Discord Webhooks
     PingOnTerminatedCheckBox, EnableWebhooksCheckBox: TLabeledCheckBox;
     WebhookLabel , DiscordUIDLabel, WebhookInfo, DiscordUIDInfo: TLabel;
@@ -2052,7 +2073,15 @@ begin
 end;
 
 procedure TConfig.StartScript(sender: TObject); override; 
+var
+  Username: String;
 begin
+ if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+  if Username = '' then Exit;
+
   SELECTEDITEM := Self.ItemSelector.GetText();
   CHOSENSPELL := ELunarSpell(Self.LunarSpellSelector.GetItemIndex());
   SCRIPTSPEED := ScriptSpeedTypes(Self.ScriptSpeedSelector.GetItemIndex());
@@ -2064,28 +2093,30 @@ begin
   STOP_AT_LEVEL := StrToInt(Self.StopAtLevelInputBox.GetText);
   DiscordUID := Self.DiscordUIDInput.GetText;
   WEBHOOKURL := Self.WebHookInput.GetText;
+  BHOPENNESTS := Self.OpenNestsCheckBox.IsChecked();
   ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
   PINGONTERMINATED := Self.PingOnTerminatedCheckBox.IsChecked();
   BIRDHOUSEENABLED := Self.BirdHouseSettingsCheckbox.IsChecked();
-  WriteINI('Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
-  WriteINI('Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
-  WriteINI('Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'CHOSENSPELL', SpellToString(CHOSENSPELL), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'SELECTEDITEM', SELECTEDITEM, 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'SCRIPTSPEED', ScriptSpeedToString(SCRIPTSPEED), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'SELLNOTEDITEMCHECK', BoolToStr(SELLNOTEDITEMCHECK, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'BUYRUNESCHECK', BoolToStr(BUYRUNESCHECK, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'BUYRAWMATERIALS', BoolToStr(BUYRAWMATERIALS, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'BANKFILLERSCHECK', BoolToStr(BANKFILLERSCHECK, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'QUANTITYINPUT', IntToStr(QUANTITYINPUT), 'Configs/BASettings.ini');
-  WriteINI('AIO Lunar Settings', 'STOP_AT_LEVEL', IntToStr(STOP_AT_LEVEL), 'Configs/BASettings.ini');
-  WriteINI('Birdhouse Settings', 'Enabled', BoolToStr(BIRDHOUSEENABLED, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('Birdhouse Settings', 'LogType', IntToStr(Ord(BirdHouseRunner.LogType)), 'Configs/BASettings.ini');
-  WriteINI('Birdhouse Settings', 'Seed', BirdHouseRunner.Seed, 'Configs/BASettings.ini');
-  WriteINI('Birdhouse Settings', 'RunIntervalMinutes', ToStr(BirdHouseRunner.TaskInterval), 'Configs/BASettings.ini');
-  WriteINI('Birdhouse Settings', 'UseBestLog', BoolToStr(BirdHouseRunner.AlwaysUseBestLog, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI('Birdhouse Settings', 'CraftWhileNav', BoolToStr(BirdHouseRunner.NeedClockworks, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'CHOSENSPELL', SpellToString(CHOSENSPELL), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'SELECTEDITEM', SELECTEDITEM, 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'SCRIPTSPEED', ScriptSpeedToString(SCRIPTSPEED), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'SELLNOTEDITEMCHECK', BoolToStr(SELLNOTEDITEMCHECK, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'BUYRUNESCHECK', BoolToStr(BUYRUNESCHECK, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'BUYRAWMATERIALS', BoolToStr(BUYRAWMATERIALS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'BANKFILLERSCHECK', BoolToStr(BANKFILLERSCHECK, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'QUANTITYINPUT', IntToStr(QUANTITYINPUT), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'STOP_AT_LEVEL', IntToStr(STOP_AT_LEVEL), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'Enabled', BoolToStr(BIRDHOUSEENABLED, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'LogType', IntToStr(Ord(BirdHouseRunner.LogType)), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'Seed', BirdHouseRunner.Seed, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'RunIntervalMinutes', ToStr(BirdHouseRunner.TaskInterval), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'UseBestLog', BoolToStr(BirdHouseRunner.AlwaysUseBestLog, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'CraftWhileNav', BoolToStr(BirdHouseRunner.NeedClockworks, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Birdhouse Settings', 'OpenNests', BoolToStr(BHOPENNESTS, 'true', 'false'), 'Configs/BASettings.ini');
 
   inherited;
 end;
@@ -2096,6 +2127,28 @@ begin
     OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks')
   else if Sender = Self.DiscordUIDInfo then
     OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
+end;
+
+procedure TConfig.AddReturnMethodDropdown();
+var
+  tab: TTabSheet;
+begin
+  // Don't tell CJ I added to his GUI
+  for tab in Self.Tabs do
+  begin
+    if tab.GetCaption() = 'Birdhouse Settings' then
+    begin
+      with Self.OpenNestsCheckBox do
+      begin
+        Create(tab);
+        SetCaption('Open Nests');
+        SetLeft(TControl.AdjustToDPI(570));
+        SetTop(TControl.AdjustToDPI(85));
+        SetChecked(BHOPENNESTS);
+        SetHint('Enable or disable opening nests after birdhouse run.');
+      end;
+    end;
+  end;
 end;
 
 procedure TConfig.WebhooksCheckboxChanged(Sender: TObject);
@@ -2202,27 +2255,37 @@ begin
 end;
 
 procedure TConfig.Init();
+var
+  Username: String;
+  BHIncludeGUIOpenNests: Boolean;
 begin
+ if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+
+  if Username = '' then Exit;
   writeln('Reading previous settings.');
-  SavedDiscordUID := ReadINI('Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
-  SavedWebhookURL := ReadINI('Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
-  SavedEnableWebhooks := StrToBoolDef(ReadINI('Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
-  SavedPingOnTerminated := StrToBoolDef(ReadINI('Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'), True); 
-  CHOSENSPELL := StringToSpell(ReadINI('AIO Lunar Settings', 'CHOSENSPELL', 'Configs/BASettings.ini'));
-  SELECTEDITEM := ReadINI('AIO Lunar Settings', 'SELECTEDITEM', 'Configs/BASettings.ini');
-  SCRIPTSPEED := StringToScriptSpeed(ReadINI('AIO Lunar Settings', 'SCRIPTSPEED', 'Configs/BASettings.ini'));
-  SELLNOTEDITEMCHECK := StrToBoolDef(ReadINI('AIO Lunar Settings', 'SELLNOTEDITEMCHECK', 'Configs/BASettings.ini'), False);
-  BUYRUNESCHECK := StrToBoolDef(ReadINI('AIO Lunar Settings', 'BUYRUNESCHECK', 'Configs/BASettings.ini'), False);
-  BUYRAWMATERIALS := StrToBoolDef(ReadINI('AIO Lunar Settings', 'BUYRAWMATERIALS', 'Configs/BASettings.ini'), False);
-  BANKFILLERSCHECK := StrToBoolDef(ReadINI('AIO Lunar Settings', 'BANKFILLERSCHECK', 'Configs/BASettings.ini'), False);
-  QUANTITYINPUT := StrToIntDef(ReadINI('AIO Lunar Settings', 'QUANTITYINPUT', 'Configs/BASettings.ini'), 0);
-  STOP_AT_LEVEL := StrToIntDef(ReadINI('AIO Lunar Settings', 'STOP_AT_LEVEL', 'Configs/BASettings.ini'), -1);
-  BIRDHOUSEENABLED := StrToBoolDef(ReadINI('Birdhouse Settings', 'Enabled', 'Configs/BASettings.ini'), True);
-  BHIncludeGUILogType := ERSLogType(StrToIntDef(ReadINI('Birdhouse Settings', 'LogType', 'Configs/BASettings.ini'), 0));
-  BHIncludeGUISeed := ReadINI('Birdhouse Settings', 'Seed', 'Configs/BASettings.ini');
-  BHIncludeGUIRunIntervalMinutes := StrToIntDef(ReadINI('Birdhouse Settings', 'RunIntervalMinutes', 'Configs/BASettings.ini'), 0) div 60000; // We need to div because the read is MS
-  BHIncludeGUIUseBestLog := StrToBoolDef(ReadINI('Birdhouse Settings', 'UseBestLog', 'Configs/BASettings.ini'), False);
-  BHIncludeGUICraftWhileNav := StrToBoolDef(ReadINI('Birdhouse Settings', 'CraftWhileNav', 'Configs/BASettings.ini'), False);
+  SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
+  SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
+  SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+  SavedPingOnTerminated := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'), True); 
+  CHOSENSPELL := StringToSpell(ReadINI(Username + ' AIO Lunar Settings', 'CHOSENSPELL', 'Configs/BASettings.ini'));
+  SELECTEDITEM := ReadINI(Username + ' AIO Lunar Settings', 'SELECTEDITEM', 'Configs/BASettings.ini');
+  SCRIPTSPEED := StringToScriptSpeed(ReadINI(Username + ' AIO Lunar Settings', 'SCRIPTSPEED', 'Configs/BASettings.ini'));
+  SELLNOTEDITEMCHECK := StrToBoolDef(ReadINI(Username + ' AIO Lunar Settings', 'SELLNOTEDITEMCHECK', 'Configs/BASettings.ini'), False);
+  BUYRUNESCHECK := StrToBoolDef(ReadINI(Username + ' AIO Lunar Settings', 'BUYRUNESCHECK', 'Configs/BASettings.ini'), False);
+  BUYRAWMATERIALS := StrToBoolDef(ReadINI(Username + ' AIO Lunar Settings', 'BUYRAWMATERIALS', 'Configs/BASettings.ini'), False);
+  BANKFILLERSCHECK := StrToBoolDef(ReadINI(Username + ' AIO Lunar Settings', 'BANKFILLERSCHECK', 'Configs/BASettings.ini'), False);
+  QUANTITYINPUT := StrToIntDef(ReadINI(Username + ' AIO Lunar Settings', 'QUANTITYINPUT', 'Configs/BASettings.ini'), 0);
+  STOP_AT_LEVEL := StrToIntDef(ReadINI(Username + ' AIO Lunar Settings', 'STOP_AT_LEVEL', 'Configs/BASettings.ini'), -1);
+  BIRDHOUSEENABLED := StrToBoolDef(ReadINI(Username + ' Birdhouse Settings', 'Enabled', 'Configs/BASettings.ini'), True);
+  BHIncludeGUILogType := ERSLogType(StrToIntDef(ReadINI(Username + ' Birdhouse Settings', 'LogType', 'Configs/BASettings.ini'), 0));
+  BHIncludeGUISeed := ReadINI(Username + ' Birdhouse Settings', 'Seed', 'Configs/BASettings.ini');
+  BHIncludeGUIRunIntervalMinutes := StrToIntDef(ReadINI(Username + ' Birdhouse Settings', 'RunIntervalMinutes', 'Configs/BASettings.ini'), 0) div 60000; // We need to div because the read is MS
+  BHIncludeGUIUseBestLog := StrToBoolDef(ReadINI(Username + ' Birdhouse Settings', 'UseBestLog', 'Configs/BASettings.ini'), False);
+  BHIncludeGUICraftWhileNav := StrToBoolDef(ReadINI(Username + ' Birdhouse Settings', 'CraftWhileNav', 'Configs/BASettings.ini'), False);
+  BHIncludeGUIOpenNests := StrToBoolDef(ReadINI(Username + ' Birdhouse Settings', 'OpenNests', 'Configs/BASettings.ini'), False);
 end;
 
 // Thanks to Torwent for the help <3
@@ -2484,6 +2547,7 @@ begin
   end; 
 
   Self.CreateBirdhouseRunSettings();
+  Self.AddReturnMethodDropdown();
 
   WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
 
