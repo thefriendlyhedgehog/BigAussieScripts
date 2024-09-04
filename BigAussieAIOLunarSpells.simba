@@ -787,7 +787,7 @@ begin
     offerStatus := GrandExchange.GetOfferStatus(slotNumber);
   until (offerStatus.Progress = 100) or ((GetTimeRunning() - startTime) > RandomRange(160000, 210000));
 
-  if offerStatus.Progress < 100 then
+  if offerStatus.Progress = 0 then
   begin
     WriteLn('The buy offer for ' + itemName + ' has not been fully fulfilled after 3 minutes');
     Logout.ClickLogout();
