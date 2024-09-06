@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -846,6 +846,20 @@ begin
   begin
     if IsEndGameInterfaceOpen() then
       CloseEndGameInterface();
+    
+    if Inventory.ContainsItem('Brewin'' Guide') then
+    begin
+      writeln('Got book by accident, dropping it.');
+      Inventory.ShiftDrop(['Brewin'' Guide'], DROP_PATTERN_SNAKE);
+      WaitUntil(not Inventory.ContainsItem('Brewin'' Guide'), 65, 4000);
+    end;
+
+    if Inventory.CountEmptySlots() < 28 then
+    begin
+      writeln('Inventory is not empty. Terminating script.');
+      TerminateScript();
+    end;
+
     writeln('Attempting to join team');
     TeamNPC.WalkSelectOption(['Join-Crew']);
     Minimap.WaitPlayerMoving;
@@ -859,10 +873,10 @@ begin
         Antiban.RandomRotate();
         WL.Activity.Restart();
 
-      if attempts >= 20 then
+      if attempts >= 50 then
       begin
-        attempts := 0;
-        exit;
+        writeln('Failed to join team after 50 attempts, Terminating.');
+        TerminateScript();
       end;
     end;
   end;
