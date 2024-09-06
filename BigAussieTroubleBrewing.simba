@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -553,6 +553,18 @@ begin
   Exit(True);
 end;
 
+procedure TroubleBrewing.CheckGameChatActive();
+var
+  ActiveButton: ERSChatButton;
+begin
+  ActiveButton := ChatButtons.GetActive();
+  if ActiveButton <> ERSChatButton.GAME_CHAT then
+  begin
+    WriteLn('Game Chat is not active. Activating Game Chat...');
+    ChatButtons.Open(ERSChatButton.GAME_CHAT);
+  end
+end;
+
 procedure TroubleBrewing.SetupObjects();
 begin
   writeln('Setting up objects');
@@ -761,6 +773,7 @@ begin
   POEEarnedText := OCR.Recognize(POEBox, ocrFilter, RS_FONT_QUILL_8);
   POEEarned := StrToIntDef(POEEarnedText, 0);
   TotalPOEEarned := TotalPOEEarned + POEEarned;
+  Writeln('Added POE: ' + POEEarnedText);
   EndGameCloseButtonBox := [487, 9, 510, 31];
   if IsEndGameInterfaceOpen() then
   begin
@@ -818,21 +831,41 @@ begin
         Mouse.Click(MOUSE_RIGHT);
         ChooseOption.Select('Take-5');
         Wait(250, 300);
-        if IsInterfaceOpen() then
-          CloseInterface();
       end;
     end;
   end;
 end;
 
 procedure TroubleBrewing.DO_ENTER_GAME();
+var
+  attempts: Integer;
 begin
-  if IsEndGameInterfaceOpen() then
-    CloseEndGameInterface();
-  writeln('Attempting to join team');
-  TeamNPC.WalkSelectOption(['Join-Crew']);
-  Minimap.WaitPlayerMoving;
-  WaitUntil(Self.GetLocation() = INLOBBYBOX, 65, 1600);
+  attempts := 0;
+
+  while Self.GetLocation() <> INLOBBYBOX do
+  begin
+    if IsEndGameInterfaceOpen() then
+      CloseEndGameInterface();
+    writeln('Attempting to join team');
+    TeamNPC.WalkSelectOption(['Join-Crew']);
+    Minimap.WaitPlayerMoving;
+    WaitUntil(Self.GetLocation() = INLOBBYBOX, 65, 1600);
+
+    if Self.GetLocation() <> INLOBBYBOX then
+    begin
+      Inc(attempts);
+
+      if attempts mod 10 = 0 then
+        Antiban.RandomRotate();
+        WL.Activity.Restart();
+
+      if attempts >= 20 then
+      begin
+        attempts := 0;
+        exit;
+      end;
+    end;
+  end;
 end;
 
 procedure TroubleBrewing.GET_TIME_REMAINING();
@@ -1050,6 +1083,7 @@ var
   BarkSlots: TIntegerArray;
   BarkDeposited: Integer;
   attempt: Integer;
+  currentMessage: String;
 begin
   if (Self.GetLocation() = NORTHHOUSEUPPER) then
   begin
@@ -1069,6 +1103,20 @@ begin
   attempt := 0;
   while Inventory.FindItem(ScrapeyBark, BarkSlots) and (Length(BarkSlots) > 1) and (attempt < 30) do
   begin
+    if IsEndGameInterfaceOpen() then
+      Exit;
+    currentMessage := Chat.GetMessage(CHAT_INPUT_LINE - 1, [CHAT_COLOR_BLACK]);
+    if ('fire' in currentMessage) or ('nothing' in currentMessage) then
+    begin
+      writeln('Hopper is on fire or broken sad face, We just gonna wait a bit.');
+      Timer.Start();
+      while Timer.ElapsedTime < Random(60000, 120000) do
+      begin
+        Wait(1000);
+        if Self.GetLocation() = OUTSIDEOFLOBBY then
+          Exit;
+      end;
+    end
     Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
     WL.Activity.Restart();
     if (Self.GetLocation() = SOUTHHOUSEUPPER) then
@@ -1097,7 +1145,6 @@ begin
   begin
     writeln('Extra bark failsafe.');
     Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
-
     if (Self.GetLocation() = SOUTHHOUSEUPPER) then
     begin
       if ScrapyBarkHopperSouth.Find(HopperCoords) then
@@ -1429,6 +1476,7 @@ begin
   Options.SetZoomLevel(Random(15, 25));
   DisplayName := Chat.GetDisplayName();
   Mouse.Speed := SRL.NormalRange(22, 28);
+  CheckGameChatActive();
   if PINGONTERMINATED and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
   // If this works much love to andrew <3 buy net hunter
