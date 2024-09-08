@@ -571,7 +571,7 @@ begin
     RawItemQuantity := 13;
     ItemArray5Quantity := 13;
     ProcessedItemQuantity := Bank.QUANTITY_ALL;
-    ItemFinder.Similarity := 0.989;
+    ItemFinder.Similarity := 0.989; // Maybe finds sand better?
   end
   else if SELECTEDITEM = 'Giant Seaweed' then
   begin
@@ -863,6 +863,7 @@ end;
 
 procedure AIOLunarSpells.WithdrawAstralRunes();
 begin
+
   if HasDivineRunePouch then
   begin
     if Inventory.ContainsItem('Divine Rune Pouch') then
@@ -1054,37 +1055,57 @@ end;
 
 procedure AIOLunarSpells.Withdraw5Array();
 begin
-  if HasRunePouch or HasDivineRunePouch and (CHOSENSPELL <> SUPERGLASS_MAKE) then
+  if (HasRunePouch or HasDivineRunePouch) and (CHOSENSPELL <> SUPERGLASS_MAKE) then
   begin
     exit;
   end;
-  if (Inventory.CountItemStack(ItemArray5) < 30) and (CHOSENSPELL <> HUMIDIFY) then
+
+  if (CHOSENSPELL = SUPERGLASS_MAKE) then
   begin
-    WriteLn('Looking for ' + ItemArray5);
-    Bank.WithdrawItem(ItemArray5Bank, True);
-    WaitUntil(Inventory.ContainsItem(ItemArray5), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
-    if Inventory.CountItemStack(ItemArray5) < 30 then
+    if Inventory.CountItem(ItemArray5) < 23 then
     begin
-      if BUYRUNESCHECK then
+      WriteLn('Looking for ' + ItemArray5);
+      Bank.WithdrawItem(ItemArray5Bank, True);
+      WaitUntil(Inventory.ContainsItem(ItemArray5), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      if Inventory.CountItem(ItemArray5) < 3 then
       begin
-        if RawItem = 'Flax' then
-          Array5QuantityToBuy := (2 * QuantityInput) div 5
-        else // Tan Leather Math
-          Array5QuantityToBuy := QuantityInput div 5;
-        WriteLn('We are out of ' + ItemArray5 + '. Will purchase ' + IntToStr(Array5QuantityToBuy) + ' runes.');
+        if BUYRAWMATERIALS then
+        begin
+          if RawItem = 'Giant seaweed' then
+            Array5QuantityToBuy := (18 * QuantityInput) div 3
+          else
+            Array5QuantityToBuy := QuantityInput;
+          WriteLn('Will purchase ' + IntToStr(Array5QuantityToBuy) + ' ' + ItemArray5);
+        end;
       end;
-      if BUYRAWMATERIALS then
+    end;
+  end
+  else
+  begin
+    if (Inventory.CountItemStack(ItemArray5) < 30) and (CHOSENSPELL <> HUMIDIFY) then
+    begin
+      WriteLn('Looking for ' + ItemArray5);
+      Bank.WithdrawItem(ItemArray5Bank, True);
+      WaitUntil(Inventory.ContainsItem(ItemArray5), GetRandomRangeShort(ScriptSpeed), GetRandomRangeLong(ScriptSpeed));
+      if Inventory.CountItemStack(ItemArray5) < 30 then
       begin
-        if RawItem = 'Giant seaweed' then
-          Array5QuantityToBuy := (18 * QuantityInput) div 3
-        else if CHOSENSPELL = RECHARGE_DRAGONSTONE then
-          Array5QuantityToBuy := QuantityInput
-        else
-          Array5QuantityToBuy := QuantityInput;
-        WriteLn('Will purchase ' + IntToStr(Array5QuantityToBuy) + ' ' + ItemArray5);
+        if BUYRUNESCHECK then
+        begin
+          if RawItem = 'Flax' then
+            Array5QuantityToBuy := (2 * QuantityInput) div 5
+          else // Tan Leather Math
+            Array5QuantityToBuy := QuantityInput div 5;
+          WriteLn('We are out of ' + ItemArray5 + '. Will purchase ' + IntToStr(Array5QuantityToBuy) + ' runes.');
+        end;
+        if BUYRAWMATERIALS then
+        begin
+          if CHOSENSPELL = RECHARGE_DRAGONSTONE then
+            Array5QuantityToBuy := QuantityInput;
+          WriteLn('Will purchase ' + IntToStr(Array5QuantityToBuy) + ' ' + ItemArray5);
+        end;
       end;
-    end; 
-  end; 
+    end;
+  end;
 end;
 
 // Probly an easier way to findlastmessage in SRL but I couldn't find it quickly so here we are...
