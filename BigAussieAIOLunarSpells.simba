@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '31'}  
+{$DEFINE SCRIPT_REVISION := '33'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -630,7 +630,10 @@ begin
     ItemArray5Value := ItemData.GetAverage(ItemArray5);
   end;
 
-  Self.RSW.Setup([RSRegions.GRAND_EXCHANGE]);
+  if birdhouseenabled then
+    Self.RSW.Setup([RSRegions.GRAND_EXCHANGE])
+  else
+    Self.RSW.SetupNamedRegion();
 
   case SCRIPTSPEED of
     SLOW: Mouse.Speed := Random(12, 14);
@@ -872,7 +875,7 @@ begin
     begin
       WriteLn('Looking for Divine Rune Pouch');
       if not bank.IsOpen() then
-        Bank.WalkOpen(RSObjects.GEBank);
+        Bank.WalkOpen();
       WaitUntil(Bank.IsOpen(), 375, 2150);
 
       Bank.WithdrawItem(DivineRunePouchBank, True);
@@ -896,7 +899,7 @@ begin
     begin
       WriteLn('Looking for Rune Pouch');
       if not bank.IsOpen() then
-        Bank.WalkOpen(RSObjects.GEBank);
+        Bank.WalkOpen();
       WaitUntil(Bank.IsOpen(), 375, 2150);
 
       Bank.WithdrawItem(RunePouchBank, True);
@@ -2316,11 +2319,16 @@ var
   tab: TTabSheet;
 begin
   for i := 0 to High(Self.Tabs) do
+  begin
     if Self.Tabs[i].getCaption() = 'Birdhouse Settings' then
     begin
       Self.Tabs[i].SetTabVisible(TCheckbox(Sender).IsChecked());
-      Break;
+    end
+    else if Self.Tabs[i].getCaption() = 'Bank Settings' then
+    begin
+      Self.Tabs[i].SetTabVisible(not TCheckbox(Sender).IsChecked());
     end;
+  end;
 end;
 
 procedure TConfig.BUYRAWMATERIALSCheckboxChanged(Sender: TObject);
@@ -2572,8 +2580,7 @@ begin
 
   WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
 
-  //Self.CreateBankSettings(); // Removed because GE is easier/less clutter
-
+  Self.CreateBankSettings();
 
   Self.CreateAntibanManager();
 
