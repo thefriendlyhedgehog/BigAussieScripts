@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -115,6 +115,40 @@ procedure OnSleepFinish(Task: PSleepTask);
 begin
   InGameTimer.Resume();
 end;
+
+procedure TAntiban.BioClick(button: Int32; max: Int32 = 3); override;
+begin
+  Mouse.Click(button);
+  Exit;
+end;
+
+function TWebGraphV2.FindObjectPath(me: TPoint; out p: TPoint): TPointArray; override;
+var
+  i: Int32;
+  cluster, best: TPointArray;
+begin
+  for i := 0 to High(Self.WalkableClusters) do
+    if Self.WalkableClusters[i].Contains(me) then
+      cluster := Self.WalkableClusters[i];
+
+  if cluster = [] then
+    Exit;
+
+  best := Self.FindNearestNodesEx(p, 12);
+
+  for i := 0 to High(best) do
+    if cluster.Contains(best[i]) then
+    begin
+      p := best[i];
+      try
+        Result := Self.PathBetweenEx(me, best[i], 0.2, 2);
+      except
+        TerminateScript(SRL.TimeStamp() + ':[WebGraph]:[Fatal]: Can''t find a walkable path to ' + p.ToString() + ' object.');
+      end;
+
+      Break;
+    end;
+end;    
 
 function TWebGraphV2.PathBetween(p, q: TPoint; rnd: Double = 0): TPointArray; override;
 var
@@ -854,12 +888,6 @@ begin
       WaitUntil(not Inventory.ContainsItem('Brewin'' Guide'), 65, 4000);
     end;
 
-    if Inventory.CountEmptySlots() < 28 then
-    begin
-      writeln('Inventory is not empty. Terminating script.');
-      TerminateScript();
-    end;
-
     writeln('Attempting to join team');
     TeamNPC.WalkSelectOption(['Join-Crew']);
     Minimap.WaitPlayerMoving;
@@ -1131,12 +1159,13 @@ begin
           Exit;
       end;
     end
-    Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
-    WL.Activity.Restart();
+
     if (Self.GetLocation() = SOUTHHOUSEUPPER) then
     begin
       if ScrapyBarkHopperSouth.Find(HopperCoords) then
       begin
+        Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
+        WL.Activity.Restart();
         Mouse.Move(HopperCoords[0]);
         if Mainscreen.IsUpText('Hopper') then
           Mouse.Click(MOUSE_LEFT);
@@ -1146,6 +1175,8 @@ begin
     begin
       if ScrapyBarkHopperNorth.Find(HopperCoords) then
       begin
+        Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
+        WL.Activity.Restart();
         Mouse.Move(HopperCoords[0]);
         if Mainscreen.IsUpText('Hopper') then
           Mouse.Click(MOUSE_LEFT);
@@ -1158,11 +1189,11 @@ begin
   if Inventory.FindItem('Scrapey bark', BarkSlots) then
   begin
     writeln('Extra bark failsafe.');
-    Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
     if (Self.GetLocation() = SOUTHHOUSEUPPER) then
     begin
       if ScrapyBarkHopperSouth.Find(HopperCoords) then
       begin
+        Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
         Mouse.Move(HopperCoords[0]);
         if Mainscreen.IsUpText('Hopper') then
           Mouse.Click(MOUSE_LEFT);
@@ -1172,6 +1203,7 @@ begin
     begin
       if ScrapyBarkHopperNorth.Find(HopperCoords) then
       begin
+        Inventory.SetSelectedSlot(BarkSlots[High(BarkSlots)]);
         Mouse.Move(HopperCoords[0]);
         if Mainscreen.IsUpText('Hopper') then
           Mouse.Click(MOUSE_LEFT);
@@ -1493,6 +1525,7 @@ begin
   CheckGameChatActive();
   if PINGONTERMINATED and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
+
   // If this works much love to andrew <3 buy net hunter
   GENERATED_GRAPH.Spacing := 9;         //low = better/slower, high = worse/faster
   GENERATED_GRAPH.MinimumTiles := 6;     //spaces with less tiles than this will be ignored.
@@ -1514,13 +1547,6 @@ begin
       TerminateScript();
     end;
   end;
-
-  {if BIRDHOUSEENABLED then
-    BirdhouseRunner.Init();
-
-  if BIRDHOUSEENABLED and BirdHouseRunner.CanDoBirdHouseRun() then
-    BirdHouseRunner.DoBirdHouseRun();}
-
 end;
 
 procedure TroubleBrewing.Run(MaxActions: UInt32; MaxTime: UInt64);

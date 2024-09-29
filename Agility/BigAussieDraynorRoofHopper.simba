@@ -56,7 +56,6 @@ Type
     XPGained: Integer;
     LapCount: Integer;
     StartingMarks: Integer;
-    
   end;
 
 procedure DraynorAgility.HighlightRect(Rect: TRectangle; Color, Opacity: Integer);
