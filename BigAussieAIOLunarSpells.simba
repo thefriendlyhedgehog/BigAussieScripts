@@ -1,15 +1,16 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '33'}  
+{$DEFINE SCRIPT_REVISION := '34'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
+{$I WaspLib/optional/handlers/teleports/transport.simba}
 
 // =NOTE=
 // Ensure the item you want to process is at the top of your inventory.
 // If you wish to use the Rune Pouch you MUST start with it in your inventory.
 // The grand exchange features will Buy/Sell at Above/Below market prices, if an order is not filled the script will not cancel/relist you need to do this manually.
 // 
-// SRL-T V4.7.0 / WaspLib - V18.4.8
+//
 //
 // Birdhouse include provided by CanadianJames - https://github.com/GBScripts
 
@@ -41,6 +42,7 @@ type
 
 //=============DEFAULT SETTINGS==============
 var
+transport: TUniversalTransport;
 
   // You ONLY need to edit these if you are not going to use the GUI //
   ENABLE_GUI: Boolean                         = True; // Enable or Disable the use of a GUI - NOTE: Some settings can only be changed in the GUI
@@ -54,6 +56,8 @@ var
   QUANTITYINPUT: Integer                      = 10000;// When you run out of raw items this is how many the script should buy.
   BANKFILLERSCHECK: Boolean                   = False; // Enable this if you have setup bank fillers correctly. 
   BIRDHOUSEENABLED: Boolean                   = False;
+  SELECTEDBANKTOUSE: String                   = '';
+  SELECTEDRETURNMETHOD: String                = ''; 
   WEBHOOKURL: String                          = '';
   DiscordUID: String                          = '';
   ENABLEWEBHOOKS: Boolean                     = True; 
@@ -286,85 +290,6 @@ begin
   end;
 end;
 
-procedure MoveItemToTop(Item: TRSItem);
-var
-  ItemBox: TBox;
-  BankBox: TBox;
-  xOffset, yOffset: Integer;
-  ScrollStart, ScrollLimit: Int32;
-begin
-  xOffset := SRL.TruncatedGauss(-40, 40);
-  yOffset := SRL.TruncatedGauss(-5, 5);
-  
-  if not Bank.IsOpen() then
-  begin
-    WriteLn('Bank is not open.');
-    Exit;
-  end;
-
-  // Ensure we are on the "All" tab, sometimes had issues.
-  if Bank.GetCurrentTab() <> 0 then
-  begin
-    Bank.OpenTab(0);
-    Wait(Random(1000, 1300));
-  end;
-
-  // Failsafe to make sure we are at the top of the bank when starting.
-  if Bank.GetScrollPosition() > 0 then
-  begin
-    Bank.SetScrollPosition(0);
-    Wait(Random(1000, 1300));
-  end;
-
-  // If we can't see it we scroll till we find it
-  if not Bank.FindItem(Item, ItemBox) then
-  begin
-    WriteLn(Item + ' not found in top of bank, attempting to find/move item.');
-
-    // Set a random scroll limit between 3-5 seconds
-    ScrollLimit := Random(3000, 5000);
-    ScrollStart := GetTickCount;
-
-    // If item is not visible, scroll down until item is found or time limit is reached
-    while not Bank.FindItem(Item, ItemBox) do
-    begin
-      if GetTickCount - ScrollStart >= ScrollLimit then
-      begin
-        WriteLn('Item not found after scrolling, this isnt reliable. Put the item at the top of the bank yourself.');
-        Exit;
-      end;
-
-      Bank.FindItemScroll(Item);
-    end;
-
-    Mouse.Move(ItemBox.Middle);
-    Wait(Random(300, 500));
-    Mouse.Hold(MOUSE_LEFT);
-
-    if SRL.Dice(20) then
-    begin
-      BankBox := Bank.Bounds;
-      Mouse.Move(Point(BankBox.Middle.X + xOffset, BankBox.Y1 + 100 + yOffset));
-
-      while Bank.GetScrollPosition() > 0 do
-      begin
-        Wait(Random(900, 1200));
-      end;
-
-      Mouse.Release(MOUSE_LEFT);
-    end
-    else
-    begin
-      while Bank.GetScrollPosition() > 0 do
-      begin
-        Bank.SetScrollPosition(0);
-        Mouse.Release(MOUSE_LEFT);
-        Wait(Random(100, 1200));
-        end;
-      end;
-    end;
-  end;
-
 function DisableSpellFiltering(var GameTabs: TRSGameTabs; Tab: ERSGameTab): Boolean;
 var
   i: Int32;
@@ -435,6 +360,7 @@ procedure AIOLunarSpells.Init(MaxActions: UInt32; MaxTime: UInt64); override;
 var
   i: Integer;
   MyPos: TPoint;
+  bankLocationIndex: Integer;
 begin
   inherited;
 
@@ -447,8 +373,11 @@ begin
   end;
   if PINGONTERMINATED and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
+
   if BIRDHOUSEENABLED then
     BirdhouseRunner.Init();
+    
+  Antiban.Setup();
 
   SetLength(Items, 59);          // Rawitem, ProcessedItem, NotedItem, AstralRune, ItemArray5(Nature Rune/Sand), Coins(6th array only used on MAKE PLANK)
   Items[0].Name := 'Berry Pie';
@@ -630,10 +559,7 @@ begin
     ItemArray5Value := ItemData.GetAverage(ItemArray5);
   end;
 
-  if birdhouseenabled then
-    Self.RSW.Setup([RSRegions.GRAND_EXCHANGE])
-  else
-    Self.RSW.SetupNamedRegion();
+  Self.RSW.SetupNamedRegion();
 
   case SCRIPTSPEED of
     SLOW: Mouse.Speed := Random(12, 14);
@@ -657,7 +583,7 @@ begin
   SetRequiredItemsForSpell(CHOSENSPELL, AstralRunesRequired, RequiredItemArray5);
   Timer.Start();
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
-  ClearDebug();
+  //ClearDebug();
   if Inventory.ContainsItem(RunePouch) then
   begin
     HasRunePouch := True;
@@ -680,10 +606,7 @@ begin
     end;
   end;
   Bank.WalkOpen();
-  WaitUntil(Bank.IsOpen(), 375, 2150);
-  MoveItemToTop(RawItem);
-  if CHOSENSPELL = SUPERGLASS_MAKE then
-    MoveItemToTop(ItemArray5);
+  WaitUntil(Bank.IsOpen(), 65, 2150);
 end;
 
 // Thank you flight for this TakeScreenshot procedure 
@@ -736,16 +659,21 @@ end;
 procedure AIOLunarSpells.SellFinishedItem();
 var
   quantity: Int32;
+  attempts: Int32;
 begin
   Bank.DepositAll();
-  WaitUntil(Inventory.Count() = 0, 375, 2150);
+  WaitUntil(Inventory.Count() = 0, 65, 2150);
   if SELLNOTEDITEMCHECK then
   begin
     WriteLn('Going to sell ' + ProcessedItem + ' Before Buying');
     if not Inventory.ContainsItem(RawItem) then
     begin
-      Bank.WalkOpen();
-      WaitUntil(Bank.IsOpen(), 375, 2150);
+      attempts := 0;
+      repeat
+        Bank.WalkOpen();
+        WaitUntil(Bank.IsOpen(), 65, 2150);
+        Inc(attempts);
+      until Bank.IsOpen() or (attempts >= 5);
       if Bank.IsOpen() then
       begin
         if not Inventory.ContainsItem(NotedProcessed) then
@@ -775,7 +703,7 @@ begin
     Bank.Close();
 
   GrandExchange.Open();
-  WaitUntil(GrandExchange.IsOpen, 100, 3000);
+  WaitUntil(GrandExchange.IsOpen, 65, 3000);
   slotNumber := GrandExchange.nextEmptySlot();
   if slotNumber = -1 then
   begin
@@ -802,10 +730,12 @@ begin
   end;
 end;
 
-procedure CheckBreakSleepLevel();
+procedure AIOLunarSpells.CheckBreakSleepLevel();
 var
   currentLevel: Integer;
 begin
+  Antiban.DoAntiban();
+  
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   if (STOP_AT_LEVEL <> -1) and (currentLevel >= STOP_AT_LEVEL) then
   begin
@@ -819,16 +749,11 @@ var
   attempts: Int32;
 begin
   attempts := 0;
-  while (attempts < 3) and (not Bank.IsOpen()) do
+  while (attempts < 5) and (not Bank.IsOpen()) do
   begin
     Bank.WalkOpen();
-    WaitUntil(Bank.IsOpen(), 375, 2150);
+    WaitUntil(Bank.IsOpen(), 65, 2150);
     Inc(attempts);
-    if not Bank.IsOpen() then
-    begin
-      Antiban.RandomRotate;
-      Wait(RandomRange(1000, 2000));
-    end;
   end;
 
   if Bank.IsOpen() then
@@ -865,8 +790,9 @@ begin
 end;
 
 procedure AIOLunarSpells.WithdrawAstralRunes();
+var
+  attempts: Int32;
 begin
-
   if HasDivineRunePouch then
   begin
     if Inventory.ContainsItem('Divine Rune Pouch') then
@@ -874,12 +800,15 @@ begin
     else
     begin
       WriteLn('Looking for Divine Rune Pouch');
-      if not bank.IsOpen() then
+      attempts := 0;
+      repeat
         Bank.WalkOpen();
-      WaitUntil(Bank.IsOpen(), 375, 2150);
+        WaitUntil(Bank.IsOpen(), 65, 2150);
+        Inc(attempts);
+      until Bank.IsOpen() or (attempts >= 5);
 
       Bank.WithdrawItem(DivineRunePouchBank, True);
-      WaitUntil(Inventory.ContainsItem('Divine Rune Pouch'), 358, 1250);
+      WaitUntil(Inventory.ContainsItem('Divine Rune Pouch'), 65, 1250);
 
       if not Inventory.ContainsItem('Divine Rune Pouch') then
       begin
@@ -898,12 +827,15 @@ begin
     else
     begin
       WriteLn('Looking for Rune Pouch');
-      if not bank.IsOpen() then
+      attempts := 0;
+      repeat
         Bank.WalkOpen();
-      WaitUntil(Bank.IsOpen(), 375, 2150);
+        WaitUntil(Bank.IsOpen(), 65, 2150);
+        Inc(attempts);
+      until Bank.IsOpen() or (attempts >= 5);
 
       Bank.WithdrawItem(RunePouchBank, True);
-      WaitUntil(Inventory.ContainsItem('Rune pouch'), 358, 1250);
+      WaitUntil(Inventory.ContainsItem('Rune pouch'), 65, 1250);
 
       if not Inventory.ContainsItem('Rune pouch') then
       begin
@@ -950,38 +882,25 @@ begin
   else
     requiredQuantity := 5;
   attempts := 0;
-  while (attempts < 3) and (not Bank.IsOpen()) do
+  while (attempts < 5) and (not Bank.IsOpen()) do
   begin
     Bank.WalkOpen();
-    WaitUntil(Bank.IsOpen(), 375, 2150);
+    WaitUntil(Bank.IsOpen(), 65, 3000);
     Inc(attempts);
-    if not Bank.IsOpen() then
-    begin
-      Antiban.RandomRotate;
-      Wait(RandomRange(1000, 2000));
-    end;
   end;
 
-  if not Bank.IsOpen() then
-  begin
-    WriteLn('Failed to open the bank after multiple attempts');
-    Logout.ClickLogout;
-    TerminateScript();
-  end;
-
-  Wait(RandomRange(300, 500));
   if (Inventory.CountItem(RawItem) < requiredQuantity) then
   begin
     WriteLn('Withdrawing ' + RawItem);
     Bank.WithdrawItem(RawItemBank, True);
-    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 375, 900);
+    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 65, 900);
   end;
     
   if (Inventory.CountItem(RawItem) < requiredQuantity) and (Bank.CountItem(RawItem) > 0) then
   begin
     WriteLn('No ' + Rawitem + ' Found in inventory but found in bank? Attempting again');
     Bank.WithdrawItem(RawItemBank, True);
-    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 375, 900);
+    WaitUntil(Inventory.CountItem(RawItem) >= requiredQuantity, 65, 900);
   end;
 
   if BUYRAWMATERIALS and ((Inventory.CountItem(RawItem) = 0) or ((Inventory.CountItem(RawItem) <= 4) and ((CHOSENSPELL = SPIN_FLAX) or (CHOSENSPELL = TAN_LEATHER)))) then
@@ -1013,14 +932,20 @@ begin
 end;
 
 procedure AIOLunarSpells.ExitGEOpenBank();
+var
+  attempts: Int32;
 begin
   GrandExchange.CollectOffer();
   MainScreen.CloseInterface(True);
-  WaitUntil(not Mainscreen.HasInterface(), 100, 2000);
-  Bank.WalkOpen();
-  WaitUntil(Bank.IsOpen(), 375, 2150);
+  WaitUntil(not Mainscreen.HasInterface(), 65, 2000);
+  attempts := 0;
+  repeat
+    Bank.WalkOpen();
+    WaitUntil(Bank.IsOpen(), 65, 2150);
+    Inc(attempts);
+  until Bank.IsOpen() or (attempts >= 5);
   Bank.DepositAll();
-  WaitUntil(Inventory.Count() = 0, 375, 2150);
+  WaitUntil(Inventory.Count() = 0, 65, 2150);
 end;
 
 procedure AIOLunarSpells.CheckInventoryLogoutIfEmpty(itemName: TRSitem);
@@ -1134,7 +1059,7 @@ begin
     RECHARGE_DRAGONSTONE: spell := ERSSpell.RECHARGE_DRAGONSTONE;
   end;
   Magic.Open();
-  WaitUntil(Magic.IsOpen(), 375, 2150);
+  WaitUntil(Magic.IsOpen(), 65, 2150);
   if Magic.FiltersIsOpen then
   begin
     WriteLn('Attempting to close filters');
@@ -1257,17 +1182,13 @@ begin
   RawTotal += RawItemCount;
   Wait(RandomRange(60, 80)); // Small wait to count invent
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100);  
+  WaitUntil(not Bank.IsOpen(), 65, 2100);  
   CastSpell();
   initialXP := XPBar.Read();
   startTime := GetTickCount();
   while Inventory.ContainsItem(RawItem) do
   begin
     Wait(RandomRange(600, 1100));
-    if SRL.Dice(20) then
-    begin
-      Self.DoAntiban;
-    end;
     currentXP := XPBar.Read();
     if (currentXP <= initialXP) and (GetTickCount() - startTime >= RandomRange(3000, 4000)) then
       break;
@@ -1292,12 +1213,7 @@ begin
     Wait(Random(150, 250));
     attempts += 1;
   end;
-  if not Bank.IsOpen() then
-  begin
-    WriteLn('Bank could not be opened after 5 attempts.');
-    Logout.ClickLogout();
-    TerminateScript();
-  end;
+
   RawItemToBuy := 0;
   AstralRunesToBuy := 0;
   WithdrawAstralRunes();
@@ -1319,7 +1235,7 @@ begin
   RawTotal += RawItemCount;
   Wait(RandomRange(60, 80));
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100);  
+  WaitUntil(not Bank.IsOpen(), 65, 2100);  
   CastSpell();
   bank.Hover();
   Self.Report();
@@ -1358,7 +1274,7 @@ begin
   RawTotal += RawItemCount;
   Wait(RandomRange(60, 80)); // Small wait to count invent
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100);  
+  WaitUntil(not Bank.IsOpen(), 65, 2100);  
   for i := 1 to (RawItemCount div 5) do
   begin
     CastSpell();
@@ -1412,7 +1328,7 @@ begin
   RawTotalSand += SandCount;
   Wait(RandomRange(60, 80));
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100);
+  WaitUntil(not Bank.IsOpen(), 65, 2100);
   CastSpell();
   Self.Report();
   CheckBreakSleepLevel();
@@ -1478,7 +1394,7 @@ var
   slots: TIntegerArray;
 begin
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100); 
+  WaitUntil(not Bank.IsOpen(), 65, 2100); 
   WriteLn('Fast casting reverse order.');
 
   failCount := 0;
@@ -1486,7 +1402,7 @@ begin
   for i := 27 downto 28 - RawItemCount do
   begin
     CastSpell();
-    WaitUntil(Inventory.IsOpen(), 385, 1250);
+    WaitUntil(Inventory.IsOpen(), 65, 1250);
 
     // Recheck the inventory for logs
     Inventory.FindItem(RawItem, slots);
@@ -1498,7 +1414,7 @@ begin
       self.ClickSlot(i, '>');
       Wait(waitTimeCasting);
         
-      WaitUntil(Magic.IsOpen(), 385, 1250);
+      WaitUntil(Magic.IsOpen(), 65, 1250);
       if not XPBar.EarnedXP() then
       begin
         Inc(failCount);
@@ -1531,7 +1447,7 @@ var
 failCount: Integer;
 begin
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100); 
+  WaitUntil(not Bank.IsOpen(), 65, 2100); 
   WriteLn('Fast casting standard order.');
   
   failCount := 0;
@@ -1539,14 +1455,14 @@ begin
   while RawItemCount > 0 do
   begin
     CastSpell();
-    WaitUntil(Inventory.IsOpen(), 385, 1250);
+    WaitUntil(Inventory.IsOpen(), 65, 1250);
     RawItemCount := Inventory.CountItem(RawItem);
     self.ClickItem(RawItem, '>');
     if RawItemCount = 1 then
       break;
     Wait(waitTimeCasting);
       
-    WaitUntil(Magic.IsOpen(), 385, 1250);
+    WaitUntil(Magic.IsOpen(), 65, 1250);
     if not XPBar.EarnedXP() then
     begin
       Inc(failCount);
@@ -1570,7 +1486,7 @@ var
   failCount: Integer;
 begin
   MainScreen.CloseInterface(True);
-  WaitUntil(not Bank.IsOpen(), 375, 2100); 
+  WaitUntil(not Bank.IsOpen(), 65, 2100); 
   WriteLn('Slow/AFK Casting.');
 
   failCount := 0;
@@ -1578,7 +1494,7 @@ begin
   while Inventory.ContainsItem(RawItem) do
   begin
     CastSpell();
-    WaitUntil(Inventory.IsOpen(), 375, 2150);
+    WaitUntil(Inventory.IsOpen(), 65, 2150);
   
     if Inventory.FindItem(RawItem, slots) then
     begin
@@ -1588,7 +1504,7 @@ begin
       Inventory.ClickSlot(slots[Random(Length(slots))], '>');
     end;
   
-    WaitUntil(Magic.IsOpen(), 385, 1250);
+    WaitUntil(Magic.IsOpen(), 65, 1250);
     if not XPBar.EarnedXP() then
     begin
       Inc(failCount);
@@ -1740,12 +1656,10 @@ begin
   end;
   If SRL.dice(1) then // Thanks Student for his help with this code.
   WriteLn('nice cock');
-  CheckBreakSleepLevel();
+  //CheckBreakSleepLevel();
 end;
 
 procedure AIOLunarSpells.Run(MaxActions: Int32; MaxTime: Int64);
-var
-  antibanChance: Int32;
 begin
   Self.Init(MaxActions, MaxTime);
   repeat
@@ -1760,34 +1674,47 @@ begin
         BirdHouseRunner.DoBirdHouseRun();
         Bank.CachedQuantity := 40;
       end;
-    if not MainScreen.HasInterface() or not Bank.IsOpen() then
-    begin
-      case SCRIPTSPEED of
-        TURBO: antibanChance := 5;
-        FAST: antibanChance := 30;
-        NORMAL: antibanChance := 50;
-        SLOW: antibanChance := 70;
-      end;
-      if SRL.Dice(antibanChance) then
-      begin
-        Self.DoAntiban;
-      end;
-    end;
-    if not Bank.IsOpen() then
-      Self.DoAntiban();
   until Self.ShouldStop();
 end;
+
+function GetReturnItem(SELECTEDRETURNMETHOD: String): String;
+begin
+  case SELECTEDRETURNMETHOD of
+    'Varrock Teleport Tablet': Result := 'Varrock teleport';
+    'Ardougne Teleport Tablet': Result := 'Ardougne teleport';
+    'Camelot Teleport Tablet': Result := 'Camelot teleport';
+    'Falador Teleport Tablet': Result := 'Falador teleport';
+    'Lumbridge Teleport Tablet': Result := 'Lumbridge teleport';
+    'Teleport Crystal': Result := 'Teleport crystal';
+    'Eternal Teleport Crystal': Result := 'Eternal teleport crystal';
+    'Ring of Wealth': Result := 'Ring of wealth';
+    'Ring of dueling': Result := 'Ring of dueling(8)';
+    'Games Necklace': Result := 'Games necklace';
+    'Amulet of glory': Result := 'Amulet of glory';
+    'Eternal Amulet of Glory': Result := 'Eternal amulet of glory';
+    'Moonclan Teleport': Result := 'Moonclan teleport';
+    'Lunar isle teleport': Result := 'Lunar isle teleport';
+    'Construction Cape': Result := 'Construct cape';
+    'Construction Cape(t)': Result := 'Construct. cape(t)';
+    'Paddewwa Teleport Tablet': Result := 'Paddewwa teleport';
+    'Varrock teleport': Result := 'Varrock teleport';
+    'Ardougne teleport': Result := 'Ardougne teleport';
+    'Camelot teleport': Result := 'Camelot teleport';
+    'Falador teleport': Result := 'Falador teleport';
+    'Lumbridge teleport': Result := 'Lumbridge teleport';
+    else Result := '';
+  end;
+end;  
 
 // ON START FOR CJ BIRDHOUSE INCLUDE
 function TBirdHouseInclude.OnStart() : Boolean; override;
 var
-  i : Int32;
-  VarrockTab: TRSItem;
-  VarrockTabBank: TRSBankItem;
+  transport: TUniversalTransport;
+  i: Int32;
+  returnItem: String;
+  withdrawItem: TRSBankItem;
+  teleportLocation: TTeleportLocation;
 begin
-  VarrockTab := ('Varrock teleport');
-  VarrockTabBank := TRSBankItem.Setup(VarrockTab, 1, FALSE);
-
   if Self.AlwaysUseBestLog then
   begin
     Self.SuggestedLogType := BirdhouseRunner.GetLogForHunterLevel(Stats.GetLevel(ERSSkill.HUNTER));
@@ -1795,7 +1722,7 @@ begin
       Self.LogType := Self.SuggestedLogType;
   end;
 
-  Bank.WalkOpen(RSObjects.GEBank);
+  Bank.WalkOpen();
 
   if not Bank.IsOpen() then
   begin
@@ -1816,17 +1743,57 @@ begin
       Exit(false);
     end;
 
-    if not Bank.WithdrawItem(VarrockTabBank, true) then
+    ItemFinder.Similarity := 0.999; // Need this as tabs looks to much alike.
+    returnItem := GetReturnItem(SELECTEDRETURNMETHOD);
+    if returnItem <> '' then
     begin
-      writeln('Failed to get Varrock teleport from bank, disabling birdhouse runs.');
-      BirdhouseRunner.IsDisabled := true;
-      Bank.DepositAll();
-      Exit(false);
+      teleportLocation.item := returnItem;
+
+      case selectedReturnMethod of
+        'Varrock Teleport Tablet': teleportLocation := RSTeleports.VARROCK;
+        'Ardougne Teleport Tablet': teleportLocation := RSTeleports.ARDOUGNE;
+        'Camelot Teleport Tablet': teleportLocation := RSTeleports.CAMELOT;
+        'Falador Teleport Tablet': teleportLocation := RSTeleports.FALADOR;
+        'Lumbridge Teleport Tablet': teleportLocation := RSTeleports.LUMBRIDGE;
+        'Teleport Crystal': teleportLocation := RSTeleports.PRIFDDINAS;
+        'Eternal Teleport Crystal': teleportLocation := RSTeleports.PRIFDDINAS;
+        'Ring of Wealth': teleportLocation := RSTeleports.GRAND_EXCHANGE;
+        'Ring of dueling': teleportLocation := RSTeleports.CASTLE_WARS;
+        'Games Necklace': teleportLocation := RSTeleports.WINTERTODT_CAMP;
+        'Amulet of glory': teleportLocation := RSTeleports.EDGEVILLE;
+        'Eternal Amulet of Glory': teleportLocation := RSTeleports.EDGEVILLE;
+        'Moonclan Teleport': teleportLocation := RSTeleports.MOONCLAN;
+        //'Lunar isle teleport': teleportLocation := RSTeleports.LUNAR_ISLE; Cast spell Home teleport for this one
+        'Construction Cape': teleportLocation := RSTeleports.HOUSE_CAPE;
+        'Construction Cape(t)': teleportLocation := RSTeleports.HOUSE_CAPE;
+        'Paddewwa Teleport Tablet': teleportLocation := RSTeleports.PADDEWWA;
+      end;
     end;
 
-    WaitUntil(Inventory.ContainsItem(VarrockTab), 375, RandomRange(800, 1500));
+    if returnItem <> '' then
+    begin
+      if (selectedReturnMethod = 'Construction Cape') or (selectedReturnMethod = 'Construction Cape(t)') then
+      begin
+        if not Bank.WithdrawItem(returnItem, True) then
+        begin
+          writeln('Failed to get ' + returnItem + ' from bank, disabling birdhouse runs.');
+          BirdhouseRunner.IsDisabled := true;
+          Bank.DepositAll();
+          Exit(false);
+        end;
+      end
+      else if not Transport.withdrawTeleportItem(teleportLocation) then
+      begin
+        writeln('Failed to get ' + returnItem + ' from bank, disabling birdhouse runs.');
+        BirdhouseRunner.IsDisabled := true;
+        Bank.DepositAll();
+        Exit(false);
+      end;
+    end;
+
     Bank.Close();
     Options.SetNPCAttackOption(ERSAttackOption.HIDDEN);
+    wait(200, 300);
     Options.SetZoomLevel(Random(10));
   end;
   Result := true;
@@ -1835,33 +1802,131 @@ end;
 // ON COMPLETE FOR CJ BIRDHOUSE INCLUDE
 procedure TBirdHouseInclude.OnComplete(); override;
 var
+  transport: TUniversalTransport;
   i : Int32;
   timeout : TCountDown;
   MyPos: TPoint;
   attemptCount: Integer;
   bankTimeout : TCountdown;
   Nests: TRSItemArray;
+  returnItem: String;
+  teleportLocation: TTeleportLocation;
+  selectedRegion: TBox;
 begin
   attemptCount := 0;
   MyPos := Script.RSW.GetMyPos();
 
   ScriptWalker := @Script.RSW;
+  
+  returnItem := GetReturnItem(SELECTEDRETURNMETHOD);
 
-  if not Inventory.ClickItem('Varrock teleport') then
+  teleportLocation.item := returnItem;
+
+  if ((SELECTEDRETURNMETHOD = 'Construction Cape') or (SELECTEDRETURNMETHOD = 'Construction Cape(t)')) and (SELECTEDBANKTOUSE = 'Prifddinas') then
   begin
-    Writeln("Teleport to varrock failed");
-    Logout.ClickLogout();
-    TerminateScript();
+    if not Inventory.ClickItem(returnItem, 'Teleport') then
+    begin
+      if not Equipment.ClickItem(returnItem, 'Teleport') then
+      begin
+        Writeln("Teleport using " + returnItem + " failed");
+        Logout.ClickLogout();
+        TerminateScript();
+      end;
+    end;
+    wait(3000, 4000);
+    Keyboard.PressKey(VK_9);
+  end
+  else
+  begin
+    case SELECTEDRETURNMETHOD of
+      'Castle Wars Mini-Game Teleport': teleportLocation := RSTeleports.MINIGAME_CASTLE_WARS;
+      'Varrock Teleport Tablet': teleportLocation := RSTeleports.VARROCK;
+      'Ardougne Teleport Tablet': teleportLocation := RSTeleports.ARDOUGNE;
+      'Camelot Teleport Tablet': teleportLocation := RSTeleports.CAMELOT;
+      'Falador Teleport Tablet': teleportLocation := RSTeleports.FALADOR;
+      'Lumbridge Teleport Tablet': teleportLocation := RSTeleports.LUMBRIDGE;
+      'Teleport Crystal': teleportLocation := RSTeleports.PRIFDDINAS;
+      'Eternal Teleport Crystal': teleportLocation := RSTeleports.PRIFDDINAS;
+      'Ring of Wealth': teleportLocation := RSTeleports.GRAND_EXCHANGE;
+      'Ring of dueling': teleportLocation := RSTeleports.CASTLE_WARS;
+      'Games Necklace': teleportLocation := RSTeleports.WINTERTODT_CAMP;
+      'Amulet of glory': teleportLocation := RSTeleports.EDGEVILLE;
+      'Eternal Amulet of Glory': teleportLocation := RSTeleports.EDGEVILLE;
+      'Moonclan Teleport': teleportLocation := RSTeleports.MOONCLAN;
+      //'Lunar isle teleport': teleportLocation := RSTeleports.LUNAR_ISLE; Cast spell Home teleport for this one
+      'Construction Cape': teleportLocation := RSTeleports.HOUSE_CAPE;
+      'Construction Cape(t)': teleportLocation := RSTeleports.HOUSE_CAPE;
+      'Paddewwa Teleport Tablet': teleportLocation := RSTeleports.PADDEWWA;
+    end;
+
+    if selectedReturnMethod = 'Home Teleport' then
+    begin
+      Magic.CastSpell(ERSSpell.LUNAR_HOME_TELEPORT);
+      Wait(10000,12000);
+    end
+    else if not transport.run(teleportLocation) then
+    begin
+      WriteLn('Teleport using ' + selectedReturnMethod + ' failed');
+      Logout.ClickLogout();
+      TerminateScript();
+    end;
   end;
 
-  if Script.RSW.Regions.Find(RSRegions.GRAND_EXCHANGE) = -1 then
-    Script.RSW.AddRegion(RSRegions.GRAND_EXCHANGE);
+  case SELECTEDBANKTOUSE of
+  'Grand Exchange':
+    if Script.RSW.Regions.Find(RSRegions.GRAND_EXCHANGE) = -1 then
+      Script.RSW.AddRegion(RSRegions.GRAND_EXCHANGE);
+  'Castle Wars':
+    if Script.RSW.Regions.Find(RSRegions.CASTLE_WARS) = -1 then
+      Script.RSW.AddRegion(RSRegions.CASTLE_WARS);
+  'Draynor Village':
+    if Script.RSW.Regions.Find(RSRegions.DRAYNOR_VILLAGE) = -1 then
+      Script.RSW.AddRegion(RSRegions.DRAYNOR_VILLAGE);
+  'Edgeville':
+    if Script.RSW.Regions.Find(RSRegions.EDGEVILLE) = -1 then
+      Script.RSW.AddRegion(RSRegions.EDGEVILLE);
+  'Falador':
+    if Script.RSW.Regions.Find(RSRegions.FALADOR) = -1 then
+      Script.RSW.AddRegion(RSRegions.FALADOR);
+  'Lunar Isle':
+    if Script.RSW.Regions.Find(RSRegions.LUNAR_ISLE) = -1 then
+      Script.RSW.AddRegion(RSRegions.LUNAR_ISLE);
+  'Varrock':
+    if Script.RSW.Regions.Find(RSRegions.VARROCK) = -1 then
+      Script.RSW.AddRegion(RSRegions.VARROCK);
+  'Ardougne':
+    if Script.RSW.Regions.Find(RSRegions.ARDOUGNE) = -1 then
+      Script.RSW.AddRegion(RSRegions.ARDOUGNE);
+  'Catherby':
+    if Script.RSW.Regions.Find(RSRegions.CATHERBY) = -1 then
+      Script.RSW.AddRegion(RSRegions.CATHERBY);
+  'Prifddinas':
+    if Script.RSW.Regions.Find(RSRegions.PRIFDDINAS) = -1 then
+      Script.RSW.AddRegion(RSRegions.PRIFDDINAS);
+  'Seers'' Village':
+    if Script.RSW.Regions.Find(RSRegions.SEERS_VILLAGE) = -1 then
+      Script.RSW.AddRegion(RSRegions.SEERS_VILLAGE);
+  'Wintertodt':
+    if Script.RSW.Regions.Find(RSRegions.WINTERTODT) = -1 then
+      Script.RSW.AddRegion(RSRegions.WINTERTODT);
+  end;
 
-  Wait(3000, 4000);
+  case SELECTEDBANKTOUSE of
+    'Grand Exchange': selectedRegion := RSRegions.GRAND_EXCHANGE;
+    'Castle Wars': selectedRegion := RSRegions.CASTLE_WARS;
+    'Draynor Village': selectedRegion := RSRegions.DRAYNOR_VILLAGE;
+    'Edgeville': selectedRegion := RSRegions.EDGEVILLE;
+    'Falador': selectedRegion := RSRegions.FALADOR;
+    'Lunar Isle': selectedRegion := RSRegions.LUNAR_ISLE;
+    'Varrock': selectedRegion := RSRegions.VARROCK;
+    'Ardougne': selectedRegion := RSRegions.ARDOUGNE;
+    'Catherby': selectedRegion := RSRegions.CATHERBY;
+    'Prifddinas': selectedRegion := RSRegions.PRIFDDINAS;
+    'Seers'' Village': selectedRegion := RSRegions.SEERS_VILLAGE;
+    'Wintertodt': selectedRegion := RSRegions.WINTERTODT;
+  end;
 
-  bankTimeout.Init(60000);
-
-  if not WaitUntil(RSRegions.VARROCK.Contains(Script.RSW.GetMyPos()), 250, 4000) then
+  if not WaitUntil(selectedRegion.Contains(Script.RSW.GetMyPos()), 65, 20000) then
   begin
     Writeln("Failed to teleport");
     Logout.ClickLogout();
@@ -1886,10 +1951,12 @@ begin
     end;
   end;
 
+  bankTimeout.Init(60000);
+
   while not bankTimeOut.IsFinished() and not Bank.IsOpen() do
   begin
     writeln('Attempting to open bank');
-    Bank.WalkOpen(RSObjects.GEBank);
+    Bank.WalkOpen();
   end;
   
   if bankTimeout.IsFinished() and not Bank.IsOpen() then
@@ -1897,10 +1964,13 @@ begin
     TerminateScript("Failed to open the bank after birdrun.");
   end;
 
-  Bank.DepositAll();
-  WaitUntil(not Inventory.IsFull(), 315, 5000);
-  CoinsChecked := False; // This resets the coincheck so we withdraw again if plankmake
-end;            
+  if Bank.IsOpen() then
+  begin
+    Bank.DepositAll();
+    WaitUntil(not Inventory.IsFull(), 65, 2000);
+    CoinsChecked := False; // This resets the coincheck so we withdraw again if plankmake
+  end;
+end;
 // ON COMPLETE FOR CJ BIRDHOUSE INCLUDE
 
 function FormatRoundedNumber(Number: Integer): String;
@@ -1977,7 +2047,7 @@ var
   i: Integer;
 begin
   RSClient.Image.Clear;
-  ClearDebug();
+  //ClearDebug();
   XPBar.EarnedXP();
   if not MainScreen.HasInterface() then
     CurrentXP := XPBar.Read();
@@ -1988,11 +2058,6 @@ begin
 
   APICLient.UpdatePayload(0, Profit, 0);
   APIClient.SubmitStats(APIClient.GetUUID());
-    
-  if (Length(Antiban.Breaks) > 0) then
-    NextBreakTime := Antiban.TimeUntilBreak(Antiban.Breaks[0]);
-  if (Length(Antiban.Sleeps) > 0) then
-    NextSleepTime := SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - GetTimeRunning)), TIME_BARE);
 
   if FocusState = fsFocused then
     FocusStateStr := 'Focused'
@@ -2017,9 +2082,7 @@ begin
   if Profit = 0 then
     WriteLn('   Total Profit: Calculating')
   else
-      WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
-  if (Length(Antiban.Sleeps) > 0) then
-    WriteLn('   Time until sleep ' + NextSleepTime);
+    WriteLn('   Total Profit: ' + FormatRoundedNumber(Profit));
   if STOP_AT_LEVEL <> -1 then
    WriteLn('   Current Level: ' + IntToStr(currentLevel) + ' / Stop at Level: ' + IntToStr(STOP_AT_LEVEL));
   WriteLn('----------------------------------------');
@@ -2028,8 +2091,7 @@ begin
   if Profit = 0 then
     WriteLn('   Profit/Hour: Calculating')
   else
-
-  WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
+    WriteLn('   Profit/Hour: ' + FormatRoundedNumber(Round((Profit) / (GetTimeRunning() / 3600000))));
 
   if BUYRAWMATERIALS then
   begin
@@ -2075,8 +2137,9 @@ type
     QuantityInputBox, StopAtLevelInputBox: TEdit;
     ScriptSpeedSelector: TLabeledCombobox;
     SELLNOTEDITEMCHECKBox, BUYRUNESCHECKBox, BUYRAWMATERIALSCheckbox, BankFillersCheckBox, BirdHouseSettingsCheckbox: TLabeledCheckBox;
-    LunarSpellSelector: TComboBox;
-    ItemSelector: TComboBox;
+    LunarSpellSelector, ReturnMethodDropdown: TComboBox;
+    ItemSelector, bankSelector: TComboBox;
+    returnMethodSelector: TLabeledCombobox;
     OpenNestsCheckBox: TLabeledCheckBox;
     // Discord Webhooks
     PingOnTerminatedCheckBox, EnableWebhooksCheckBox: TLabeledCheckBox;
@@ -2100,11 +2163,11 @@ procedure TConfig.StartScript(sender: TObject); override;
 var
   Username: String;
 begin
- if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
-    Username := 'NoUserNameSelected'
-  else
-    Username := Login.Players[Login.PlayerIndex].User;
-  if Username = '' then Exit;
+  if Self.BirdHouseSettingsCheckbox.IsChecked() and (Self.returnMethodSelector.GetItemIndex() = -1) then
+  begin
+    ShowMessage('No return method is selected, You must select a return method.');
+    Exit;
+  end;
 
   SELECTEDITEM := Self.ItemSelector.GetText();
   CHOSENSPELL := ELunarSpell(Self.LunarSpellSelector.GetItemIndex());
@@ -2121,6 +2184,8 @@ begin
   ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
   PINGONTERMINATED := Self.PingOnTerminatedCheckBox.IsChecked();
   BIRDHOUSEENABLED := Self.BirdHouseSettingsCheckbox.IsChecked();
+  SELECTEDBANKTOUSE := Self.bankSelector.GetText();
+  SELECTEDRETURNMETHOD := Self.returnMethodSelector.GetText();
   WriteINI(Username + ' Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
@@ -2134,6 +2199,7 @@ begin
   WriteINI(Username + ' AIO Lunar Settings', 'BANKFILLERSCHECK', BoolToStr(BANKFILLERSCHECK, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' AIO Lunar Settings', 'QUANTITYINPUT', IntToStr(QUANTITYINPUT), 'Configs/BASettings.ini');
   WriteINI(Username + ' AIO Lunar Settings', 'STOP_AT_LEVEL', IntToStr(STOP_AT_LEVEL), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIO Lunar Settings', 'SELECTEDRETURNMETHOD', SELECTEDRETURNMETHOD, 'Configs/BASettings.ini');
   WriteINI(Username + ' Birdhouse Settings', 'Enabled', BoolToStr(BIRDHOUSEENABLED, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Birdhouse Settings', 'LogType', IntToStr(Ord(BirdHouseRunner.LogType)), 'Configs/BASettings.ini');
   WriteINI(Username + ' Birdhouse Settings', 'Seed', BirdHouseRunner.Seed, 'Configs/BASettings.ini');
@@ -2141,7 +2207,6 @@ begin
   WriteINI(Username + ' Birdhouse Settings', 'UseBestLog', BoolToStr(BirdHouseRunner.AlwaysUseBestLog, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Birdhouse Settings', 'CraftWhileNav', BoolToStr(BirdHouseRunner.NeedClockworks, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Birdhouse Settings', 'OpenNests', BoolToStr(BHOPENNESTS, 'true', 'false'), 'Configs/BASettings.ini');
-
   inherited;
 end;
 
@@ -2153,18 +2218,81 @@ begin
     OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
 end;
 
+procedure TConfig.BankSelectorOnChange(sender: TObject);
+begin
+  // Call Tors 
+  Self._BankOnChange(sender);
+  // Call mine
+  Self.UpdateReturnMethodOptions(sender);
+end;
+
+procedure TConfig.UpdateReturnMethodOptions(Sender: TObject);
+var
+  selectedBank: String;
+begin
+  bankSelector := TComboBox(Sender);
+  selectedBank := bankSelector.GetText();
+  returnMethodSelector.Clear();
+
+  case selectedBank of
+    'Grand Exchange': // Varock Teleport Tab Tested, 
+      returnMethodSelector.AddItemArray(['Varrock Teleport Tablet', 'Ring of Wealth']);
+    'Ardougne': // Tested and working
+      returnMethodSelector.AddItemArray(['Ardougne Teleport Tablet']);
+    'Castle Wars':
+      returnMethodSelector.AddItemArray(['Castle Wars Mini-Game Teleport', 'Ring of dueling']);
+    'Catherby': // Tested and working
+      returnMethodSelector.AddItemArray(['Camelot Teleport Tablet']);
+    'Draynor Village':
+      returnMethodSelector.AddItemArray(['Amulet of glory']);
+    'Edgeville': // Amulet of glory working
+      returnMethodSelector.AddItemArray(['Amulet of glory']);
+    'Falador':
+      returnMethodSelector.AddItemArray(['Falador Teleport Tablet']);
+    'Lunar Isle':
+      returnMethodSelector.AddItemArray(['Home Teleport']);
+    'Prifddinas':
+      returnMethodSelector.AddItemArray(['Eternal Teleport Crystal', 'Construction Cape', 'Construction Cape(t)']);
+    'Seers'' Village':
+      returnMethodSelector.AddItemArray(['Camelot Teleport Tablet']);
+    'Varrock':
+      returnMethodSelector.AddItemArray(['Varrock Teleport Tablet']);
+    'Wintertodt':
+      returnMethodSelector.AddItemArray(['Games Necklace']);
+  end;
+end;
+
 procedure TConfig.AddReturnMethodDropdown();
 var
-  tab: TTabSheet;
+  bankSettingsTab: TTabSheet;
 begin
-  // Don't tell CJ I added to his GUI
-  for tab in Self.Tabs do
+  for bankSettingsTab in Self.Tabs do
+    if bankSettingsTab.GetCaption() = 'Bank Settings' then
+      Break;
+
+  with returnMethodSelector do
   begin
-    if tab.GetCaption() = 'Birdhouse Settings' then
+    Create(bankSettingsTab);
+    SetCaption('Return Method');
+    SetLeft(TControl.AdjustToDPI(240));
+    SetTop(TControl.AdjustToDPI(14));
+    SetHint('Select the return method based on the selected bank.');
+    SetStyle(csDropDownList); 
+  end;
+
+  bankSelector := TScriptForm.Form.GetChild('bank_selector_combobox');
+  if bankSelector <> nil then
+  begin
+    bankSelector.SetOnChange(@Self.BankSelectorOnChange);
+    UpdateReturnMethodOptions(bankSelector);
+  end;
+
+  for bankSettingsTab in Self.Tabs do
+    if bankSettingsTab.GetCaption() = 'Birdhouse Settings' then
     begin
       with Self.OpenNestsCheckBox do
       begin
-        Create(tab);
+        Create(bankSettingsTab);
         SetCaption('Open Nests');
         SetLeft(TControl.AdjustToDPI(570));
         SetTop(TControl.AdjustToDPI(85));
@@ -2172,7 +2300,6 @@ begin
         SetHint('Enable or disable opening nests after birdhouse run.');
       end;
     end;
-  end;
 end;
 
 procedure TConfig.WebhooksCheckboxChanged(Sender: TObject);
@@ -2283,12 +2410,6 @@ var
   Username: String;
   BHIncludeGUIOpenNests: Boolean;
 begin
- if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
-    Username := 'NoUserNameSelected'
-  else
-    Username := Login.Players[Login.PlayerIndex].User;
-
-  if Username = '' then Exit;
   writeln('Reading previous settings.');
   SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
   SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
@@ -2303,6 +2424,7 @@ begin
   BANKFILLERSCHECK := StrToBoolDef(ReadINI(Username + ' AIO Lunar Settings', 'BANKFILLERSCHECK', 'Configs/BASettings.ini'), False);
   QUANTITYINPUT := StrToIntDef(ReadINI(Username + ' AIO Lunar Settings', 'QUANTITYINPUT', 'Configs/BASettings.ini'), 0);
   STOP_AT_LEVEL := StrToIntDef(ReadINI(Username + ' AIO Lunar Settings', 'STOP_AT_LEVEL', 'Configs/BASettings.ini'), -1);
+  SELECTEDRETURNMETHOD := ReadINI(Username + ' AIO Lunar Settings', 'SELECTEDRETURNMETHOD', 'Configs/BASettings.ini');
   BIRDHOUSEENABLED := StrToBoolDef(ReadINI(Username + ' Birdhouse Settings', 'Enabled', 'Configs/BASettings.ini'), True);
   BHIncludeGUILogType := ERSLogType(StrToIntDef(ReadINI(Username + ' Birdhouse Settings', 'LogType', 'Configs/BASettings.ini'), 0));
   BHIncludeGUISeed := ReadINI(Username + ' Birdhouse Settings', 'Seed', 'Configs/BASettings.ini');
@@ -2317,18 +2439,19 @@ procedure TConfig.ToggleBirdhouseTabVisibility(Sender: TObject);
 var
   i: Int32;
   tab: TTabSheet;
+  isChecked: Boolean;
 begin
+  isChecked := TCheckbox(Sender).IsChecked();
+
   for i := 0 to High(Self.Tabs) do
   begin
     if Self.Tabs[i].getCaption() = 'Birdhouse Settings' then
     begin
-      Self.Tabs[i].SetTabVisible(TCheckbox(Sender).IsChecked());
-    end
-    else if Self.Tabs[i].getCaption() = 'Bank Settings' then
-    begin
-      Self.Tabs[i].SetTabVisible(not TCheckbox(Sender).IsChecked());
+      Self.Tabs[i].SetTabVisible(isChecked);
     end;
   end;
+
+  returnMethodSelector.SetVisible(isChecked);
 end;
 
 procedure TConfig.BUYRAWMATERIALSCheckboxChanged(Sender: TObject);
@@ -2432,15 +2555,6 @@ begin
     SetHint('This affects wait times and mouse speed.');
   end;
 
-  {with Self.Message do
-  begin
-    Create(tab);
-    SetLeft(TControl.AdjustToDPI(340));
-    SetTop(TControl.AdjustToDPI(155));
-    SetCaption('Auto Buys/Sells at Above/Below market rate.');
-    SetFontColor(clNavy);
-  end;}
-
   with Self.BUYRAWMATERIALSCheckbox do
   begin
     Create(tab);
@@ -2513,7 +2627,7 @@ begin
   with Self.EnableWebhooksCheckBox do
   begin
     Create(tab);
-    SetCaption('Enable discord webhooks');
+    SetCaption('Enable Discord Webhooks');
     SetLeft(Self.BirdHouseSettingsCheckbox.GetLeft());
     SetTop(Self.BirdHouseSettingsCheckbox.GetTop() + TControl.AdjustToDPI(25));
     SetHint('Enable or Disable Discord Webhooks notifications.');
@@ -2575,12 +2689,12 @@ begin
     SetChecked(SavedPingOnTerminated);
   end; 
 
+  Self.CreateBankSettings();
+
   Self.CreateBirdhouseRunSettings();
   Self.AddReturnMethodDropdown();
 
   WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
-
-  Self.CreateBankSettings();
 
   Self.CreateAntibanManager();
 
@@ -2598,6 +2712,7 @@ begin
   Self.BankFillersCheckBox.SetChecked(BANKFILLERSCHECK);
   Self.QuantityInputBox.SetText(IntToStr(QUANTITYINPUT));
   Self.BirdHouseSettingsCheckbox.SetChecked(BIRDHOUSEENABLED);
+  Self.returnMethodSelector.SetText(SELECTEDRETURNMETHOD);
   
   BUYRAWMATERIALSCheckboxChanged(Self.BUYRAWMATERIALSCheckbox.CheckBox);
   Self.ToggleBirdhouseTabVisibility(Self.BirdHouseSettingsCheckbox.CheckBox);
