@@ -1,0 +1,924 @@
+{$DEFINE SCRIPT_ID := '9796a306-c0ef-472f-93a3-b4777b5ac1da'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
+{$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
+{$I SRL-T/osr.simba}
+{$I WaspLib/osr.simba}
+
+// This is a heavily modified version of Flights Pollinivneach roof-hopper
+// https://villavu.com/forum/showthread.php?t=177756=
+//
+// If you wish to use Summer Pies to boost, please ensure you start with them in your inventory.
+// ###These are edited in the GUI and saved to your configuration .ini, you should not need to change these manually
+var
+  WEBHOOKURL: String                     = '';
+  DiscordUID: String                     = '';
+  STOP_AT_LEVEL: Integer                 = -1;
+  ENABLEWEBHOOKS: Boolean                = True; 
+  PINGONTERMINATED: Boolean              = True; 
+  TELEPORTMOUSE: Boolean                 = False;
+// ###These are edited in the GUI and saved to your configuration .ini, you should not need to change these manually.##
+  ActiveTimer: TStopWatch;
+
+Type
+  TLocation = (START, FINISH, TIGHTROPE, PLATFORM1, ZIPLINE, ADVANCEDPLATFORM1, ADVANCEDPLATFORM2, BASICPLATFORM1, BASICPLATFORM2, UNKNOWN);
+  ResultEx  = (COMPLETE, FAILED, NOTFOUND);
+
+  TObstacle = record
+    Index,
+    MaxTime,XP : Int32;
+    WalkTile   : TPoint;
+    NextLoc    : TLocation;
+    Color      : TCTS2Color;
+    MMTiles    : TPointArray;
+    UpText     : TStringArray;
+    AngleMin, AngleMax: Int32;
+  end;
+
+  WyrmAgility = record (TBaseBankScript)
+    StartTile          : TPoint;
+    Obstacles          : Array [0..5] of TObstacle;
+    Obs_Names          : Array [0..5] of String;
+    AdvancedCourse: Boolean;
+    FailCount,Attempts : Int32;
+    MyPos: TPoint;
+    MyFullPos: TRSPosition;
+    Timer: TStopWatch;
+    RunningTime: TStopWatch;
+    BoostTimer: TStopWatch;
+    SummerPiesBoost: Boolean;
+
+    Termites: TRSitem;
+    BoneShards: TRSitem;
+    SummerPies: TRSitem;
+
+    Index: Int32;
+    StartingBoneShards: Integer;
+    StartingTermites: Integer;
+    StartXP: Integer;
+    CurrentXP: Integer;
+    PrevXP: Integer;
+    XPGained: Integer;
+    LapCount: Integer;
+  end;
+
+var
+  Script: WyrmAgility;
+
+procedure WyrmAgility.HighlightRect(Rect: TRectangle; Color, Opacity: Integer);
+begin
+    RSClient.Image.Clear(MainScreen.Bounds);
+    RSClient.Image.DrawRect(Rect, $FFFF00);
+end;
+
+procedure OnBreakStart(Task: PBreakTask);
+begin
+  ActiveTimer.Pause();
+end;
+
+procedure OnBreakFinish(Task: PBreakTask);
+begin
+  ActiveTimer.Resume();
+end;
+
+procedure OnSleepStart(Task: PSleepTask);
+begin
+  ActiveTimer.Pause();
+end;
+
+procedure OnSleepFinish(Task: PSleepTask);
+begin
+  ActiveTimer.Resume();
+end;
+
+procedure WyrmAgility.SendWebhook(msg: String; FilePath: String = '');
+var
+  HTTP: Int32;
+  Response, Payload: String;
+begin
+  if WEBHOOKURL = "" then
+    Exit;
+  if DiscordUID <> '' then
+    msg := '<@' + DiscordUID + '> ' + msg;
+
+  // First attempt with JSON payload
+  Payload := '{"content": "' + msg + '"}';
+  HTTP := InitializeHTTPClient(False);
+  try
+    SetHTTPHeader(HTTP, 'Content-Type', 'application/json');
+    Response := PostHTTPPage(HTTP, WEBHOOKURL, Payload);
+    if Response = '' then
+      WriteLn('Webhook successfully sent with JSON payload.')
+    else
+      WriteLn('Webhook sent with JSON payload. Response: ', Response);
+
+    // Fallback to FORMS if JSON Fails - We had to fallback as some users had issues with JSON Thanks @Chandler for all the help testing this.
+    if Pos('"code": 50006', Response) > 0 then
+    begin
+      FreeHTTPClient(HTTP);
+      HTTP := InitializeHTTPClient(False);
+      AddPostVariable(HTTP, 'content', msg);
+      Response := PostHTTPPageEx(HTTP, WEBHOOKURL);
+      if Response = '' then
+        WriteLn('Webhook fallback successfully sent with form data after code 50006 error.')
+      else
+        WriteLn('Webhook fallback sent with form data after code 50006 error. Response: ', Response);
+    end;
+  finally
+    FreeHTTPClient(HTTP);
+  end;
+end;
+
+procedure WyrmAgility.SendTerminationNotification();
+begin
+  Self.SendWebhook('Colossal Wyrm Agility has terminated or crashed.');
+end;
+
+procedure WyrmAgility.TakeScreenshot(Name: String);
+var
+  i: Int32;
+begin
+  CreateDirectory('Screenshots/');
+  i := Length(GetFiles('Screenshots/', 'png'));
+  SaveScreenshot('Screenshots/BAWyrmAgility_' + Name + '_' + IntToStr(i) + '.png');
+end;
+
+procedure TAntiban.Setup(); override;
+begin
+  Self.Skills := [ERSSkill.Agility, ERSSkill.TOTAL];
+  Self.MinZoom := 0;
+  Self.MaxZoom := 10;
+  Antiban.OnStartBreak := @OnBreakStart;
+  Antiban.OnFinishBreak := @OnBreakFinish;
+  Antiban.OnStartSleep := @OnSleepStart;
+  Antiban.OnFinishSleep := @OnSleepFinish;
+
+  inherited;
+end;
+
+function FormatRoundedNumber(Number: Integer): String;
+begin
+  // If the number is >= 1 million, format it with 1 decimal place and add "M" suffix
+  if Number >= 1000000 then
+    Result := FormatFloat('0.0M', Number / 1000000)
+  // If the number is >= 1 thousand, format it with no decimal places and add "K" suffix
+  else if Number >= 1000 then
+    Result := FormatFloat('0K', Number / 1000)
+  // For smaller numbers, use the regular SRL.FormatNumber function
+  else
+    Result := SRL.FormatNumber(Number);
+end;
+
+procedure WyrmAgility.Report();
+var
+  ActiveRuntime: Integer;
+  CurrentXP: Integer;
+  GainedXP: Integer;
+  CurrentTermites: Integer;
+  CurrentBoneShards: Integer;
+  TotalTermites: Integer;
+  TotalBoneShards: Integer;
+  XPPerHour, XPPerHourExcludingBreaks: Integer;
+  i: Integer;
+begin
+  ClearDebug();
+  if Index = 5 then
+  begin
+    TotalTermites := 0;
+    TotalBoneShards := 0;
+    CurrentTermites := Inventory.CountItemStack('Termites');
+    CurrentBoneShards := Inventory.CountItemStack('Blessed bone shards');
+
+    if CurrentTermites = -1 then
+      CurrentTermites := 0;
+    if CurrentBoneShards = -1 then
+      CurrentBoneShards := 0;
+
+    TotalTermites := CurrentTermites - StartingTermites;
+  TotalBoneShards := CurrentBoneShards - StartingBoneShards;
+  end;
+  
+  APIClient.SubmitStats(APIClient.GetUUID());
+  XPBar.EarnedXP();
+  
+  CurrentXP := XPBar.Read();
+  GainedXP := CurrentXP - StartXP;
+  WriteLn('========================================');
+  WriteLn('       BigAussies Wyrm Roof-Hopper      ');
+  WriteLn('========================================');
+  if AdvancedCourse then
+    WriteLn('   Course Type: Advanced')
+  else
+    WriteLn('   Course Type: Basic');
+  WriteLn('   Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short));
+  WriteLn('   Termites Obtained: ' + IntToStr(TotalTermites));
+  WriteLn('   Bone Shards Obtained: ' + IntToStr(TotalBoneShards));
+  WriteLn('   XP Gained: ' + FormatRoundedNumber(GainedXP));
+  if (STOP_AT_LEVEL <> -1) or (STOP_AT_LEVEL = 99) then
+    WriteLn('   Current Level: ' + IntToStr(Stats.GetLevel(ERSSkill.Agility)) + ' / Stop at Level: ' + IntToStr(STOP_AT_LEVEL));
+  WriteLn('----------------------------------------');
+  
+  XPPerHour := Round((GainedXP) / (RunningTime.ElapsedTime / 3600000));
+  XPPerHourExcludingBreaks := Round((GainedXP) / (ActiveTimer.ElapsedTime / 3600000));
+  WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
+  if Length(Antiban.Breaks) > 0 then
+    WriteLn('   Time till break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - RunningTime.ElapsedTime)), Time_Short));
+  if Length(Antiban.Sleeps) > 0 then
+    if Antiban.Sleeps[0].NextAtTime > GetTimeRunning then
+      WriteLn('   Time till sleep: ' + SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - RunningTime.ElapsedTime)), Time_Short));
+      
+  if Self.SummerPiesBoost then
+    WriteLn('   Summer Pie Boost Enabled');
+  
+  WriteLn('========================================');
+  WriteLn('       BigAussies Wyrm Roof-Hopper      ');
+  WriteLn('               Version: ' + {$MACRO SCRIPT_REVISION});
+  WriteLn('========================================');
+end;
+
+// full Credits to SkunkBUILDAGUIworks & Student for helping with this so we can see the portals.
+procedure TRSMinimap.RotateWithinAngles(min, max: Int32);
+var
+  minMaxAvg: Int32 := Floor((min + max) div 2);
+  preferredAngle: Int32 := SRL.SkewedRand(minMaxAvg, min, max);
+begin
+  if preferredAngle < 0 then
+    preferredAngle := preferredAngle + 360;
+
+  if InRange(self.getCompassAngle(True), min, max) then
+    Exit; //tztok Aussie fat cok
+
+  Minimap.SetCompassAngle(preferredAngle);
+end; 
+
+function WyrmAgility.GetLocation(): TLocation;
+begin
+  MyFullPos := Map.FullPosition;
+  //writeln(MyFullPos);
+
+  if (MyFullPos.Plane = 0) and MyFullPos.InBox([2476, 38682, 2524, 38738]) then Exit(START);
+  if MyFullPos.InBox([15572, 38702, 15584, 38726]) then Exit(TIGHTROPE);
+  if (MyFullPos.Plane = 1) and MyFullPos.InBox([15548, 38786, 15556, 38794]) then Exit(PLATFORM1);
+  if (MyFullPos.Plane = 2) and MyFullPos.InBox([28608, 38798, 28612, 38806]) then Exit(ADVANCEDPLATFORM1); // Adjusted coordinates
+  if (MyFullPos.Plane = 2) and MyFullPos.InBox([28548, 38798, 28556, 38806]) then Exit(ADVANCEDPLATFORM2);
+  if MyFullPos.InBox([28508, 38698, 28517, 38706]) then Exit(ZIPLINE);
+  if MyFullPos.InBox([15492, 38786, 15502, 38794]) then Exit(BASICPLATFORM1);
+  if MyFullPos.InBox([15464, 38698, 15472, 38706]) then Exit(BASICPLATFORM2);
+end;
+
+function WyrmAgility.GetNextObstacle(): Int32;
+var
+  Loc := Self.GetLocation();
+begin
+  if (not RSClient.IsLoggedIn) then Exit;
+  case Loc of
+    START             : Exit(0);
+    TIGHTROPE         : Exit(1);
+    PLATFORM1         : Exit(2);
+    ADVANCEDPLATFORM1 : Exit(3);
+    ADVANCEDPLATFORM2 : Exit(4);
+    ZIPLINE           : Exit(5);
+    BASICPLATFORM1    : Exit(3);
+    BASICPLATFORM2    : Exit(4);
+  end;
+end;
+
+function WyrmAgility.CheckAndBoostSummerPie(): Boolean;
+var
+  dropItems: TRSItemArray;
+begin
+  Result := False;
+  dropItems := ['Pie dish'];
+
+  if SRL.Dice(5) then
+  begin
+    WriteLn('[Antiban]: Skipping boost');
+    Exit;
+  end;
+
+  if not (Inventory.ClickItem('Half a summer pie') or Inventory.ClickItem('Summer pie')) then
+    Exit;
+
+  Result := True;
+  if Inventory.ContainsItem('Pie dish') then
+  begin
+    Wait(100, 200);
+    Inventory.RightClickDrop(dropItems, DROP_PATTERN_SNAKE);
+    WriteLn('Dropped Pie dish');
+  end;
+end;
+
+function WyrmAgility.FindObstacle(Obs: TObstacle): Boolean;
+var
+  Pt, Tile: TPoint;
+  MSRect: TRectangle;
+  TPA: TPointArray;
+  ATPA: T2DPointArray;
+  Finder: TRSObjectFinder;
+begin    
+  if (not RSClient.IsLoggedIn) then Exit(False);
+
+  for Tile in Obs.MMTiles do
+  begin
+    RSClient.Image.Clear(Mainscreen.Bounds);
+    MSRect := Map.GetTileMS(Tile, 0);
+    
+    if MainScreen.IsVisible(MSRect.Mean) then
+    begin
+      Self.HighlightRect(MSRect, 16105854, 75);
+      
+      if Obs.Color.Color <> 0 then
+      begin
+        Finder.Colors := [Obs.Color];
+        Finder.ClusterDistance := 5;
+
+        for 1 to SRL.NormalRange(3,5) do
+        begin
+          if Obs.Index = 0 then
+            ATPA := MainScreen.FindObject(Finder, MSRect.Expand(20).Bounds)
+          else
+            ATPA := MainScreen.FindObject(Finder, MSRect.Expand(5).Bounds);
+          
+          if Length(ATPA) < 1 then Exit;
+          for TPA in ATPA do
+          begin
+            if TELEPORTMOUSE then
+              Mouse.Teleport(TPA.Mean)
+            else
+              Mouse.Move(TPA.Mean);
+            if MainScreen.IsUpText(Obs.UpText, 75) then Exit(True);
+          end;
+        end;
+      end else
+      begin
+        for 1 to SRL.NormalRange(2,4) do
+        begin
+          Pt := SRL.RandomPoint(MSRect);
+          if TELEPORTMOUSE then
+            Mouse.Teleport(Pt)
+          else
+            Mouse.Move(Pt);
+          if MainScreen.IsUpText(Obs.UpText, 75) then Exit(True);
+        end;
+      end;
+    end;
+  end;
+
+  Result := Mainscreen.IsUpText(Obs.UpText, 75);
+end;
+
+function WyrmAgility.HandleObstacle(Obs: TObstacle): ResultEx;
+var
+  T: TCountDown;
+  i, InitialXP, CurrentXP: Int32;
+  NextObs: TObstacle;
+begin
+  Result := NOTFOUND;
+  Self.DoAntiban();
+  if (not RSClient.IsLoggedIn) then Exit;
+
+  while Minimap.IsPlayerMoving() do
+    Wait(35, 45);
+
+  if Obs.WalkTile.X < 2 then
+    Obs.WalkTile := Obs.MMTiles[0];
+
+  for 1 to 3 do
+  begin
+    if Self.FindObstacle(Obs) then Break;
+  end;
+
+  if Mainscreen.IsUpText(Obs.UpText, 75) then
+  begin
+    Mouse.Click(MOUSE_LEFT);
+    if (not MainScreen.DidRedClick) then Exit;
+
+    RSClient.Image.Clear(Mainscreen.Bounds);
+    Self.Attempts := 0;
+
+  end else
+    Exit(NOTFOUND);
+
+  T.Init(Obs.MaxTime);
+  InitialXP := XPBar.Read();
+
+  while (not T.IsFinished) do
+  begin
+    if (not RSClient.IsLoggedIn) then Exit;
+
+    CurrentXP := XPBar.Read();
+    if (CurrentXP - InitialXP) >= Obs.XP then
+      Break;
+
+    Wait(75, 115);
+  end;
+
+  Result := COMPLETE;
+  Self.PrevXP := XPBar.Read();
+  Self.Report();
+end;
+
+procedure WyrmAgility.SetupObstacles();
+var
+  i: Int32;
+begin
+  Self.Obs_Names := ['Climb Ladder', 'Cross Tightrope', 'Main Platform 1', 'Platform 2', 'Platform 3', 'Zip Line'];
+  writeln('Starting Obstacle Setup');
+  with Obstacles[0] do // START LADDER
+  begin
+    Index   := 0;
+    UpText  := ['limb'];
+    MMTiles := [[2516, 38704]]; 
+    Color   := CTS2(6659008, 7, 0.04, 2.02);
+    XP      := 37;
+    NextLoc := TIGHTROPE;
+    MaxTime := 6500;
+  end;
+  with Obstacles[1] do // First Cross Rope
+  begin
+    Index   := 1;
+    UpText  := ['oss'];
+    MMTiles := [[15581, 38730]]; 
+    Color := CTS2(1812174, 20, 0.08, 0.85);
+    XP      := 73;
+    NextLoc := PLATFORM1;
+    MaxTime := 21000;
+  end;
+
+  if Stats.GetLevel(ERSSkill.Agility) >= 62 then
+  begin
+    AdvancedCourse := True;
+    writeln('Setting up advanced course');
+    with Obstacles[2] do // Advanced Platform 1 Jump Edge
+    begin
+      Index   := 2;
+      UpText := ['limb'];
+      MMTiles := [[15552, 38796]]; // Coords if we do advance course
+      //Color   := CTS2(1943496, 8, 0.02, 0.54);
+      XP      := 60;
+      NextLoc := ADVANCEDPLATFORM1;
+      MaxTime := 3500;
+    end;
+    with Obstacles[3] do // Advanced Platform 1 Jump Edge
+    begin
+      Index   := 3;
+      UpText  := ['ump'];
+      MMTiles := [[28600, 38802]];
+      Color   := CTS2(1943496, 8, 0.02, 0.54);
+      XP      := 60;
+      NextLoc := ADVANCEDPLATFORM2;
+      MaxTime := 7000;
+    end;
+    with Obstacles[4] do // Advanced Platform 2 Cross Rope
+    begin
+      Index   := 4;
+      UpText  := ['oss'];
+      MMTiles := [[28548, 38798]];
+      XP      := 123;
+      NextLoc := ZIPLINE;
+      MaxTime := 21000;
+    end;
+  end
+  else
+  begin
+    writeln('Setting up basic course');
+    with Obstacles[2] do // Advanced Platform 1 Jump Edge
+    begin
+      Index   := 2;
+      UpText := ['ross'];
+      MMTiles := [[15546, 38790]]; // Coords to start basic course
+      Color   := CTS2(2071995, 4, 0.02, 0.55);
+      XP      := 37;
+      NextLoc := BASICPLATFORM1;
+      MaxTime := 13000;
+    end;
+    with Obstacles[3] do // Basic Platform 1
+    begin
+      Index   := 3;
+      UpText  := ['limb'];
+      MMTiles := [[15484, 38790]];
+      XP      := 74;
+      NextLoc := BASICPLATFORM2;
+      MaxTime := 12000;
+    end;
+    with Obstacles[4] do // Basic platform 2
+    begin
+      Index   := 4;
+      UpText  := ['limb'];
+      MMTiles := [[15462, 38702]];
+      XP      := 37;
+      NextLoc := ZIPLINE;
+      MaxTime := 4500;
+    end;
+  end;
+
+  with Obstacles[5] do // Final Zipline
+  begin
+    Index   := 5;
+    UpText  := ['lide'];
+    MMTiles := [[28518, 38698]];
+    if Stats.GetLevel(ERSSkill.Agility) >= 62 then
+      XP      := 325
+    else
+      XP      := 244;
+    NextLoc := START;
+    MaxTime := 9200;
+  end;
+end;
+
+procedure WyrmAgility.Init(MaxActions: UInt32; MaxTime: UInt64); override;
+var
+  CurrentZoomLevel: Integer;
+  i: Int32;
+begin
+  inherited;
+
+  RSClient.Image.Clear(Mainscreen.Bounds);
+  Map.SetupChunkEx([24, 46, 26, 44], [0, 1, 2]);
+  Objects.Setup(Map.Objects(), @Map.Walker);
+  Npcs.Setup(Map.NPCs(), @Map.Walker);
+
+  StartXP := XPBar.Read();
+  StartingTermites := Inventory.CountItemStack('Termites');
+
+  if StartingTermites = -1 then
+    StartingTermites := 0;
+  
+  StartingBoneShards := Inventory.CountItemStack('Blessed bone shards');
+  if StartingBoneShards = -1 then
+    StartingBoneShards := 0;
+
+  SummerPies := ('Summer Pie');
+
+  if inventory.ContainsItem(SummerPies) or inventory.ContainsItem('Half a summer pie') then
+  begin
+    writeln('Summer Pies Found, Will use Summer Pies to boost.');
+    Self.SummerPiesBoost := True;
+  end;
+
+  Self.RSW.EnableRunAtEnergy := 85;
+  CurrentZoomLevel := Options.GetZoomLevel;
+
+  if (CurrentZoomLevel < 0) or (CurrentZoomLevel > 10) then
+    Options.SetZoomLevel(SRL.NormalRange(0, 10));
+
+  if PINGONTERMINATED and ENABLEWEBHOOKS then
+    AddOnTerminate(@Self.SendTerminationNotification);
+
+  Mouse.Speed := SRL.NormalRange(22,26);
+  Self.PrevXP := XPBar.Read();
+  AdvancedCourse := False;
+  SetupObstacles();
+  RunningTime.Start();
+  ActiveTimer.Start();
+end;
+
+procedure WyrmAgility.Run(MaxActions: UInt32; MaxTime: UInt64);
+var
+  TRes: ResultEx;
+  Recal, StartOver: Boolean;
+  NextObstacleIndex: Int32;
+begin
+  Self.Init(MaxActions, MaxTime);
+  repeat
+    if (STOP_AT_LEVEL <> -1) and (Stats.GetLevel(ERSSkill.Agility) >= STOP_AT_LEVEL) then
+    begin
+      WriteLn('Reached level ', STOP_AT_LEVEL, '. Stopping script.');
+      Logout.ClickLogout;
+      TerminateScript();
+    end;
+
+    if (Index = 0) and (Stats.GetLevel(ERSSkill.Agility) <= 61) then
+      SetupObstacles();
+
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
+
+    Recal := False;
+    for Index := Self.GetNextObstacle to High(Self.Obstacles) do
+    begin
+      TRes := Self.HandleObstacle(Self.Obstacles[Index]);
+
+      if TRes = NOTFOUND then
+      begin
+        Inc(Self.Attempts);
+        if Self.Attempts > 5 then
+        begin
+          MyFullPos := Map.FullPosition;
+          WriteLn('Failed to locate obstacle: ' + Obs_Names[Index]);
+          WriteLn('Index: ' + ToStr(Index) + ', Loc: ' + ToStr(Self.GetLocation) + ', Ang: ' + ToStr(Minimap.GetCompassAngle(True)));
+          WriteLn('Coords: (' + IntToStr(MyFullPos.X) + ', ' + IntToStr(MyFullPos.Y) + ', Plane: ' + IntToStr(MyFullPos.Plane) + ')');
+          TakeScreenshot('FailedObstacle');
+          Logout.ClickLogout();
+          TerminateScript();
+        end;
+
+        if WL.Activity.IsFinished() then
+        begin
+          WriteLn('No activity detected in 5 minutes! Shutting down.');
+          Break;
+        end;
+
+        Antiban.RandomRotate();
+        Recal := True;
+      end;
+
+      if Recal then break;
+    end;
+
+    //Wait(SRL.NormalRange(125, 275));
+  until Self.ShouldStop();
+  Logout.ClickLogout();
+  TerminateScript('Time to shutdown');
+end;
+
+{$IFDEF SCRIPT_GUI}
+type
+  TConfig = record(TScriptForm)
+    WebhookLabel , DiscordUIDLabel, DiscordUIDInfo: TLabel;
+    WebHookInput, DiscordUIDInput, StopAtLevelInputBox: TLabeledEdit;
+    PingOnDMCheckBox, PingOnInGameChatCheckBox, PingOnTerminatedCheckBox, EnableWebhooksCheckBox, TeleportMouseCheckBox: TLabeledCheckBox;
+    StopAtLevelLabel, WebhookInfo: TLabel;
+  end;
+
+procedure TConfig.UpdateAccountValues(sender: TObject);
+var
+  selector: TComboBox;
+  user, pass, pin: TEdit;
+  worlds: TMemo;
+  idx: Int32;
+  worldsStr: String;
+  i: Int32;
+begin
+  selector := TComboBox(Self.Form.GetChild('am_selector_combobox'));
+  idx := selector.GetItemIndex();
+
+  if (idx < 0) or (idx > High(Login.Players)) then Exit;
+  
+  Self.SaveUserSettings();
+
+  Login.PlayerIndex := idx;
+
+  user := TEdit(Self.Form.GetChild('am_user_edit'));
+  pass := TEdit(Self.Form.GetChild('am_pass_edit'));
+  pin := TEdit(Self.Form.GetChild('am_pin_edit'));
+  worlds := TMemo(Self.Form.GetChild('am_worlds_memo'));
+
+  user.SetText(Login.Players[idx].User);
+  pass.SetText(Login.Players[idx].Password);
+  pin.SetText(Login.Players[idx].Pin);
+
+  worldsStr := '';
+  for i := 0 to High(Login.Players[idx].Worlds) do
+  begin
+    worldsStr += ToStr(Login.Players[idx].Worlds[i]);
+    if i < High(Login.Players[idx].Worlds) then
+      worldsStr += ', ';
+  end;
+  worlds.SetText(worldsStr);
+
+  Self.LoadUserSettings();
+end;
+
+procedure TConfig.InitializeAccountManager;
+var
+  accountManagerTab: TTabSheet;
+  selector: TComboBox;
+begin
+  selector := TComboBox(Self.Form.GetChild('am_selector_combobox'));
+  selector.SetOnChange(@UpdateAccountValues);
+end;
+  
+procedure TConfig.LoadUserSettings();
+var
+  SavedDiscordUID, SavedWebhookURL: String;
+  SavedPingOnTerminated, SavedEnableWebhooks, SavedTeleportMouse: Boolean;
+  Username: String;
+begin
+ if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+
+  if Username = '' then Exit;
+
+  SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
+  SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
+  SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+  SavedPingOnTerminated := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'PingOnTerminated', 'Configs/BASettings.ini'), True); 
+  SavedTeleportMouse := StrToBoolDef(ReadINI(Username + ' Colossal Wyrm Agility Settings', 'TeleportMouse', 'Configs/BASettings.ini'), False);
+
+  if Assigned(Self.TeleportMouseCheckBox) then
+  begin
+    Self.TeleportMouseCheckBox.SetChecked(SavedTeleportMouse);
+  end;
+
+  if Assigned(Self.EnableWebhooksCheckBox) then
+  begin
+    Self.EnableWebhooksCheckBox.SetChecked(SavedEnableWebhooks);
+    Self.WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
+  end;
+
+  if Assigned(Self.PingOnTerminatedCheckBox) then
+  begin
+    Self.PingOnTerminatedCheckBox.SetChecked(SavedPingOnTerminated);
+  end;
+
+  if Assigned(Self.DiscordUIDInput) then
+    Self.DiscordUIDInput.SetText(SavedDiscordUID);
+
+  if Assigned(Self.WebHookInput) then
+    Self.WebHookInput.SetText(SavedWebhookURL);
+end;
+
+procedure TConfig.SaveUserSettings();
+var
+  Username: String;
+begin
+ if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+  if Username = '' then Exit;
+
+  if Assigned(Self.TeleportMouseCheckBox) then
+    TELEPORTMOUSE := Self.TeleportMouseCheckBox.IsChecked();
+
+  if Assigned(Self.EnableWebhooksCheckBox) then
+    ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
+
+  if Assigned(Self.PingOnTerminatedCheckBox) then
+    PINGONTERMINATED := Self.PingOnTerminatedCheckBox.IsChecked();
+
+  if Assigned(Self.DiscordUIDInput) then
+    DiscordUID := Self.DiscordUIDInput.GetText();
+
+  if Assigned(Self.WebHookInput) then
+    WEBHOOKURL := Self.WebHookInput.GetText();
+
+  WriteINI(Username + ' Colossal Wyrm Agility Settings', 'TeleportMouse', BoolToStr(TELEPORTMOUSE, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'PingOnTerminated', BoolToStr(PINGONTERMINATED, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
+end;
+
+procedure TConfig.StartScript(sender: TObject); override; 
+begin
+
+  Self.SaveUserSettings();
+  inherited;
+end;
+
+procedure TConfig.OpenURL(Sender: TObject);
+begin
+  if Sender = Self.WebhookInfo then
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks')
+  else if Sender = Self.DiscordUIDInfo then
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
+end;
+
+procedure TConfig.WebhooksCheckboxChanged(Sender: TObject);
+begin
+  Self.WebhookInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.PingOnTerminatedCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+end;
+
+procedure TConfig.Run(); override;
+var
+  Img: TPicture;
+  BGImg: TImage;
+  tab: TTabSheet;
+  SavedDiscordUID, SavedWebhookURL: String;
+  SavedPingOnTerminated, SavedEnableWebhooks, SavedRemoteInput, SavedTeleportMouse: Boolean;
+begin
+  ClearDebug();
+  Self.Setup('BigAussies Colossal Wyrm Agility');
+  Self.Start.SetOnClick(@Self.StartScript);
+  WLSettings.RemoteInput.BlockInput := True; // Disabled input, remove this if you want to enable input.
+
+  Self.AddTab('Script Settings');
+  tab := Self.Tabs[High(Self.Tabs)];
+
+  Self.CreateAccountManager(tab);
+
+  InitializeAccountManager();
+
+  Self.LoadUserSettings();
+
+  with Self.TeleportMouseCheckBox do
+  begin
+    Create(tab);
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(TControl.AdjustToDPI(140));
+    SetCaption('Teleport Mouse mode');
+    SetHint('Instead of moving the mouse to obstacles the mouse will be teleported.');
+    SetChecked(SavedTeleportMouse);
+  end;
+
+  with Self.StopAtLevelInputBox do
+  begin
+    Create(tab);
+    SetLeft(Self.TeleportMouseCheckBox.GetLeft() + TControl.AdjustToDPI(175));
+    SetTop(TControl.AdjustToDPI(140));
+    SetWidth(110);
+    SetCaption('Stop at Level');
+    SetHint('Enter -1 to never stop.');
+    Edit.SetOnKeyPress(@Edit.NumberField);
+  end;
+
+  with Self.EnableWebhooksCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Discord Notifications");
+    SetLeft(Self.TeleportMouseCheckBox.GetLeft());
+    SetTop(Self.TeleportMouseCheckBox.GetTop() + TControl.AdjustToDPI(25));
+    SetHint('Script will ping you on your own discord server when it stops.');
+    SetChecked(SavedEnableWebhooks);
+    CheckBox.SetOnChange(@WebhooksCheckboxChanged);
+  end;
+
+  with Self.WebhookInfo do
+  begin
+    Create(tab);
+    SetLeft(Self.EnableWebhooksCheckBox.GetLeft());
+    SetTop(Self.EnableWebhooksCheckBox.GetTop() + TControl.AdjustToDPI(25));
+    SetCaption('Click here to learn how to generate your own Discord webhook URL');
+    SetHint('Click here to learn how to generate your own Discord webhook URL');
+    setOnClick(@OpenURL);
+    SetFontSize(TControl.AdjustToDPI(9));
+    SetFontColor(clBlue);
+  end;
+
+  with Self.DiscordUIDInput do
+  begin
+    Create(tab);
+    SetLeft(Self.WebhookInfo.GetLeft());
+    SetTop(Self.WebhookInfo.GetTop() + TControl.AdjustToDPI(30));
+    SetCaption('Discord UID (Optional)');
+    SetHint('What name to @ in discord when script terminates');
+    SetWidth(TControl.AdjustToDPI(140));
+    SetText(SavedDiscordUID);
+  end;
+
+  with Self.DiscordUIDInfo do
+  begin
+    Create(tab);
+    SetFontColor(clBlue);
+    SetLeft(Self.DiscordUIDInput.GetLeft() + Self.DiscordUIDInput.GetWidth() + TControl.AdjustToDPI(10));
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(18));
+    SetCaption('Click here to learn how to find your Discord User ID');
+    SetHint('Click here to learn how to find your Discord User ID');
+    setOnClick(@OpenURL);
+    SetFontSize(TControl.AdjustToDPI(9));
+  end;
+
+  with Self.WebHookInput do
+  begin
+    Create(tab);
+    SetLeft(Self.DiscordUIDInput.GetLeft());
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(45));
+    SetCaption('Discord Webhook URL');
+    SetHint('Discord Webhook URL');
+    SetWidth(TControl.AdjustToDPI(180));
+    SetText(savedWebhookURL);
+  end;
+
+  with Self.PingOnTerminatedCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Ping on script termination");
+    SetLeft(Self.WebHookInput.GetLeft());
+    SetTop(Self.WebHookInput.GetTop() + TControl.AdjustToDPI(50));
+    SetHint('Enable to ping when the script terminates cleanly');
+    SetChecked(SavedPingOnTerminated);
+  end;
+
+  WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
+
+  Self.CreateVersionPanel(tab);
+
+  Self.CreateAntibanManager();
+
+  Self.CreateWaspLibSettings();
+
+  Self.CreateAPISettings();
+
+  inherited;
+end;
+
+var
+  Config: TConfig;
+{$ENDIF}
+
+begin
+  {$IFDEF SCRIPT_GUI}
+  Sync(@Config.Run);
+  {$ENDIF}
+  Script.Run(WLSettings.MaxActions, WLSettings.MaxTime);
+end;
