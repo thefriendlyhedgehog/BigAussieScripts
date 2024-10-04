@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '9796a306-c0ef-472f-93a3-b4777b5ac1da'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '4'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -38,14 +38,17 @@ Type
     StartTile          : TPoint;
     Obstacles          : Array [0..5] of TObstacle;
     Obs_Names          : Array [0..5] of String;
-    AdvancedCourse: Boolean;
     FailCount,Attempts : Int32;
     MyPos: TPoint;
     MyFullPos: TRSPosition;
     Timer: TStopWatch;
     RunningTime: TStopWatch;
     BoostTimer: TStopWatch;
-    SummerPiesBoost: Boolean;
+
+    SummerPiesBoost,
+    AdvancedCourse,
+    NewLap: Boolean;
+    
 
     Termites: TRSitem;
     BoneShards: TRSitem;
@@ -54,6 +57,8 @@ Type
     Index: Int32;
     StartingBoneShards: Integer;
     StartingTermites: Integer;
+    TotalTermites: Integer;
+    TotalBoneShards: Integer;
     StartXP: Integer;
     CurrentXP: Integer;
     PrevXP: Integer;
@@ -175,14 +180,13 @@ var
   GainedXP: Integer;
   CurrentTermites: Integer;
   CurrentBoneShards: Integer;
-  TotalTermites: Integer;
-  TotalBoneShards: Integer;
   XPPerHour, XPPerHourExcludingBreaks: Integer;
   i: Integer;
 begin
   ClearDebug();
-  if Index = 5 then
+  if NewLap then
   begin
+    NewLap := False;
     TotalTermites := 0;
     TotalBoneShards := 0;
     CurrentTermites := Inventory.CountItemStack('Termites');
@@ -194,7 +198,7 @@ begin
       CurrentBoneShards := 0;
 
     TotalTermites := CurrentTermites - StartingTermites;
-  TotalBoneShards := CurrentBoneShards - StartingBoneShards;
+    TotalBoneShards := CurrentBoneShards - StartingBoneShards;
   end;
   
   APIClient.SubmitStats(APIClient.GetUUID());
@@ -220,6 +224,8 @@ begin
   XPPerHour := Round((GainedXP) / (RunningTime.ElapsedTime / 3600000));
   XPPerHourExcludingBreaks := Round((GainedXP) / (ActiveTimer.ElapsedTime / 3600000));
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
+  Writeln('   Termites per hour: ' + FormatRoundedNumber(Round(TotalTermites / (RunningTime.ElapsedTime / 3600000))));
+  Writeln('   Bone shards per hour: ' + FormatRoundedNumber(Round(TotalBoneShards / (RunningTime.ElapsedTime / 3600000))));
   if Length(Antiban.Breaks) > 0 then
     WriteLn('   Time till break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - RunningTime.ElapsedTime)), Time_Short));
   if Length(Antiban.Sleeps) > 0 then
@@ -400,6 +406,9 @@ begin
 
   T.Init(Obs.MaxTime);
   InitialXP := XPBar.Read();
+
+  if Index = 5 then
+    NewLap := True;
 
   while (not T.IsFinished) do
   begin
@@ -791,8 +800,6 @@ end;
 
 procedure TConfig.Run(); override;
 var
-  Img: TPicture;
-  BGImg: TImage;
   tab: TTabSheet;
   SavedDiscordUID, SavedWebhookURL: String;
   SavedPingOnTerminated, SavedEnableWebhooks, SavedRemoteInput, SavedTeleportMouse: Boolean;
