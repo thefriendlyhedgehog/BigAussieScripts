@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '34'}  
+{$DEFINE SCRIPT_REVISION := '35'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1862,7 +1862,7 @@ begin
     if selectedReturnMethod = 'Home Teleport' then
     begin
       Magic.CastSpell(ERSSpell.LUNAR_HOME_TELEPORT);
-      Wait(10000,12000);
+      Wait(18000,20000);
     end
     else if not transport.run(teleportLocation) then
     begin
@@ -2239,7 +2239,7 @@ begin
       returnMethodSelector.AddItemArray(['Varrock Teleport Tablet', 'Ring of Wealth']);
     'Ardougne': // Tested and working
       returnMethodSelector.AddItemArray(['Ardougne Teleport Tablet']);
-    'Castle Wars':
+    'Castle Wars': // Mini-game teleport and working
       returnMethodSelector.AddItemArray(['Castle Wars Mini-Game Teleport', 'Ring of dueling']);
     'Catherby': // Tested and working
       returnMethodSelector.AddItemArray(['Camelot Teleport Tablet']);

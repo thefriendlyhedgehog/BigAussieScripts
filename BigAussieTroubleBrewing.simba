@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '6'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -8,6 +8,7 @@ var
   REDNORTHTEAM: Boolean                  = False;
   BLUESOUTHTEAM: Boolean                 = False;
   METHODTOUSE: String                    = '';
+  NPCSELECTION: String                  = '';
   POWERFLETCHING: Boolean                = False;
   WEBHOOKURL: String                     = '';
   DiscordUID: String                     = '';
@@ -55,6 +56,8 @@ type
     TotalScrapeyLogs,
     CurrentXP,
     TotalPOEEarned: Integer;
+
+    TeamDetermined: Boolean;
 
     DisplayName: String;
 
@@ -574,16 +577,17 @@ end;
 function TroubleBrewing.DetermineTeam(): Boolean;
 begin
   MyFullPos := Map.FullPosition;
-  if MyFullPos.InBox([11008, 38402, 11248, 38530]) then
+  if MyFullPos.InBox([11116, 38354, 11152, 38390]) then
   begin
     REDNORTHTEAM := True;
     BLUESOUTHTEAM := False;
   end
-  else if MyFullPos.InBox([11008, 38538, 11248, 38654]) then
+  else if MyFullPos.InBox([11156, 38354, 11192, 38390]) then
   begin
     REDNORTHTEAM := False;
     BLUESOUTHTEAM := True;
   end;
+  Self.SetupObjects();
   Exit(True);
 end;
 
@@ -669,11 +673,17 @@ begin
   FancyDan := Npcs.Get('Fancy Dan');
   SanFan := Npcs.Get('San Fan');
 
+  if NPCSELECTION = 'Red' then
+    TeamNPC := FancyDan
+  else if NPCSELECTION = 'Blue' then
+    TeamNPC := SanFan
+  else
+    TeamNPC := HonestJimmy;
+
   if REDNORTHTEAM then
   begin
     writeln('Setting up for North/Red team.');
     TreeFilteredCoords := [[11060, 38426], [11056, 38466]];
-    TeamNPC := FancyDan;
 
     with ScrapyBarkHopperNorth do
     begin
@@ -703,7 +713,6 @@ begin
   begin
     writeln('Setting up for South/blue team');
     TreeFilteredCoords := [[11084, 38642], [11044, 38606]];
-    TeamNPC := SanFan;
 
     with ScrapyBarkHopperSouth do
     begin
@@ -802,6 +811,8 @@ var
   POEEarned: Integer;
   ocrFilter: TOCRColorFilter;
 begin
+  Self.TeamDetermined := False;
+  writeln('Resetting team determined');
   POEBox := [314, 169, 337, 181];
   ocrFilter := TOCRColorFilter.Create([537395], [1]);
   POEEarnedText := OCR.Recognize(POEBox, ocrFilter, RS_FONT_QUILL_8);
@@ -889,7 +900,7 @@ begin
     end;
 
     writeln('Attempting to join team');
-    TeamNPC.WalkSelectOption(['Join-Crew']);
+    TeamNPC.WalkSelectOption(['Join-Crew', 'Join-Team']);
     Minimap.WaitPlayerMoving;
     WaitUntil(Self.GetLocation() = INLOBBYBOX, 65, 1600);
 
@@ -927,9 +938,17 @@ var
   AntibanTimer: TStopWatch;
   AntibanInterval: Int32;
 begin
+  if not Self.TeamDetermined then
+  begin
+    writeln('Detecting what team we are on.');
+    Self.DetermineTeam();
+    Self.TeamDetermined := True;
+  end;
+
   WL.Activity.Restart();
   AntibanTimer.Start();
   AntibanInterval := Random(180000, 240000);
+
   if Chat.IsOpen() then
     Chat.ClickOption('Arr!', True);
 
@@ -1547,6 +1566,10 @@ begin
       TerminateScript();
     end;
   end;
+  // Red Team - 11116, 38354 - 11152, 38390
+  // Blue team - 11156, 38354 - 11192, 38390
+  //While true do
+  //  Map.DebugPosition();
 end;
 
 procedure TroubleBrewing.Run(MaxActions: UInt32; MaxTime: UInt64);
@@ -1772,19 +1795,9 @@ end;
 
 procedure TConfig.StartScript(sender: TObject); override;
 begin
-  if Self.TeamDropBox.GetItemIndex() = 0 then
-  begin
-    REDNORTHTEAM := True;
-    BLUESOUTHTEAM := False;
-  end
-  else
-  begin
-    REDNORTHTEAM := False;
-    BLUESOUTHTEAM := True;
-  end;
-
   METHODTOUSE := Self.MethodDropBox.GetText();
   POWERFLETCHING := Self.PowerFletchCheckBox.IsChecked();
+  NPCSELECTION := Self.TeamDropBox.GetText();
   Self.SaveUserSettings();
 
   inherited;
@@ -1887,11 +1900,13 @@ begin
     SetLeft(TControl.AdjustToDPI(30));
     SetTop(TControl.AdjustToDPI(140));
     SetWidth(TControl.AdjustToDPI(140));
-    AddItemArray(['Red', 'Blue']);
+    AddItemArray(['Red', 'Blue', 'Random']);
     if TeamSelection = '' then
       SetItemIndex(0)
     else if TeamSelection = 'Blue' then
       SetItemIndex(1)
+    else if TeamSelection = 'Random' then
+      SetItemIndex(2)
     else
       SetItemIndex(0);
     SetHint('Red Team can join a game in progress, Blue Team cannot.');
