@@ -980,7 +980,7 @@ begin
         if not ScrappyTree.IsVisible() then
         begin
           Minimap.RotateWithinAngles(285, 345);
-          Map.Walker.WebWalk([11080, 38634]);
+          Map.Walker.WebWalk([11068, 38622]);
         end;
       if IsInterfaceOpen() or IsEndGameInterfaceOpen() then
         Exit;

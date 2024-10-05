@@ -39,7 +39,6 @@ Type
     Obstacles          : Array [0..5] of TObstacle;
     Obs_Names          : Array [0..5] of String;
     FailCount,Attempts : Int32;
-    MyPos: TPoint;
     MyFullPos: TRSPosition;
     Timer: TStopWatch;
     RunningTime: TStopWatch;
