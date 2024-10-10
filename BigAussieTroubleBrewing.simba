@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '9'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -577,16 +577,32 @@ end;
 function TroubleBrewing.DetermineTeam(): Boolean;
 begin
   MyFullPos := Map.FullPosition;
+  
   if MyFullPos.InBox([11116, 38354, 11152, 38390]) then
   begin
+    writeln('North Team Setup');
     REDNORTHTEAM := True;
     BLUESOUTHTEAM := False;
   end
   else if MyFullPos.InBox([11156, 38354, 11192, 38390]) then
   begin
+    writeln('South Team Setup');
+    REDNORTHTEAM := False;
+    BLUESOUTHTEAM := True;
+  end
+  else if MyFullPos.InBox([11012, 38402, 11260, 38522]) then
+  begin
+    writeln('North Team Setup');
+    REDNORTHTEAM := True;
+    BLUESOUTHTEAM := False;
+  end
+  else if MyFullPos.InBox([11008, 38534, 11260, 38654]) then
+  begin
+    writeln('South Team Setup');
     REDNORTHTEAM := False;
     BLUESOUTHTEAM := True;
   end;
+  
   Self.SetupObjects();
   Exit(True);
 end;
@@ -709,7 +725,7 @@ begin
       Rotations := [0];
     end;
   end
-  else
+  else if BLUESOUTHTEAM then
   begin
     writeln('Setting up for South/blue team');
     TreeFilteredCoords := [[11084, 38642], [11044, 38606]];
@@ -903,6 +919,12 @@ begin
     TeamNPC.WalkSelectOption(['Join-Crew', 'Join-Team']);
     Minimap.WaitPlayerMoving;
     WaitUntil(Self.GetLocation() = INLOBBYBOX, 65, 1600);
+    if Minimap.GetHPPercent() < 25 then
+    begin
+      writeln('LowHP Trying to join game, Probably being attacked. Running away if we can.');
+      Map.Walker.WebWalk([11156, 38346]);
+      HonestJimmy.WalkSelectOption(['Join-Team']);
+    end;
 
     if Self.GetLocation() <> INLOBBYBOX then
     begin
@@ -914,8 +936,15 @@ begin
 
       if attempts >= 50 then
       begin
-        writeln('Failed to join team after 50 attempts, Terminating.');
+        writeln('Failed to join team after 50 attempts, Joining random team.');
+        Map.Walker.WebWalk([11156, 38346]);
+        HonestJimmy.WalkSelectOption(['Join-Team']);
+      end;
+      if attempts >= 75 then
+      begin
+        writeln('Failed to join team after 75 attempts, Terminating script.');
         TerminateScript();
+        Exit;
       end;
     end;
   end;
@@ -967,6 +996,7 @@ var
   ItemsToKeep: TRSItemArray;
   UnwantedItemSlots: TIntegerArray;
   i: Integer;
+  RandomX, RandomY: Integer;
 begin
   if IsEndGameInterfaceOpen() then
     CloseEndGameInterface();
@@ -979,11 +1009,16 @@ begin
       if BLUESOUTHTEAM then
         if not ScrappyTree.IsVisible() then
         begin
+          writeln('Tree not visible');
           Minimap.RotateWithinAngles(285, 345);
-          Map.Walker.WebWalk([11068, 38622]);
+          RandomX := 11068 + RandomRange(-25, 25);
+          RandomY := 38622 + RandomRange(-25, 25);
+          Map.Walker.WebWalk([RandomX, RandomY]);
         end;
+
       if IsInterfaceOpen() or IsEndGameInterfaceOpen() then
         Exit;
+
       ScrappyTree.WalkClick();
       Minimap.EnableSpec(100);
     end
@@ -1167,6 +1202,12 @@ begin
     if IsEndGameInterfaceOpen() then
       Exit;
     currentMessage := Chat.GetMessage(CHAT_INPUT_LINE - 1, [CHAT_COLOR_BLACK]);
+    if ('own team' in currentMessage) then
+    begin
+      writeln('Error: Wrong team setup. Terminating script.');
+      TerminateScript();
+      Exit;
+    end;
     if ('fire' in currentMessage) or ('nothing' in currentMessage) then
     begin
       writeln('Hopper is on fire or broken sad face, We just gonna wait a bit.');
@@ -1566,10 +1607,7 @@ begin
       TerminateScript();
     end;
   end;
-  // Red Team - 11116, 38354 - 11152, 38390
-  // Blue team - 11156, 38354 - 11192, 38390
-  //While true do
-  //  Map.DebugPosition();
+  DetermineTeam();
 end;
 
 procedure TroubleBrewing.Run(MaxActions: UInt32; MaxTime: UInt64);
