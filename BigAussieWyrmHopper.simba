@@ -235,7 +235,7 @@ begin
   if Self.SummerPiesBoost then
     WriteLn('   Summer Pie Boost Enabled');
   
-  if STOP_AT_TERMITES <> -1 then
+  if STOP_AT_TERMITES > 0 then
     WriteLn('   Stopping at ' + IntToStr(STOP_AT_TERMITES) + ' Termites');
   
   WriteLn('========================================');
@@ -243,9 +243,9 @@ begin
   WriteLn('               Version: ' + {$MACRO SCRIPT_REVISION});
   WriteLn('========================================');
 
-  if Inventory.CountItemStack('Termites') >= STOP_AT_TERMITES then
+  if (STOP_AT_TERMITES > 0) and (Inventory.CountItemStack('Termites') >= STOP_AT_TERMITES) then
   begin
-    WriteLn('Stopping script as we have reach termites limit');
+    WriteLn('Stopping script as we have reached the termites limit');
     Logout.ClickLogout();
     TerminateScript();
   end;
@@ -599,7 +599,7 @@ var
 begin
   Self.Init(MaxActions, MaxTime);
   repeat
-    if (STOP_AT_LEVEL <> -1) and (Stats.GetLevel(ERSSkill.Agility) >= STOP_AT_LEVEL) then
+    if (STOP_AT_LEVEL > 0) and (Stats.GetLevel(ERSSkill.Agility) >= STOP_AT_LEVEL) then
     begin
       WriteLn('Reached level ', STOP_AT_LEVEL, '. Stopping script.');
       Logout.ClickLogout;
