@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '35'}  
+{$DEFINE SCRIPT_REVISION := '36'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1388,7 +1388,7 @@ end;
 
 procedure AIOLunarSpells.FastCastingReverseOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: TRSItem; waitTimeCasting: Integer);
 var
-  i, failCount: Integer;
+  failCount: Integer;
   itemFound: Boolean;
   match: TRSItemFinderMatch;
   slots: TIntegerArray;
@@ -1399,19 +1399,17 @@ begin
 
   failCount := 0;
 
-  for i := 27 downto 28 - RawItemCount do
+  while RawItemCount > 0 do
   begin
     CastSpell();
     WaitUntil(Inventory.IsOpen(), 65, 1250);
 
-    // Recheck the inventory for logs
     Inventory.FindItem(RawItem, slots);
 
-    // Check if the item in the current slot is a log
-    itemFound := ItemFinder.Find([RawItem], [Inventory.GetSlotBox(i)], match);
-    if itemFound and (i in slots) then
+    itemFound := ItemFinder.Find([RawItem], [Inventory.GetSlotBox(27)], match);
+    if itemFound and (27 in slots) then
     begin
-      self.ClickSlot(i, '>');
+      self.ClickSlot(27, '>');
       Wait(waitTimeCasting);
         
       WaitUntil(Magic.IsOpen(), 65, 1250);
@@ -1432,9 +1430,12 @@ begin
     end
     else
     begin
-      WriteLn('Item in slot ' + IntToStr(i) + ' is no longer a log. Skipping.');
+      WriteLn('Item in slot 27 is no longer a log. Skipping.');
     end;
+
+    Dec(RawItemCount);
   end;
+
   if Inventory.ContainsItem(RawItem) then
   begin
     WriteLn('Waiting for remaining ' + RawItem + ' to be processed.');
@@ -1612,10 +1613,10 @@ begin
   end;
   FocusJustSwitched := False;
 
-    if CurrentCastingOrder = Reverse then
-      FastCastingReverseOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting)
-    else
-      FastCastingStandardOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting);
+  if CurrentCastingOrder = Reverse then
+    FastCastingReverseOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting)
+  else
+    FastCastingStandardOrder(RawItemCount, ScriptSpeed, RawItem, waitTimeCasting);
   end
   else
   begin
