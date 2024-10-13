@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '9796a306-c0ef-472f-93a3-b4777b5ac1da'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '6'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -274,7 +274,7 @@ begin
   if (MyFullPos.Plane = 0) and MyFullPos.InBox([2476, 38682, 2524, 38738]) then Exit(START);
   if MyFullPos.InBox([15572, 38702, 15584, 38726]) then Exit(TIGHTROPE);
   if (MyFullPos.Plane = 1) and MyFullPos.InBox([15548, 38786, 15556, 38794]) then Exit(PLATFORM1);
-  if (MyFullPos.Plane = 2) and MyFullPos.InBox([28608, 38798, 28612, 38806]) then Exit(ADVANCEDPLATFORM1); // Adjusted coordinates
+  if (MyFullPos.Plane = 2) and MyFullPos.InBox([28602, 38796, 28614, 38808]) then Exit(ADVANCEDPLATFORM1); 
   if (MyFullPos.Plane = 2) and MyFullPos.InBox([28548, 38798, 28556, 38806]) then Exit(ADVANCEDPLATFORM2);
   if MyFullPos.InBox([28508, 38698, 28517, 38706]) then Exit(ZIPLINE);
   if MyFullPos.InBox([15492, 38786, 15502, 38794]) then Exit(BASICPLATFORM1);
