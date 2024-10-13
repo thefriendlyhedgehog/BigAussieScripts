@@ -1388,7 +1388,6 @@ end;
 
 procedure AIOLunarSpells.FastCastingReverseOrder(RawItemCount: Integer; ScriptSpeed: ScriptSpeedTypes; RawItem: TRSItem; waitTimeCasting: Integer);
 var
-  failCount: Integer;
   itemFound: Boolean;
   match: TRSItemFinderMatch;
   slots: TIntegerArray;
@@ -1396,8 +1395,6 @@ begin
   MainScreen.CloseInterface(True);
   WaitUntil(not Bank.IsOpen(), 65, 2100); 
   WriteLn('Fast casting reverse order.');
-
-  failCount := 0;
 
   while RawItemCount > 0 do
   begin
@@ -1407,30 +1404,21 @@ begin
     Inventory.FindItem(RawItem, slots);
 
     itemFound := ItemFinder.Find([RawItem], [Inventory.GetSlotBox(27)], match);
-    if itemFound and (27 in slots) then
-    begin
-      self.ClickSlot(27, '>');
-      Wait(waitTimeCasting);
-        
-      WaitUntil(Magic.IsOpen(), 65, 1250);
-      if not XPBar.EarnedXP() then
-      begin
-        Inc(failCount);
-        if failCount >= 5 then
-        begin
-          WriteLn('Spell did not cast, no XP gained for 5 consecutive casts. Logging out and terminating script.');
-          Logout.ClickLogout();
-          TerminateScript();
-        end;
-      end
-      else
-      begin
-        failCount := 0;
-      end;
-    end
-    else
+    if not itemFound or not (27 in slots) then
     begin
       WriteLn('Item in slot 27 is no longer a log. Skipping.');
+      Dec(RawItemCount);
+      Continue;
+    end;
+
+    self.ClickSlot(27, '>');
+    Wait(waitTimeCasting);
+        
+    WaitUntil(Magic.IsOpen(), 65, 1250);
+    if not XPBar.EarnedXP() then
+    begin
+      WriteLn('Spell did not cast, no XP gained.');
+      Continue;
     end;
 
     Dec(RawItemCount);
@@ -1464,20 +1452,6 @@ begin
     Wait(waitTimeCasting);
       
     WaitUntil(Magic.IsOpen(), 65, 1250);
-    if not XPBar.EarnedXP() then
-    begin
-      Inc(failCount);
-      if failCount >= 5 then
-      begin
-        WriteLn('Spell did not cast, no XP gained for 5 consecutive casts. Logging out and terminating script.');
-        Logout.ClickLogout();
-        TerminateScript();
-      end;
-    end
-    else
-    begin
-      failCount := 0;
-    end;
   end;
 end;
 
