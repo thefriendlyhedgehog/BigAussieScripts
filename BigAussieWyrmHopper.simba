@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '9796a306-c0ef-472f-93a3-b4777b5ac1da'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '7'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '9'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -335,12 +335,15 @@ begin
 
   for Tile in Obs.MMTiles do
   begin
-    RSClient.Image.Clear(Mainscreen.Bounds);
+    if RSClient.RemoteInput.IsSetup then
+      RSClient.Image.Clear(Mainscreen.Bounds);
+
     MSRect := Map.GetTileMS(Tile, 0);
     
     if MainScreen.IsVisible(MSRect.Mean) then
     begin
-      Self.HighlightRect(MSRect, 16105854, 75);
+      if RSClient.RemoteInput.IsSetup then
+        Self.HighlightRect(MSRect, 16105854, 75);
       
       if Obs.Color.Color <> 0 then
       begin
@@ -408,7 +411,9 @@ begin
     Mouse.Click(MOUSE_LEFT);
     if (not MainScreen.DidRedClick) then Exit;
 
-    RSClient.Image.Clear(Mainscreen.Bounds);
+    if RSClient.RemoteInput.IsSetup then
+      RSClient.Image.Clear(Mainscreen.Bounds);
+
     Self.Attempts := 0;
 
   end else
@@ -551,7 +556,9 @@ var
 begin
   inherited;
 
-  RSClient.Image.Clear(Mainscreen.Bounds);
+  if RSClient.RemoteInput.IsSetup then
+    RSClient.Image.Clear(Mainscreen.Bounds);
+
   Map.SetupChunkEx([24, 46, 26, 44], [0, 1, 2]);
   Objects.Setup(Map.Objects(), @Map.Walker);
   Npcs.Setup(Map.NPCs(), @Map.Walker);
@@ -825,7 +832,6 @@ begin
   ClearDebug();
   Self.Setup('BigAussies Colossal Wyrm Agility');
   Self.Start.SetOnClick(@Self.StartScript);
-  WLSettings.RemoteInput.BlockInput := True; // Disabled input, remove this if you want to enable input.
 
   Self.AddTab('Script Settings');
   tab := Self.Tabs[High(Self.Tabs)];

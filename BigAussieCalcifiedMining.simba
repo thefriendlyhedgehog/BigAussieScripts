@@ -1,5 +1,4 @@
-{$UNDEF SCRIPT_ID}{$DEFINE SCRIPT_ID := ''}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '5'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -180,8 +179,12 @@ begin
   writeln('Depositing items.');
   if Inventory.ContainsItem('Open gem bag') then
     Inventory.ClickItem('Open gem bag', 'Empty');
+
+  WaitUntil(Inventory.ContainsItem('Open gem bag'), 120, 3000);
+
   if Inventory.ContainsRandomItems(itemsToKeep) then
     Bank.DepositRandomItems(itemsToKeep);
+
   if not Inventory.ContainsItem(HammerItem) or not Inventory.ContainsItem('Imcando hammer') then
     Bank.WithdrawItem(HammerBank, TRUE);
 
@@ -480,7 +483,7 @@ begin
   HammerItem := ('Hammer');
   HammerBank := TRSBankItem.Setup(HammerItem, 1, FALSE);
   CalcifiedMoths := ('Calcified moth');
-  itemsToKeep := ['Blessed bone shards', 'Open gem bag', 'Hammer', 'Imcando hammer', 'Gem bag', 'Bronze pickaxe', 'Adamant pickaxe', 'Crystal pickaxe', 'Dragon pickaxe', 'Rune pickaxe', 'Mithril pickaxe', 'Black pickaxe', 'Steel pickaxe', 'Iron pickaxe', 'Gilded pickaxe', 'Dragon pickaxe (or)', 'Infernal pickaxe (or)', '3rd age pickaxe', 'Infernal pickaxe'];
+  itemsToKeep := ['Blessed bone shards', 'Gem bag', 'Open gem bag', 'Hammer', 'Imcando hammer', 'Gem bag', 'Bronze pickaxe', 'Adamant pickaxe', 'Crystal pickaxe', 'Dragon pickaxe', 'Rune pickaxe', 'Mithril pickaxe', 'Black pickaxe', 'Steel pickaxe', 'Iron pickaxe', 'Gilded pickaxe', 'Dragon pickaxe (or)', 'Infernal pickaxe (or)', '3rd age pickaxe', 'Infernal pickaxe'];
   StartXP := XPBar.Read();
   Antiban.MinZoom := 15;
   Antiban.MaxZoom := 30;
@@ -491,6 +494,7 @@ begin
   StartingShards := Inventory.CountItemStack('Blessed bone shards');
   if PINGONTERMINATED then
     AddOnTerminate(@Self.SendTerminationNotification);
+  HANDLEBANKING();
 end;
 
 procedure CalcifiedMiner.Run(MaxActions: UInt32; MaxTime: UInt64);
