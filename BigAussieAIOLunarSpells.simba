@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '0757baf6-64b1-4889-9c51-7bc460e1efc6'} 
-{$DEFINE SCRIPT_REVISION := '37'}  
+{$DEFINE SCRIPT_REVISION := '38'}  
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -376,8 +376,6 @@ begin
 
   if BIRDHOUSEENABLED then
     BirdhouseRunner.Init();
-    
-  Antiban.Setup();
 
   SetLength(Items, 59);          // Rawitem, ProcessedItem, NotedItem, AstralRune, ItemArray5(Nature Rune/Sand), Coins(6th array only used on MAKE PLANK)
   Items[0].Name := 'Berry Pie';
@@ -734,7 +732,7 @@ procedure AIOLunarSpells.CheckBreakSleepLevel();
 var
   currentLevel: Integer;
 begin
-  Antiban.DoAntiban();
+  Self.DoAntiban();
   
   currentLevel := Stats.GetLevel(ERSSkill.MAGIC);
   if (STOP_AT_LEVEL <> -1) and (currentLevel >= STOP_AT_LEVEL) then
@@ -1444,14 +1442,14 @@ begin
   while RawItemCount > 0 do
   begin
     CastSpell();
-    WaitUntil(Inventory.IsOpen(), 65, 1250);
+    WaitUntil(Inventory.IsOpen(), 35, 1250);
     RawItemCount := Inventory.CountItem(RawItem);
     self.ClickItem(RawItem, '>');
     if RawItemCount = 1 then
       break;
     Wait(waitTimeCasting);
       
-    WaitUntil(Magic.IsOpen(), 65, 1250);
+    WaitUntil(Magic.IsOpen(), 35, 2000);
   end;
 end;
 
@@ -1617,9 +1615,10 @@ begin
     SUPERGLASS_MAKE, RECHARGE_DRAGONSTONE: doSuperGlassAndRechargeDragonstone();
     PLANK_MAKE: doPlankMake();
   end;
+  CheckBreakSleepLevel();
+  Self.DoAntiban();
   If SRL.dice(1) then // Thanks Student for his help with this code.
-  WriteLn('nice cock');
-  //CheckBreakSleepLevel();
+    WriteLn('nice cock');
 end;
 
 procedure AIOLunarSpells.Run(MaxActions: Int32; MaxTime: Int64);
@@ -1766,15 +1765,16 @@ end;
 procedure TBirdHouseInclude.OnComplete(); override;
 var
   transport: TUniversalTransport;
-  i : Int32;
-  timeout : TCountDown;
+  i, attempts, teleportAttempts, attemptCount: Int32;
+  timeout: TCountDown;
   MyPos: TPoint;
-  attemptCount: Integer;
-  bankTimeout : TCountdown;
+  bankTimeout: TCountdown;
   Nests: TRSItemArray;
   returnItem: String;
   teleportLocation: TTeleportLocation;
   selectedRegion: TBox;
+  maxAttempts, maxTeleportAttempts: Int32;
+  teleportSuccess: Boolean;
 begin
   attemptCount := 0;
   MyPos := Script.RSW.GetMyPos();
@@ -1800,7 +1800,13 @@ begin
     Keyboard.PressKey(VK_9);
   end
   else
-  begin
+  maxAttempts := 2;
+  maxTeleportAttempts := 3;
+  attempts := 0;
+
+  repeat
+    Inc(attempts);
+
     case SELECTEDRETURNMETHOD of
       'Castle Wars Mini-Game Teleport': teleportLocation := RSTeleports.MINIGAME_CASTLE_WARS;
       'Varrock Teleport Tablet': teleportLocation := RSTeleports.VARROCK;
@@ -1816,24 +1822,42 @@ begin
       'Amulet of glory': teleportLocation := RSTeleports.EDGEVILLE;
       'Eternal Amulet of Glory': teleportLocation := RSTeleports.EDGEVILLE;
       'Moonclan Teleport': teleportLocation := RSTeleports.MOONCLAN;
-      //'Lunar isle teleport': teleportLocation := RSTeleports.LUNAR_ISLE; Cast spell Home teleport for this one
       'Construction Cape': teleportLocation := RSTeleports.HOUSE_CAPE;
       'Construction Cape(t)': teleportLocation := RSTeleports.HOUSE_CAPE;
       'Paddewwa Teleport Tablet': teleportLocation := RSTeleports.PADDEWWA;
     end;
 
-    if selectedReturnMethod = 'Home Teleport' then
+    teleportSuccess := False;
+    for teleportAttempts := 1 to maxTeleportAttempts do
     begin
-      Magic.CastSpell(ERSSpell.LUNAR_HOME_TELEPORT);
-      Wait(18000,20000);
-    end
-    else if not transport.run(teleportLocation) then
-    begin
-      WriteLn('Teleport using ' + selectedReturnMethod + ' failed');
-      Logout.ClickLogout();
-      TerminateScript();
+      
+      if selectedReturnMethod = 'Home Teleport' then
+      begin
+        Magic.CastSpell(ERSSpell.LUNAR_HOME_TELEPORT);
+        Wait(18000, 20000);
+        teleportSuccess := True;
+        Break;
+      end
+      else if transport.run(teleportLocation) then
+      begin
+        teleportSuccess := True;
+        Break;
+      end;
+      
+      Wait(1000, 2000);
     end;
-  end;
+
+    if not teleportSuccess then
+    begin
+      WriteLn('All teleport attempts failed.');
+      if attempts >= maxAttempts then
+      begin
+        WriteLn('Teleport using ' + selectedReturnMethod + ' failed after all attempts');
+        Logout.ClickLogout();
+        TerminateScript();
+      end;
+      Continue; // If we haven't reached max attempts, try the whole process again
+    end;
 
   case SELECTEDBANKTOUSE of
   'Grand Exchange':
@@ -1889,9 +1913,15 @@ begin
     'Wintertodt': selectedRegion := RSRegions.WINTERTODT;
   end;
 
-  if not WaitUntil(selectedRegion.Contains(Script.RSW.GetMyPos()), 65, 20000) then
+    if WaitUntil(selectedRegion.Contains(Script.RSW.GetMyPos()), 65, 25000) then
+      Break; // Successfully teleported and in the right region
+
+    WriteLn('Failed to reach the desired region. Trying again...');
+  until attempts >= maxAttempts;
+
+  if attempts >= maxAttempts then
   begin
-    Writeln("Failed to teleport");
+    WriteLn('Failed to teleport to the correct location after all attempts');
     Logout.ClickLogout();
     TerminateScript();
   end;
@@ -2010,7 +2040,7 @@ var
   i: Integer;
 begin
   RSClient.Image.Clear;
-  //ClearDebug();
+  ClearDebug();
   XPBar.EarnedXP();
   if not MainScreen.HasInterface() then
     CurrentXP := XPBar.Read();
