@@ -1,4 +1,5 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '9'}
+{$DEFINE SCRIPT_ID := '91cba4cb-2fe0-4f87-b96d-4b7514d73e4f'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '10'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -919,32 +920,27 @@ begin
     TeamNPC.WalkSelectOption(['Join-Crew', 'Join-Team']);
     Minimap.WaitPlayerMoving;
     WaitUntil(Self.GetLocation() = INLOBBYBOX, 65, 1600);
-    if Minimap.GetHPPercent() < 25 then
-    begin
-      writeln('LowHP Trying to join game, Probably being attacked. Running away if we can.');
-      Map.Walker.WebWalk([11156, 38346]);
-      HonestJimmy.WalkSelectOption(['Join-Team']);
-    end;
 
     if Self.GetLocation() <> INLOBBYBOX then
     begin
       Inc(attempts);
 
+      if Minimap.GetHPPercent() < 25 then
+      begin
+        writeln('LowHP Trying to join game, Probably being attacked. Attempting to run away.');
+        Map.Walker.WebWalk([11156, 38346]);
+        HonestJimmy.WalkSelectOption(['Join-Team']);
+      end;
+
       if attempts mod 10 = 0 then
         Antiban.RandomRotate();
         WL.Activity.Restart();
 
-      if attempts >= 50 then
+      if attempts >= 30 then
       begin
-        writeln('Failed to join team after 50 attempts, Joining random team.');
+        writeln('Failed to join team after 30 attempts, Joining random team.');
         Map.Walker.WebWalk([11156, 38346]);
         HonestJimmy.WalkSelectOption(['Join-Team']);
-      end;
-      if attempts >= 75 then
-      begin
-        writeln('Failed to join team after 75 attempts, Terminating script.');
-        TerminateScript();
-        Exit;
       end;
     end;
   end;
@@ -1572,10 +1568,14 @@ begin
   TotalPiecesOfEight := 0;
   RSClient.Image.Clear;
   Map.SetupChunkEx([58, 47, 60, 45], [0, 2]);
+  Map.Loader.Graph.LoadNodesFromString('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');
+  Map.Loader.Graph.LoadPathsFromString('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');
+  Map.Loader.Graph.LoadNamesFromString('6AgAAHici1Y2iI0exaN4FI/iUTyKR/EoHoYYABFPUp0=');    
   Objects.Setup(Map.Objects(), @Map.Walker);
   Npcs.Setup(Map.NPCs(), @Map.Walker);
   Self.SetupObjects();
   Self.DefineItemBoxes();
+
   Mouse.Distribution := MOUSE_DISTRIBUTION_GAUSS;
   Timer.Start();
   StartXP := XPBar.Read();
@@ -1585,13 +1585,6 @@ begin
   CheckGameChatActive();
   if PINGONTERMINATED and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
-
-  // If this works much love to andrew <3 buy net hunter
-  GENERATED_GRAPH.Spacing := 9;         //low = better/slower, high = worse/faster
-  GENERATED_GRAPH.MinimumTiles := 6;     //spaces with less tiles than this will be ignored.
-  GENERATED_GRAPH.NodeRadius := 25;      //closed space less than NodeRadius pixels will have a single node.
-  GENERATED_GRAPH.MaxConnections := 6;   //Max connections per node.
-  GENERATED_GRAPH.WallCrossings := False; //Whether to allow wall crossings when there's a close path around it.
 
   if not Equipment.ContainsAny(ValidAxes) and (METHODTOUSE = 'Scrapy Bark') then
   begin
