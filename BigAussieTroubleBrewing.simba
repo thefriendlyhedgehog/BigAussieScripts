@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '91cba4cb-2fe0-4f87-b96d-4b7514d73e4f'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '10'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '11'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1136,14 +1136,19 @@ begin
     Exit;
 
   attempts := 0;
-
   if MyFullPos.InBox([11008, 38538, 11248, 38654]) then
   begin
     writeln('Walking to South House');
     while (attempts < 4) and (Self.GetLocation() <> SOUTHHOUSEUPPER) do
     begin
+      if Self.GetLocation() = OUTSIDEOFLOBBY then
+        Exit;
+
       if (attempts = 3) and (Self.GetLocation() <> SOUTHHOUSEUPPER) then
       begin
+        if Self.GetLocation() = OUTSIDEOFLOBBY then
+          Exit;
+
         writeln('Rotating camera to find South House ladder');
         Minimap.RotateWithinAngles(205, 318);
       end;
@@ -1152,16 +1157,23 @@ begin
       Inc(attempts);
     end;
   end
-  else if MyFullPos.InBox([11008, 38402, 11248, 38530]) then
+  else if MyFullPos.InBox([11008, 38406, 11248, 38530]) then
   begin
     writeln('Walking to North House');
     while (attempts < 4) and (Self.GetLocation() <> NORTHHOUSEUPPER) do
     begin
+      if Self.GetLocation() = OUTSIDEOFLOBBY then
+        Exit;
+          
       if (attempts = 3) and (Self.GetLocation() <> NORTHHOUSEUPPER) then
       begin
+        if Self.GetLocation() = OUTSIDEOFLOBBY then
+          Exit;
+
         writeln('Rotating camera to find North House ladder');
         Minimap.RotateWithinAngles(37, 135);
       end;
+
       CopperLadderNorth.WalkClick();
       WaitUntil(Self.GetLocation() = NORTHHOUSEUPPER, 65, 3000);
       Inc(attempts);
@@ -1197,6 +1209,10 @@ begin
   begin
     if IsEndGameInterfaceOpen() then
       Exit;
+
+    if Self.GetLocation() = OUTSIDEOFLOBBY then
+      Exit;
+          
     currentMessage := Chat.GetMessage(CHAT_INPUT_LINE - 1, [CHAT_COLOR_BLACK]);
     if ('own team' in currentMessage) then
     begin
@@ -1291,6 +1307,7 @@ begin
   end;
   WaterDeposited := Inventory.CountItem('Bucket of water');
   attempt := 0;
+
   while Inventory.FindItem('Bucket of water', WaterSlots) do
   begin
     Inventory.SetSelectedSlot(WaterSlots[High(WaterSlots)]);
@@ -1320,6 +1337,7 @@ begin
     WaitUntil(not Inventory.ContainsItem('Bucket of water'), 65, 40000);
     Inc(attempt);
   end;
+
   TotalWaterDeposited += WaterDeposited;
   if TotalWaterDeposited >= 100 then
   begin
@@ -1350,6 +1368,9 @@ begin
   begin
     while (attempts < 6) and (Self.GetLocation() = SOUTHHOUSEUPPER) do
     begin
+      if Self.GetLocation() = OUTSIDEOFLOBBY then
+        Exit;
+        
       if (attempts = 3) and (Self.GetLocation() = SOUTHHOUSEUPPER) then
       begin
         writeln('Rotating camera to find South House upper ladder');
@@ -1364,6 +1385,8 @@ begin
   begin
     while (attempts < 6) and (Self.GetLocation() = NORTHHOUSEUPPER) do
     begin
+      if Self.GetLocation() = OUTSIDEOFLOBBY then
+        Exit;
       if (attempts = 3) and (Self.GetLocation() = NORTHHOUSEUPPER) then
       begin
         writeln('Rotating camera to find North House upper ladder');
@@ -1434,7 +1457,7 @@ begin
   MyFullPos := Map.FullPosition;
   if MyFullPos.Plane = 0 then
   begin
-    if MyFullPos.InBox([11008, 38402, 11260, 38654]) then Exit(INGAMEBOX);
+    if MyFullPos.InBox([11008, 38406, 11260, 38654]) then Exit(INGAMEBOX);
     if MyFullPos.InBox([11140, 38410, 11196, 38442]) then Exit(NORTHHOUSE);
     if MyFullPos.InBox([11144, 38614, 11200, 38646]) then Exit(SOUTHHOUSE);
     if MyFullPos.InBox([11116, 38354, 11192, 38390]) then Exit(INLOBBYBOX);
@@ -1467,7 +1490,7 @@ begin
           Exit(STATE_DO_WOODCUTTING);
         if Inventory.ContainsItem('Scrapey tree logs') then
           Exit(STATE_DO_FLETCHING);
-        if Inventory.ContainsItem('Scrapey bark') then
+        if Inventory.ContainsItem('Scrapey bark') and inventory.IsFull then
           Exit(STATE_ENTER_UPPER_HOUSE);
       end
       else if (METHODTOUSE = 'Buckets') then
