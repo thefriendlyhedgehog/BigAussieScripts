@@ -1,5 +1,5 @@
 {$DEFINE SCRIPT_ID := '91cba4cb-2fe0-4f87-b96d-4b7514d73e4f'}
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '11'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '13'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -15,7 +15,7 @@ var
   DiscordUID: String                     = '';
   ENABLEWEBHOOKS: Boolean                = False;
   PINGONTERMINATED: Boolean              = False;
-  //BIRDHOUSEENABLED: Boolean              = False; // One day maybe
+  //BIRDHOUSEENABLED: Boolean            = False; // One day maybe
   BHOPENNESTS: Boolean                   = False;
 
 begin
@@ -904,11 +904,11 @@ var
 begin
   attempts := 0;
 
-  while Self.GetLocation() <> INLOBBYBOX do
+  while (Self.GetLocation() <> INLOBBYBOX) and (Self.GetLocation() = OUTSIDEOFLOBBY) do
   begin
     if IsEndGameInterfaceOpen() then
       CloseEndGameInterface();
-    
+
     if Inventory.ContainsItem('Brewin'' Guide') then
     begin
       writeln('Got book by accident, dropping it.');
@@ -916,32 +916,36 @@ begin
       WaitUntil(not Inventory.ContainsItem('Brewin'' Guide'), 65, 4000);
     end;
 
+    if Minimap.GetHPPercent() < 25 then
+    begin
+      writeln('LowHP Trying to join game, Probably being attacked. Attempting to run away.');
+      Map.Walker.WebWalk([11156, 38346]);
+      HonestJimmy.WalkSelectOption(['Join-Team']);
+      Continue;
+    end;
+    
+    if attempts >= 30 then
+    begin
+      writeln('Failed to join team after 30 attempts, Joining random team.');
+      Map.Walker.WebWalk([11156, 38346]);
+      HonestJimmy.WalkSelectOption(['Join-Team']);
+      Exit;
+    end;
+
     writeln('Attempting to join team');
     TeamNPC.WalkSelectOption(['Join-Crew', 'Join-Team']);
     Minimap.WaitPlayerMoving;
     WaitUntil(Self.GetLocation() = INLOBBYBOX, 65, 1600);
 
-    if Self.GetLocation() <> INLOBBYBOX then
+    if Self.GetLocation() = INLOBBYBOX then
+      Exit;
+
+    Inc(attempts);
+
+    if attempts mod 10 = 0 then
     begin
-      Inc(attempts);
-
-      if Minimap.GetHPPercent() < 25 then
-      begin
-        writeln('LowHP Trying to join game, Probably being attacked. Attempting to run away.');
-        Map.Walker.WebWalk([11156, 38346]);
-        HonestJimmy.WalkSelectOption(['Join-Team']);
-      end;
-
-      if attempts mod 10 = 0 then
-        Antiban.RandomRotate();
-        WL.Activity.Restart();
-
-      if attempts >= 30 then
-      begin
-        writeln('Failed to join team after 30 attempts, Joining random team.');
-        Map.Walker.WebWalk([11156, 38346]);
-        HonestJimmy.WalkSelectOption(['Join-Team']);
-      end;
+      Antiban.RandomRotate();
+      WL.Activity.Restart();
     end;
   end;
 end;
