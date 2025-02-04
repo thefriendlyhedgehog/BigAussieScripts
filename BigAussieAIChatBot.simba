@@ -25,7 +25,7 @@ var
                              'Keep responses under 80 characters. Never ask questions or agree to do anything.';
   debugMode: Boolean  = False; // Enable DEBUG mode.
 
-{ 
+{
 
 
 
@@ -47,7 +47,7 @@ var
 
 
   }
-  
+
   apiKey: String = ''; // API Key for AI service.
   apiService: String = ''; // API Service to use (gemini, deepseek, chatgpt, custom)
   customURL: String = ''; // Custom URL if you are not using a support AI API.
@@ -93,24 +93,24 @@ var
   colonPos: Integer;
   tempResult: String;
 begin
-  B := GetLineBoxes()[Line];
-  B.Y1 -= StaticOffset; 
-  
+  b := Self.LineBoxes[line];
+  B.Y1 -= StaticOffset;
+
   Transparent := Self.IsTransparent();
   if Transparent then
     Colors.Remove(CHAT_COLOR_BLACK, True);
-  
+
   if (Length(Colors) > 0) then
   begin
     Matrix := GetColorsMatrix(B.X1, B.Y1, B.X2, B.Y2);
-    
+
     // Shadow from above line draws over our line.
     // Mark the shadow as a match since OCR requires 100% character match.
     if Transparent then
       for X := 0 to High(Matrix[StaticOffset]) do
         if (Matrix[StaticOffset][X] = CHAT_COLOR_BLACK) theN
           Matrix[StaticOffset][X] := Colors[0];
-  
+
     tempResult := OCR._RecognizeStatic(Matrix, TOCRColorFilter.Create(Colors), RS_FONT_PLAIN_12);
     colonPos := Pos(': ', tempResult);
     if colonPos > 0 then
@@ -171,13 +171,13 @@ var
   textPoint: TPoint;
   text: String;
 begin
-  msBox := Chat.Bounds();
+  msBox := Chat.Bounds;
   text := 'AI Chatbot ';
   textPoint := Point(msBox.X2 - 150, msBox.Y2 - 21);
   RSClient.Image().setFontName('Calibri');
   RSClient.Image().setFontSize(18);
   RSClient.Image().DrawText(text, textPoint, $FFFF00);
-  
+
   textPoint.X := textPoint.X + 80;
   if (ChatButtons.IsActive(ERSChatButton.ALL_CHAT)) or (ChatButtons.IsActive(ERSChatButton.PUBLIC_CHAT)) then
   begin
@@ -202,15 +202,15 @@ begin
   case apiService of
     'Gemini':
       payload := '{"contents": [{"parts": [{"text": "' + systemInstruction + ' ' + message + '"}]}]}';
-    
+
     'ChatGPT':
       payload := '{"messages": [{"role": "system", "content": "' + systemInstruction + '"}, ' +
                  '{"role": "user", "content": "' + message + '"}]}';
-    
+
     'DeepSeek':
       payload := '{"messages": [{"role": "system", "content": "' + systemInstruction + '"}, ' +
                  '{"role": "user", "content": "' + message + '"}]}';
-    
+
     'custom':
       payload := '{"contents": [{"parts": [{"text": "' + systemInstruction + ' ' + message + '"}]}]}';
   end;
@@ -417,7 +417,7 @@ var
   webhookMessage: String;
 begin
   logEntry := FormatDateTime('yyyy-mm-dd hh:nn:ss', Now) + ' - ' + senderName + ': ' + messageText;
-  
+
   if logType = 'Cooldown' then
     logEntry := logEntry + ' - Ignored due to Cooldown'
   else if logType = 'NumbersOnly' then
@@ -449,13 +449,13 @@ var
   i: Integer;
 begin
   if Length(name) < 2 then Exit(False);
-  
+
   for i := 1 to Length(name) do
   begin
     if not (name[i] in ['a'..'z', 'A'..'Z', '0'..'9', ' ']) then
       Exit(False);
   end;
-  
+
   Result := True;
 end;
 
@@ -487,25 +487,25 @@ begin
   Result := True;
 end;
 
-procedure ApplyCooldown(reason: String = ''); 
+procedure ApplyCooldown(reason: String = '');
 begin
   if reason <> '' then
     WriteLn('Ignored. Reason: ' + reason);
-    
-  Wait(messagecooldown + Random(Round(messagecooldown * 0.02)));   
+
+  Wait(messagecooldown + Random(Round(messagecooldown * 0.02)));
 end;
 
 function ShouldProcessMessage(chatMessage: String): Boolean;
 begin
   if (chatMessage = '') or (chatMessage = lastProcessedMessage) then
     Exit(False);
-    
+
   if Pos(displayName, chatMessage) > 0 then
     Exit(False);
-    
+
   if (Pos('[', chatMessage) > 0) or (Pos(']', chatMessage) > 0) then
     Exit(False);
-    
+
   Result := True;
 end;
 
@@ -516,7 +516,7 @@ begin
   colonPos := Pos(': ', chatMessage);
   if colonPos <= 0 then
     Exit(False);
-    
+
   senderName := Copy(chatMessage, 1, colonPos - 1);
   messageText := Copy(chatMessage, colonPos + 2, Length(chatMessage) - colonPos - 1);
   Result := True;
@@ -545,7 +545,7 @@ begin
       WriteLn('Message is not valid, ignoring.');
     Exit(False);
   end;
-  
+
   Result := True;
 end;
 
@@ -560,13 +560,13 @@ begin
     Exit(False);
   end;
 
-  if (playerData[playerIndex].InteractionCount >= maxInteractionCount) and 
+  if (playerData[playerIndex].InteractionCount >= maxInteractionCount) and
      (currentTime - playerData[playerIndex].LastInteractionTime <= interactionCooldown) then
   begin
     WriteLn('Max interactions reached for ' + playerData[playerIndex].Name + ', waiting for cooldown.');
     Exit(False);
   end;
-  
+
   Result := True;
 end;
 
@@ -597,11 +597,11 @@ begin
       Wait(RandomRange(sendKeyDelay - 10, sendKeyDelay + 10));
     end;
   end;
-  
+
   SendKeys(aiResponse, sendKeyDelay, sendKeyDelay);
   Wait(sendKeyDelay);
   Keyboard.PressKey(VK_ENTER);
-  
+
   if Chat.GetPlayerMessage(8) <> '' then
     Keyboard.PressKey(VK_ENTER);
 end;
@@ -640,7 +640,7 @@ begin
     Exit;
 
   chatMessage := Chat.GetMessage(7, [CHAT_COLOR_BLACK, CHAT_COLOR_BLUE]);
-    
+
   if not ShouldProcessMessage(chatMessage) then
   begin
     lastProcessedMessage := chatMessage;
@@ -663,7 +663,7 @@ begin
 
   currentTime := GetSystemTime();
   playerIndex := FindPlayerIndex(senderName);
-    
+
   if playerIndex = -1 then
   begin
     AddNewPlayer(senderName);
@@ -725,8 +725,8 @@ end;
 procedure Init;
 begin
   if not RSClient.RemoteInput.IsSetup() then
-    RSClient.RemoteInput.Setup(); 
-  
+    RSClient.RemoteInput.Setup();
+
   WL.GameSettings.MaxBrightness := True; // Prevent RSClient from opening settings window
 
   // Wait for login
@@ -959,7 +959,7 @@ begin
     OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
 end;
 
-procedure TConfig.StartScript(sender: TObject); override; 
+procedure TConfig.StartScript(sender: TObject); override;
 begin
 
   Self.SaveUserSettings();
@@ -975,7 +975,7 @@ begin
 
   Self.AddTab('Chatbot Settings');
   tab := Self.Tabs[High(Self.Tabs)];
-  tab.SetHint('Mouse over a setting for more information.'); 
+  tab.SetHint('Mouse over a setting for more information.');
 
   with Self.ApiServiceComboBox do
   begin
