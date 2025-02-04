@@ -157,7 +157,7 @@ begin
   part := partsArray.getJSONObject(0);
 
   // Grab the text
-  message := part.getString('text'); // Extracts the 'text' string from our 'part' object.
+  message := part.getString('text');
   if debugMode then
     WriteLn('Extracted message: ' + message);
   jsonObject.Free(); // Always free
