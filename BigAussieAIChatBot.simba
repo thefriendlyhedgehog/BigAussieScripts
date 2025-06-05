@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '1'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '3'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -448,15 +448,27 @@ end;
 function IsValidPlayerName(name: String): Boolean;
 var
   i: Integer;
+  validChars: Boolean;
 begin
-  if Length(name) < 2 then Exit(False);
-
+  if (Length(name) < 1) or (Length(name) > 12) then
+    Exit(False);
+    
+  if (name[1] = ' ') or (name[Length(name)] = ' ') then
+    Exit(False);
+    
+  validChars := True;
   for i := 1 to Length(name) do
   begin
-    if not (name[i] in ['a'..'z', 'A'..'Z', '0'..'9', ' ']) then
-      Exit(False);
+    if not ((name[i] in ['a'..'z', 'A'..'Z', '0'..'9']) or (name[i] = ' ') or (name[i] = '-')) then
+    begin
+      validChars := False;
+      Break;
+    end;
   end;
-
+  
+  if not validChars then
+    Exit(False);
+    
   Result := True;
 end;
 
@@ -1123,7 +1135,7 @@ var
 begin
   writeln('BigAussie AI Chatbot starting, Please wait.');
 
-  if MessageDlg('AI Chatbot', 'Do you want to configure chatbot settings?', mtConfirmation, [mbYes, mbNo]) = mrYes then
+  if MessageDlg('AI Chatbot', 'Do you need to configure chatbot settings? (First Time Setup)', mtConfirmation, [mbYes, mbNo]) = mrYes then
   begin
     {$IFDEF SCRIPT_GUI}
       Sync(@Config.Run);
