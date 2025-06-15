@@ -28,7 +28,6 @@ var
                              'Avoid repetitive responses and vary your language naturally. ' +
                              'Never ask personal questions or agree to do tasks outside of normal chat.';
   debugMode: Boolean  = False; // Enable DEBUG mode.
-  Discord.DisableDebugging := False;
 
 {
 
@@ -2031,6 +2030,7 @@ end;
 procedure Init;
 begin
   ClearDebug();
+  Discord.DisableDebugging := False;
   if not RSClient.RemoteInput.IsSetup() then
     RSClient.RemoteInput.Setup();
 
