@@ -2030,7 +2030,6 @@ end;
 procedure Init;
 begin
   ClearDebug();
-  Discord.DisableDebugging := False;
   if not RSClient.RemoteInput.IsSetup() then
     RSClient.RemoteInput.Setup();
 
@@ -2686,6 +2685,7 @@ var
   Config: TConfig;
 
 begin
+  Discord.DisableDebugging := True;
   writeln('BigAussie AI Chatbot starting, Please wait.');
 
   if MessageDlg('AI Chatbot', 'Do you need to configure chatbot settings?' + LineEnding + '(First Time Setup)', mtConfirmation, [mbYes, mbNo]) = mrYes then
