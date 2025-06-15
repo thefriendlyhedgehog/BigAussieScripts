@@ -2687,7 +2687,7 @@ var
 begin
   writeln('BigAussie AI Chatbot starting, Please wait.');
 
-  if MessageDlg('AI Chatbot', 'Do you need to configure chatbot settings(First time setup)?', mtConfirmation, [mbYes, mbNo]) = mrYes then
+  if MessageDlg('AI Chatbot', 'Do you need to configure chatbot settings?' + LineEnding + '(First Time Setup)', mtConfirmation, [mbYes, mbNo]) = mrYes then
   begin
     {$IFDEF SCRIPT_GUI}
       Sync(@Config.Run);
