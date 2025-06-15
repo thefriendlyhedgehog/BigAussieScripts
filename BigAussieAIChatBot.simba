@@ -28,6 +28,7 @@ var
                              'Avoid repetitive responses and vary your language naturally. ' +
                              'Never ask personal questions or agree to do tasks outside of normal chat.';
   debugMode: Boolean  = False; // Enable DEBUG mode.
+  Discord.DisableDebugging := False;
 
 {
 
