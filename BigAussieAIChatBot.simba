@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '0.3'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '0.4'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -74,6 +74,7 @@ var
   SENDPLAYERINTERACTIONNOTIFICATIONS: Boolean = True;
   SENDSESSIONSTARTNOTIFICATIONS: Boolean = True;
   SENDCOOLDOWNNOTIFICATIONS: Boolean = True;
+  CUSTOMDISCORDBOT: Boolean = False;
 
 type
   TResponseStyle = (rsNormal, rsFriendly, rsCasual, rsMinimal);
@@ -1172,6 +1173,8 @@ var
   currentTime: Int64;
   chatEnabled: Boolean;
 begin
+  if (not RSClient.IsLoggedIn) then Exit;
+
   currentTime := GetSystemTime();
   chatEnabled := (ChatButtons.IsActive(ERSChatButton.ALL_CHAT) or ChatButtons.IsActive(ERSChatButton.PUBLIC_CHAT));
   
@@ -1562,14 +1565,6 @@ function ValidateMessage(senderName, messageText: String; var blockReason: Strin
 var
   i, playerIndex: Integer;
 begin
-  if not IsValidPlayerName(senderName) then
-  begin
-    blockReason := 'Invalid player name format';
-    if debugMode then
-      writeln('Invalid Username');
-    Exit(False);
-  end;
-
   // Check if message starts with "!" ok fik
   if (Length(messageText) > 0) and (messageText[1] = '!') then
   begin
@@ -1864,6 +1859,13 @@ begin
     Exit;
   end;
 
+  if not IsValidPlayerName(senderName) then
+  begin
+    if debugMode then
+      writeln('Invalid player name format, completely ignoring message: ' + senderName);
+    Exit;
+  end;
+
   // Get or create player data BEFORE WE validation
   currentTime := GetSystemTime();
   playerIndex := FindPlayerIndex(senderName);
@@ -2045,8 +2047,12 @@ begin
 
   Discord.Setup();
   Discord.SetWebhook(DiscordWebHookUrl);
-  Discord.SetUsername('BigAussie AI Chatbot');
-  Discord.SetAvatar('https://i.imgur.com/kAksbxW.jpeg');
+
+  if CUSTOMDISCORDBOT then
+  begin
+    Discord.SetUsername('BigAussie AI Chatbot');
+    Discord.SetAvatar('https://i.imgur.com/kAksbxW.jpeg');
+  end;
 
   // We dont care.
   WL.GameSettings.MaxBrightness := True;
@@ -2115,7 +2121,7 @@ type
     WebHookInput, ApiKeyInput, CustomURLInput: TLabeledEdit;
     EnableWebhooksCheckBox, LogConversationsCheckBox, UseConversationMemoryCheckBox,
     AIResponseNotificationsCheckBox, PlayerInteractionNotificationsCheckBox,
-    SessionStartNotificationsCheckBox, CooldownNotificationsCheckBox: TLabeledCheckBox;
+    SessionStartNotificationsCheckBox, CooldownNotificationsCheckBox, CustomDiscordBotCheckBox: TLabeledCheckBox;
     MaxNearbyPlayersInput, MaxInteractionCountInput, InteractionCooldownInput, MessageCooldownInput, MaxLogCountInput: TLabeledEdit;
     IgnoreListInput: TLabeledEdit;
     ApiServiceComboBox, ResponseStyleComboBox: TLabeledCombobox;
@@ -2151,8 +2157,9 @@ begin
   useConversationMemory := StrToBoolDef(ReadINI(Username + ' AIChatbot Chat Settings', 'UseConversationMemory', 'Configs/BASettings.ini'), True);
   //SENDAIRESPONSENOTIFICATIONS := StrToBoolDef(ReadINI(Username + ' AIChatbot Webhook Settings', 'AIResponseNotifications', 'Configs/BASettings.ini'), True);
   //SENDPLAYERINTERACTIONNOTIFICATIONS := StrToBoolDef(ReadINI(Username + ' AIChatbot Webhook Settings', 'PlayerInteractionNotifications', 'Configs/BASettings.ini'), False);
-  //SENDSESSIONSTARTNOTIFICATIONS := StrToBoolDef(ReadINI(Username + ' AIChatbot Webhook Settings', 'SessionStartNotifications', 'Configs/BASettings.ini'), True);
+  SENDSESSIONSTARTNOTIFICATIONS := StrToBoolDef(ReadINI(Username + ' AIChatbot Webhook Settings', 'SessionStartNotifications', 'Configs/BASettings.ini'), True);
   //SENDCOOLDOWNNOTIFICATIONS := StrToBoolDef(ReadINI(Username + ' AIChatbot Webhook Settings', 'CooldownNotifications', 'Configs/BASettings.ini'), False);
+  CUSTOMDISCORDBOT := StrToBoolDef(ReadINI(Username + ' AIChatbot Webhook Settings', 'CustomDiscordBot', 'Configs/BASettings.ini'), True);
   
   maxNearbyPlayers := StrToIntDef(ReadINI(Username + ' AIChatbot Chat Settings', 'MaxNearbyPlayers', 'Configs/BASettings.ini'), 2);
   maxInteractionCount := StrToIntDef(ReadINI(Username + ' AIChatbot Chat Settings', 'MaxInteractionCount', 'Configs/BASettings.ini'), 2);
@@ -2218,6 +2225,9 @@ begin
     
   if Assigned(Self.MessageCooldownInput) then
     Self.MessageCooldownInput.SetText(IntToStr(messagecooldown));
+
+  if Assigned(Self.CustomDiscordBotCheckBox) then
+    Self.CustomDiscordBotCheckBox.SetChecked(CUSTOMDISCORDBOT);
     
   if Assigned(Self.MaxLogCountInput) then
     Self.MaxLogCountInput.SetText(IntToStr(maxLogCount));
@@ -2333,6 +2343,9 @@ begin
   if Assigned(Self.InteractionCooldownInput) then
     interactionCooldown := StrToIntDef(Self.InteractionCooldownInput.GetText(), 600000);
 
+  if Assigned(Self.CustomDiscordBotCheckBox) then
+    CUSTOMDISCORDBOT := Self.CustomDiscordBotCheckBox.IsChecked();
+
   if Assigned(Self.MessageCooldownInput) then
     messagecooldown := StrToIntDef(Self.MessageCooldownInput.GetText(), 200);
 
@@ -2357,8 +2370,9 @@ begin
   WriteINI(Username + ' AIChatbot Chat Settings', 'MaxLogCount', IntToStr(maxLogCount), 'Configs/BASettings.ini');
   //WriteINI(Username + ' AIChatbot Webhook Settings', 'AIResponseNotifications', BoolToStr(SENDAIRESPONSENOTIFICATIONS, 'true', 'false'), 'Configs/BASettings.ini');
   //WriteINI(Username + ' AIChatbot Webhook Settings', 'PlayerInteractionNotifications', BoolToStr(SENDPLAYERINTERACTIONNOTIFICATIONS, 'true', 'false'), 'Configs/BASettings.ini');
-  //WriteINI(Username + ' AIChatbot Webhook Settings', 'SessionStartNotifications', BoolToStr(SENDSESSIONSTARTNOTIFICATIONS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIChatbot Webhook Settings', 'SessionStartNotifications', BoolToStr(SENDSESSIONSTARTNOTIFICATIONS, 'true', 'false'), 'Configs/BASettings.ini');
   //WriteINI(Username + ' AIChatbot Webhook Settings', 'CooldownNotifications', BoolToStr(SENDCOOLDOWNNOTIFICATIONS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' AIChatbot Webhook Settings', 'CustomDiscordBot', BoolToStr(CUSTOMDISCORDBOT, 'true', 'false'), 'Configs/BASettings.ini');
 
   WriteINI(Username + ' AIChatbot Advanced Settings', 'EnableSmartContext', BoolToStr(enableSmartContext, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' AIChatbot Advanced Settings', 'ContextMemoryDuration', IntToStr(contextMemoryDuration), 'Configs/BASettings.ini');
@@ -2392,6 +2406,8 @@ begin
     Self.SessionStartNotificationsCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.CooldownNotificationsCheckBox) then
     Self.CooldownNotificationsCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.CustomDiscordBotCheckBox) then
+    Self.CustomDiscordBotCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
 end;
 
 function TConfig.CreateLabeledPanel(owner: TControl; title: String; top, height: Int32; FontSize: Int32 = 10; Color: TColor = clBlack; FontStyles: TFontStyles = [fsBold]): TLabeledPanel;
@@ -2640,7 +2656,7 @@ begin
 
   // Discord Panel
   panelTop := Self.ChatBehaviorPanel.GetTop() + Self.ChatBehaviorPanel.GetHeight() + TControl.AdjustToDPI(5);
-  Self.DiscordPanel := Self.CreateLabeledPanel(tab, 'Discord Settings', panelTop, 100, 10, clBlue);
+  Self.DiscordPanel := Self.CreateLabeledPanel(tab, 'Discord Settings', panelTop, 120, 10, clBlue);
   Self.DiscordPanel.SetLeft(TControl.AdjustToDPI(10));
 
   with Self.WebHookInput do
@@ -2649,7 +2665,7 @@ begin
     SetCaption('Webhook URL');
     SetLeft(TControl.AdjustToDPI(20));
     SetTop(TControl.AdjustToDPI(25));
-    SetWidth(TControl.AdjustToDPI(400));
+    SetWidth(TControl.AdjustToDPI(300));
     SetPasswordChar('*');
   end;
 
@@ -2667,13 +2683,31 @@ begin
   with Self.WebhookInfo do
   begin
     Create(Self.DiscordPanel.Panel);
-    SetLeft(TControl.AdjustToDPI(20));
-    SetTop(Self.WebHookInput.GetTop() + TControl.AdjustToDPI(40));
+    SetLeft(Self.EnableWebhooksCheckBox.GetRight() + TControl.AdjustToDPI(0));
+    SetTop(Self.WebHookInput.GetTop() + TControl.AdjustToDPI(0));
     SetCaption('Click here to learn how to generate your own Discord webhook URL');
     SetHint('Click here to learn how to generate your own Discord webhook URL');
     setOnClick(@OpenURL);
     SetFontSize(TControl.AdjustToDPI(9));
     SetFontColor(clBlue);
+  end;
+
+  with Self.SessionStartNotificationsCheckBox do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Session Start Notifications');
+    SetLeft(TControl.AdjustToDPI(20));
+    SetTop(Self.WebHookInput.GetTop() + TControl.AdjustToDPI(40));
+    SetHint('Send a notification when the AI chatbot session starts');
+  end;
+
+  with Self.CustomDiscordBotCheckBox do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Custom Discord Bot');
+    SetLeft(Self.SessionStartNotificationsCheckBox.GetRight() + TControl.AdjustToDPI(20));
+    SetTop(Self.SessionStartNotificationsCheckBox.GetTop());
+    SetHint('Use a custom Discord bot instead of webhooks');
   end;
 
   Self.PopulateGUIFromSettings();
