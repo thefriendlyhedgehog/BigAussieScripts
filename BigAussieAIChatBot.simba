@@ -71,9 +71,9 @@ var
   
   // Discord notifications
   SENDAIRESPONSENOTIFICATIONS: Boolean = True;
-  SENDPLAYERINTERACTIONNOTIFICATIONS: Boolean = False;
+  SENDPLAYERINTERACTIONNOTIFICATIONS: Boolean = True;
   SENDSESSIONSTARTNOTIFICATIONS: Boolean = True;
-  SENDCOOLDOWNNOTIFICATIONS: Boolean = False;
+  SENDCOOLDOWNNOTIFICATIONS: Boolean = True;
 
 type
   TResponseStyle = (rsNormal, rsFriendly, rsCasual, rsMinimal);
