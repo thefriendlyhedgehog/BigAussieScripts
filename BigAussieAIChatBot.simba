@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.1'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.2'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1039,7 +1039,7 @@ begin
   end;
 end;
 
-procedure SendCooldownNotification(reason, playerName: String);
+procedure SendCooldownNotification(reason, playerName, ignoredMessage: String);
 var
   EmbedIdx: Int32;
   detailedDescription: String;
@@ -1056,6 +1056,7 @@ begin
     Discord.Webhook.Embeds[EmbedIdx].Color := $FF0000; // Red
     
     detailedDescription := '**Player:** ' + playerName + LineEnding +
+                          '**Message:** ' + ignoredMessage + LineEnding +
                           '**Reason:** ' + reason + LineEnding;
     
     // Add specific details based on the reason
@@ -1460,7 +1461,7 @@ begin
   else if logType = 'NumbersOnly' then
   begin
     logEntry := logEntry + ' - Numbers Only';
-    SendCooldownNotification('AI response was numbers only', senderName);
+    SendCooldownNotification('AI response was numbers only', senderName, messageText);
   end
   else if logType = 'AIResponse' then
   begin
@@ -1900,7 +1901,7 @@ begin
   begin
     lastProcessedMessage := chatMessage;
     ApplyCooldown('Player limits exceeded');
-    SendCooldownNotification(blockReason, senderName);
+    SendCooldownNotification(blockReason, senderName, messageText);
     LogMessage(senderName, messageText, '', 'Cooldown');
     Exit;
   end;
