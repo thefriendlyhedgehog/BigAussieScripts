@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.2'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.3'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -114,6 +114,7 @@ var
   totalAIResponses: Integer = 0;
   totalBlockedMessages: Integer = 0;
   sessionConversationLog: TStringArray;
+  lastActiveChatButton: ERSChatButton = ERSChatButton.CLOSED;
 
   httpClient: THTTPClient;
   Discord: TDiscordClient;
@@ -1059,7 +1060,6 @@ begin
                           '**Message:** ' + ignoredMessage + LineEnding +
                           '**Reason:** ' + reason + LineEnding;
     
-    // Add specific details based on the reason
     if Pos('Too many players nearby', reason) > 0 then
     begin
       nearbyPlayers := Length(Minimap.GetDots(ERSMinimapDot.PLAYER));
@@ -1832,12 +1832,15 @@ var
   conversationHistory: String;
   i: Integer;
   logEntry: String;
+  textAreaBox: TBox;
 begin
   CheckAndFixChatTabs();
-  
+
+  textAreaBox := [348, 455, 515, 475]; // our tbox for draw text
+    
   if ((GetSystemTime() - lastDrawTime) > 1000) and (RSClient.RemoteInput.IsSetup) then
   begin
-    RSClient.Image.Clear;
+    RSClient.Image().Clear(textAreaBox);
     DrawAIText();
     lastDrawTime := GetSystemTime();
   end;
@@ -2045,6 +2048,7 @@ begin
   totalBlockedMessages := 0;
   SetLength(sessionConversationLog, 0);
   lastDrawTime := GetSystemTime();
+  DrawAIText();
 
   Discord.Setup();
   Discord.SetWebhook(DiscordWebHookUrl);
