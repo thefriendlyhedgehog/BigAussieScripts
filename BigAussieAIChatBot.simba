@@ -1832,17 +1832,20 @@ var
   conversationHistory: String;
   i: Integer;
   logEntry: String;
-  textAreaBox: TBox;
+  currentActiveChatButton: ERSChatButton;
 begin
   CheckAndFixChatTabs();
-
-  textAreaBox := [348, 455, 515, 475]; // our tbox for draw text
-    
-  if ((GetSystemTime() - lastDrawTime) > 1000) and (RSClient.RemoteInput.IsSetup) then
+  
+  if RSClient.RemoteInput.IsSetup then
   begin
-    RSClient.Image().Clear(textAreaBox);
-    DrawAIText();
-    lastDrawTime := GetSystemTime();
+    currentActiveChatButton := ChatButtons.GetActive();
+    if currentActiveChatButton <> lastActiveChatButton then
+    begin
+      writeln('Active chat button changed to ' + ToString(currentActiveChatButton));
+      RSClient.Image.Clear;
+      DrawAIText();
+      lastActiveChatButton := currentActiveChatButton;
+    end;
   end;
 
   if not chatboxEnable then
