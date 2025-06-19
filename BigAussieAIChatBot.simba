@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.3'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.4'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1832,20 +1832,17 @@ var
   conversationHistory: String;
   i: Integer;
   logEntry: String;
-  currentActiveChatButton: ERSChatButton;
+  textAreaBox: TBox;
 begin
   CheckAndFixChatTabs();
-  
-  if RSClient.RemoteInput.IsSetup then
+
+  textAreaBox := [348, 455, 515, 475]; // our tbox for draw text
+    
+  if ((GetSystemTime() - lastDrawTime) > 1000) and (RSClient.RemoteInput.IsSetup) then
   begin
-    currentActiveChatButton := ChatButtons.GetActive();
-    if currentActiveChatButton <> lastActiveChatButton then
-    begin
-      writeln('Active chat button changed to ' + ToString(currentActiveChatButton));
-      RSClient.Image.Clear;
-      DrawAIText();
-      lastActiveChatButton := currentActiveChatButton;
-    end;
+    RSClient.Image().Clear(textAreaBox);
+    DrawAIText();
+    lastDrawTime := GetSystemTime();
   end;
 
   if not chatboxEnable then
