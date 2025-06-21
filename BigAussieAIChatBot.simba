@@ -1,4 +1,4 @@
-{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.4'}
+{$UNDEF SCRIPT_REVISION}{$DEFINE SCRIPT_REVISION := '2.7'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -129,8 +129,8 @@ var
   suspiciousActivityThreshold: Integer = 2;
   
   enableAntiDetection: Boolean = True;
-  minResponseTime: Integer = 3000;
-  maxResponseTime: Integer = 8000;
+  minResponseTime: Integer = 500;
+  maxResponseTime: Integer = 2000;
   typingVariation: Boolean = True;
   humanLikeDelays: Boolean = True;
 
@@ -741,28 +741,33 @@ begin
   Result := baseTime;
 end;
 
+// Due to Remote input taking mouse control we need to ensure the message is sent before mouse timeout.
+// This will ensure the message is sent before the mouse timeout.
+// We do this or we can try splitting the message but that seems worse.
 procedure SimulateTyping(message: String);
 var
-  i, charDelay, pauseChance: Integer;
+  messageLength, targetTime, calculatedDelay: Integer;
+  minDelay, maxDelay, randomVariation: Integer;
+  finalDelay: Integer;
 begin
-  if not typingVariation then
-  begin
-    SendKeys(message, sendKeyDelay, sendKeyDelay);
-    Exit;
-  end;
+  messageLength := Length(message);
   
-  // Simulate human-like typing with variations
-  for i := 1 to Length(message) do
-  begin
-    charDelay := sendKeyDelay + RandomRange(-10, 20);
-    
-    // Occasional longer pauses (thinking/hesitation?????)
-    pauseChance := Random(100);
-    if pauseChance < 5 then
-      charDelay := charDelay + RandomRange(200, 800);
-      
-    SendKeys(message[i], charDelay, charDelay);
-  end;
+  targetTime := RandomRange(3000, 6000);
+  
+  calculatedDelay := targetTime div (messageLength * 2);
+  
+  minDelay := 5;
+  maxDelay := 150;
+  
+  calculatedDelay := Max(minDelay, Min(maxDelay, calculatedDelay));
+
+  randomVariation := RandomRange(-calculatedDelay div 3, calculatedDelay div 3);
+  finalDelay := Max(minDelay, calculatedDelay + randomVariation);
+  
+  SendKeys(message, finalDelay, finalDelay + RandomRange(0, 10));
+  
+  WriteLn('Typed ' + IntToStr(messageLength) + ' chars with ' + IntToStr(finalDelay) + 'ms delay (target: ' + 
+          IntToStr(targetTime) + 'ms, actual: ~' + IntToStr((messageLength * finalDelay * 2)) + 'ms)');
 end;
 
 function CalculateSimilarity(str1, str2: String): Single;
@@ -1808,19 +1813,19 @@ end;
 
 function ValidateAIResponse(aiResponse: String): Boolean;
 var
-  i: Integer;
+  trimmedResponse: String;
 begin
-  // Check if response contains only numbers this is the crude workaround but it works
-  for i := 1 to Length(aiResponse) do
+  // Trim whitespac?
+  trimmedResponse := Trim(aiResponse);
+  
+  if trimmedResponse = '1' then
   begin
-    if not (aiResponse[i] in ['0'..'9']) then
-    begin
-      Result := True;
-      Exit;
-    end;
+    WriteLn('Blocking AI response "1"');
+    Result := False;
+    Exit;
   end;
 
-  Result := False;
+  Result := True;
 end;
 
 procedure ProcessChatMessages();
@@ -1989,7 +1994,7 @@ begin
       begin
         writeln('Text detected in chat, deleting before sending');
         Keyboard.PressKey(VK_BACK);
-        Wait(sendKeyDelay);
+        //Wait(sendKeyDelay);
         for i := 1 to RandomRange(0, 2) do
         begin
           Keyboard.PressKey(VK_BACK);
@@ -1997,6 +2002,8 @@ begin
         end;
       end;
 
+      //SendKeys(aiResponse, sendKeyDelay, sendKeyDelay);
+      // Simulate typing and send the response
       SimulateTyping(aiResponse);
       Wait(sendKeyDelay);
       Keyboard.PressKey(VK_ENTER);
@@ -2039,8 +2046,8 @@ begin
   if not RSClient.RemoteInput.IsSetup() then
     RSClient.RemoteInput.Setup();
 
-  WLSettings.RemoteInput.BlockInput := False;
-  RSClient.RemoteInput.EnableRealInput();
+  //WLSettings.RemoteInput.BlockInput := False;
+  //RSClient.RemoteInput.EnableRealInput();
 
   sessionStartTime := GetSystemTime();
   totalMessagesProcessed := 0;
@@ -2177,8 +2184,8 @@ begin
   enablePlayerTrustSystem := StrToBoolDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'EnablePlayerTrustSystem', 'Configs/BASettings.ini'), True);
   suspiciousActivityThreshold := StrToIntDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'SuspiciousActivityThreshold', 'Configs/BASettings.ini'), 2);
   enableAntiDetection := StrToBoolDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'EnableAntiDetection', 'Configs/BASettings.ini'), True);
-  minResponseTime := StrToIntDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'MinResponseTime', 'Configs/BASettings.ini'), 3000);
-  maxResponseTime := StrToIntDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'MaxResponseTime', 'Configs/BASettings.ini'), 8000);
+  minResponseTime := StrToIntDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'MinResponseTime', 'Configs/BASettings.ini'), 500);
+  maxResponseTime := StrToIntDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'MaxResponseTime', 'Configs/BASettings.ini'), 2000);
   typingVariation := StrToBoolDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'TypingVariation', 'Configs/BASettings.ini'), True);
   humanLikeDelays := StrToBoolDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'HumanLikeDelays', 'Configs/BASettings.ini'), True);
   enableResponseFiltering := StrToBoolDef(ReadINI(Username + ' AIChatbot Advanced Settings', 'EnableResponseFiltering', 'Configs/BASettings.ini'), True);
