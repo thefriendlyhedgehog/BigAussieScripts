@@ -2047,7 +2047,7 @@ begin
     RSClient.RemoteInput.Setup();
 
   //WLSettings.RemoteInput.BlockInput := False;
-  //RSClient.RemoteInput.EnableRealInput();
+  RSClient.RemoteInput.EnableRealInput();
 
   sessionStartTime := GetSystemTime();
   totalMessagesProcessed := 0;
