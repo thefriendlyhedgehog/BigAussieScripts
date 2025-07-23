@@ -1,0 +1,1345 @@
+{$DEFINE SCRIPT_REVISION := '1.0'}
+{$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
+{$I SRL-T/osr.simba}
+{$I WaspLib/osr.simba}
+{$I WaspLib/optional/handlers/discord.simba}
+
+var
+  WEBHOOKURL: String                     = '';
+  DiscordUID: String                     = '';
+  ENABLEWEBHOOKS: Boolean                = True; 
+  SENDLEVELUPNOTIFICATIONMSG: Boolean    = True;
+  SENDSESSIONSUMMARYMSG: Boolean         = True;
+  SENDHOURLYREPORTMSG: Boolean           = True;
+  ABLOSEFOCUS: Boolean                   = True;
+
+type
+  TGemStoneCrabState = (
+    STATE_FIND_CRAB,
+    STATE_ATTACK_CRAB,
+    STATE_IN_COMBAT
+  );
+
+  GemStoneCrabSlayer = record(TBaseBankScript)
+    InCombat: Boolean;
+    IsAttacking: Boolean;
+    CrabHealth: Int32;
+    LastHealthCheck: UInt64;
+    
+    TotalKills: Int32;
+    StartXP: Int32;
+    CurrentXP: Integer;
+    PrevXP: Integer;
+    XPGained: Integer;
+    LastLevel: Int32;
+    CurrentLevel: Int32;
+    LastHourlyReportTime: Int64;
+    GainedXP: Integer;
+    
+    AFKMode: Boolean;
+    
+    RunningTime: TStopWatch;
+    ActiveTimer: TStopWatch;
+  end;
+
+var
+  GemStoneCrabBot: GemStoneCrabSlayer;
+  ConfigINI: TConfigINI;
+  Discord: TDiscordClient;
+  ActiveTimer: TStopWatch;
+
+procedure OnBreakStart(Task: PBreakTask);
+begin
+  ActiveTimer.Pause();
+end;
+
+procedure OnBreakFinish(Task: PBreakTask);
+begin
+  ActiveTimer.Resume();
+end;
+
+procedure OnSleepStart(Task: PSleepTask);
+begin
+  ActiveTimer.Pause();
+end;
+
+procedure OnSleepFinish(Task: PSleepTask);
+begin
+  ActiveTimer.Resume();
+end;
+
+procedure TAntiban.Setup(); override;
+begin
+  Self.Skills := [ERSSkill.TOTAL, ERSSkill.ATTACK, ERSSkill.STRENGTH, ERSSkill.DEFENCE, ERSSkill.HITPOINTS, ERSSkill.MINING];
+  Self.MinZoom := 0;
+  Self.MaxZoom := 10;
+  Antiban.OnStartBreak := @OnBreakStart;
+  Antiban.OnFinishBreak := @OnBreakFinish;
+  Antiban.OnStartSleep := @OnSleepStart;
+  Antiban.OnFinishSleep := @OnSleepFinish;
+
+  inherited;
+end;
+
+procedure TRSObject.SetObject(objUpText: TStringArray; coordinates: TPointArray; size, height: double);
+begin
+  Self := [];
+  Self.Setup(size, height, coordinates);
+  Self.Setup(objUpText);
+
+  Filter := [True, False, True, True];
+end;
+
+{$IFDEF SCRIPT_GUI}
+type
+  TConfig = record(TScriptForm)
+    WebhookLabel , DiscordUIDLabel, DiscordUIDInfo: TLabel;
+    WebHookInput, DiscordUIDInput: TLabeledEdit;
+    EnableWebhooksCheckBox,
+    HourlyReportsCheckBox, ScreenshotOnLevelCheckBox, SessionSummaryCheckBox, LoseFocusCheckBox: TLabeledCheckBox;
+    WebhookInfo: TLabel;
+    TestButton: TButton;
+    SavedDiscordUID, SavedWebhookURL: String;
+    DiscordPanel: TLabeledPanel;
+    Username: String;
+  end;
+
+procedure TConfig.UpdateAccountValues(sender: TObject);
+var
+  selector: TComboBox;
+  user, pass, pin: TEdit;
+  worlds: TMemo;
+  idx: Int32;
+  worldsStr: String;
+  i: Int32;
+begin
+  selector := TComboBox(Self.Form.GetChild('am_selector_combobox'));
+  idx := selector.GetItemIndex();
+
+  if (idx < 0) or (idx > High(Login.Players)) then Exit;
+  
+  Self.SaveUserSettings();
+
+  Login.PlayerIndex := idx;
+
+  user := TEdit(Self.Form.GetChild('am_user_edit'));
+  pass := TEdit(Self.Form.GetChild('am_pass_edit'));
+  pin := TEdit(Self.Form.GetChild('am_pin_edit'));
+  worlds := TMemo(Self.Form.GetChild('am_worlds_memo'));
+
+  user.SetText(Login.Players[idx].User);
+  pass.SetText(Login.Players[idx].Password);
+  pin.SetText(Login.Players[idx].Pin);
+
+  worldsStr := '';
+  for i := 0 to High(Login.Players[idx].Worlds) do
+  begin
+    worldsStr += ToStr(Login.Players[idx].Worlds[i]);
+    if i < High(Login.Players[idx].Worlds) then
+      worldsStr += ', ';
+  end;
+  worlds.SetText(worldsStr);
+
+  Self.LoadUserSettings();
+end;
+
+procedure TConfig.InitializeAccountManager;
+var
+  accountManagerTab: TTabSheet;
+  selector: TComboBox;
+begin
+  selector := TComboBox(Self.Form.GetChild('am_selector_combobox'));
+  selector.SetOnChange(@UpdateAccountValues);
+end;
+  
+procedure TConfig.LoadUserSettings();
+var
+  SavedDiscordUID, SavedWebhookURL: String;
+  SavedEnableWebhooks: Boolean;
+  SavedHourlyReports, SavedLevelUpNotifications, SavedSessionSummary, SavedLoseFocus: Boolean;
+  Username: String;
+begin
+ if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+
+  if Username = '' then Exit;
+
+  SavedHourlyReports := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'HourlyReports', 'Configs/BASettings.ini'), True);
+  SavedLevelUpNotifications := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', 'Configs/BASettings.ini'), True);
+  SavedSessionSummary := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'SessionSummary', 'Configs/BASettings.ini'), True);
+  SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
+  SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
+  SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
+  SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+
+  if Assigned(Self.HourlyReportsCheckBox) then
+    Self.HourlyReportsCheckBox.SetChecked(SavedHourlyReports);
+
+  if Assigned(Self.ScreenshotOnLevelCheckBox) then
+    Self.ScreenshotOnLevelCheckBox.SetChecked(SavedLevelUpNotifications);
+
+  if Assigned(Self.SessionSummaryCheckBox) then
+    Self.SessionSummaryCheckBox.SetChecked(SavedSessionSummary);
+
+  if Assigned(Self.LoseFocusCheckBox) then
+    Self.LoseFocusCheckBox.SetChecked(SavedLoseFocus);
+
+  if Assigned(Self.EnableWebhooksCheckBox) then
+  begin
+    Self.EnableWebhooksCheckBox.SetChecked(SavedEnableWebhooks);
+    Self.WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
+  end;
+
+  if Assigned(Self.DiscordUIDInput) then
+    Self.DiscordUIDInput.SetText(SavedDiscordUID);
+
+  if Assigned(Self.WebHookInput) then
+    Self.WebHookInput.SetText(SavedWebhookURL);
+end;
+
+procedure TConfig.SaveUserSettings();
+var
+  Username: String;
+begin
+ if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+    
+  if Username = '' then Exit;
+
+  if Assigned(Self.HourlyReportsCheckBox) then
+    SENDHOURLYREPORTMSG := Self.HourlyReportsCheckBox.IsChecked();
+
+  if Assigned(Self.ScreenshotOnLevelCheckBox) then
+    SENDLEVELUPNOTIFICATIONMSG := Self.ScreenshotOnLevelCheckBox.IsChecked();
+
+  if Assigned(Self.SessionSummaryCheckBox) then
+    SENDSESSIONSUMMARYMSG := Self.SessionSummaryCheckBox.IsChecked();
+
+  if Assigned(Self.LoseFocusCheckBox) then
+    ABLOSEFOCUS := Self.LoseFocusCheckBox.IsChecked();
+
+  if Assigned(Self.EnableWebhooksCheckBox) then
+    ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
+
+  if Assigned(Self.DiscordUIDInput) then
+    DiscordUID := Self.DiscordUIDInput.GetText();
+
+  if Assigned(Self.WebHookInput) then
+    WEBHOOKURL := Self.WebHookInput.GetText();
+
+  WriteINI(Username + ' Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'HourlyReports', BoolToStr(SENDHOURLYREPORTMSG, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', BoolToStr(SENDLEVELUPNOTIFICATIONMSG, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Webhook Settings', 'SessionSummary', BoolToStr(SENDSESSIONSUMMARYMSG, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Antiban Manager', 'LoseFocus', BoolToStr(ABLOSEFOCUS, 'true', 'false'), 'Configs/BASettings.ini');
+end;
+
+procedure TConfig.StartScript(sender: TObject); override; 
+begin
+  Self.SaveUserSettings();
+  Discord.SetWebhook(WEBHOOKURL);
+  Discord.SetUsername('BigAussies Gemstone Crab Slayer');
+  Discord.SetAvatar('https://oldschool.runescape.wiki/images/thumb/2/2e/Gemstone_crab.png/150px-Gemstone_crab.png');
+  inherited;
+end;
+
+procedure TConfig.OpenURL(Sender: TObject);
+begin
+  if Sender = Self.WebhookInfo then
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks')
+  else if Sender = Self.DiscordUIDInfo then
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
+end;
+
+procedure TConfig.WebhooksCheckboxChanged({$H-}sender: TObject){$H+};
+begin
+  Self.WebhookInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  Self.DiscordUIDInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.DiscordPanel) then
+    Self.DiscordPanel.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.DiscordUIDInput) then
+    Self.DiscordUIDInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.WebHookInput) then
+    Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.TestButton) then
+    Self.TestButton.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.ScreenshotOnLevelCheckBox) then
+    Self.ScreenshotOnLevelCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.HourlyReportsCheckBox) then
+    Self.HourlyReportsCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+  if Assigned(Self.SessionSummaryCheckBox) then
+    Self.SessionSummaryCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+end;
+
+function TConfig.CreateLabeledPanel(owner: TControl; title: String; top, height: Int32; FontSize: Int32 = 10; Color: TColor = clBlack; FontStyles: TFontStyles = [fsBold]): TLabeledPanel;
+var
+  verticalSpacing: Int32;
+begin
+  verticalSpacing := TControl.AdjustToDPI(3);
+  Result.Create(owner);
+  with Result do
+  begin
+    SetCaption(title);
+
+    Panel.SetCaption('');
+    Panel.SetBevelWidth(1);
+    Panel.SetBevelInner(bvRaised);
+    Panel.SetBevelOuter(bvLowered);
+    Panel.SetTop(top + verticalSpacing);
+    Panel.SetWidth(Self.Form.GetWidth - TControl.AdjustToDPI(25));
+    Panel.SetHeight(TControl.AdjustToDPI(height));
+    Panel.SetBorderStyle(bsNone);
+
+    Caption.SetFontSize(FontSize);
+    Caption.SetFontColor(Color);
+    Caption.GetFont().SetStyle(FontStyles);
+  end;
+end;
+
+procedure TConfig.TestButtonClick({$H-}sender: TObject){$H+};
+begin
+  if Self.WebHookInput.GetText = '' then
+  begin
+    ShowMessage('Please enter a Webhook URL');
+    Exit;
+  end;
+  Discord.Webhook.Content := ('Test message from BigAussies Gemstone Crab Slayer');
+  Discord.Webhook.URL := Self.WebHookInput.GetText;
+  Discord.Send();
+  ShowMessage('Test message sent. Please check Discord.');
+end;
+
+procedure TConfig.Run(); override;
+var
+  tab: TTabSheet;
+  SavedDiscordUID, SavedWebhookURL: String;
+  SavedEnableWebhooks: Boolean;
+  SavedScreenshotOnLevel, SavedHourlyReports, SavedSessionSummary, SavedLoseFocus: Boolean;
+  panelTop: Int32;
+begin
+  ClearDebug();
+  
+  if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
+    Username := 'NoUserNameSelected'
+  else
+    Username := Login.Players[Login.PlayerIndex].User;
+
+  Self.Setup('BigAussies Gemstone Crab Slayer');
+  Self.Start.SetOnClick(@Self.StartScript);
+
+  WLSettings.RemoteInput.BlockInput := True;
+
+  Self.AddTab('Script Settings');
+  tab := Self.Tabs[High(Self.Tabs)];
+
+  Self.CreateAccountManager(tab);
+  InitializeAccountManager();
+  Self.LoadUserSettings();
+
+  SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
+  SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
+  SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+  SavedScreenshotOnLevel := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', 'Configs/BASettings.ini'), True);
+  SavedHourlyReports := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'HourlyReports', 'Configs/BASettings.ini'), True);
+  SavedSessionSummary := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'SessionSummary', 'Configs/BASettings.ini'), True);
+  SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
+
+  with Self.EnableWebhooksCheckBox do
+  begin
+    Create(tab);
+    SetCaption("Discord Notifications");
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(TControl.AdjustToDPI(140));
+    SetHint('Enable Discord notifications for crashes and updates.');
+    SetChecked(SavedEnableWebhooks);
+    CheckBox.SetOnChange(@WebhooksCheckboxChanged);
+  end;
+
+  panelTop := Self.EnableWebhooksCheckBox.GetTop() + TControl.AdjustToDPI(30);
+  Self.DiscordPanel := Self.CreateLabeledPanel(tab, 'Discord Settings', panelTop, 130, 10, clBlue);
+  Self.DiscordPanel.SetLeft(TControl.AdjustToDPI(10));
+
+  with Self.WebhookInfo do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetLeft(TControl.AdjustToDPI(150));
+    SetTop(TControl.AdjustToDPI(5));
+    SetCaption('Click here to learn how to generate your own Discord webhook URL');
+    SetHint('Click here to learn how to generate your own Discord webhook URL');
+    setOnClick(@OpenURL);
+    SetFontSize(TControl.AdjustToDPI(9));
+    SetFontColor(clBlue);
+  end;
+
+  with Self.DiscordUIDInput do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Discord UID');
+    SetLeft(TControl.AdjustToDPI(20));
+    SetTop(TControl.AdjustToDPI(25));
+    SetWidth(TControl.AdjustToDPI(100));
+    SetText(SavedDiscordUID);
+    SetHint('Your Discord User ID for mentions.');
+  end;
+
+  with Self.WebHookInput do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Webhook URL');
+    SetLeft(Self.DiscordUIDInput.GetRight + TControl.AdjustToDPI(10));
+    SetTop(Self.DiscordUIDInput.GetTop);
+    SetWidth(TControl.AdjustToDPI(350));
+    SetText(SavedWebhookURL);
+    SetPasswordChar('*');
+    SetHint('Your Discord webhook URL.');
+  end;
+
+  with Self.TestButton do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Test Webhook');
+    SetLeft(Self.WebHookInput.GetRight + TControl.AdjustToDPI(10));
+    SetTop(Self.WebHookInput.GetTop + TControl.AdjustToDPI(15));
+    SetWidth(TControl.AdjustToDPI(90));
+    SetHeight(TControl.AdjustToDPI(25));
+    SetOnClick(@TestButtonClick);
+    SetHint('Send a test message to your webhook.');
+  end;
+
+  with Self.DiscordUIDInfo do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetFontColor(clBlue);
+    SetLeft(Self.DiscordUIDInput.GetLeft() + Self.DiscordUIDInput.GetWidth() + TControl.AdjustToDPI(10));
+    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(18));
+    SetCaption('Click here to learn how to find your Discord User ID');
+    SetHint('Click here to learn how to find your Discord User ID');
+    setOnClick(@OpenURL);
+    SetFontSize(TControl.AdjustToDPI(9));
+  end;
+
+  with Self.ScreenshotOnLevelCheckBox do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Screenshot on Level Up');
+    SetLeft(TControl.AdjustToDPI(20));
+    SetTop(Self.DiscordUIDInput.GetTop + TControl.AdjustToDPI(50));
+    SetHint('Takes a screenshot and sends to Discord when you level up');
+    SetChecked(SavedScreenshotOnLevel);
+  end;
+
+  with Self.HourlyReportsCheckBox do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Hourly Progress Reports');
+    SetLeft(Self.ScreenshotOnLevelCheckBox.GetRight + TControl.AdjustToDPI(20));
+    SetTop(Self.ScreenshotOnLevelCheckBox.GetTop);
+    SetHint('Sends detailed progress embeds every hour');
+    SetChecked(SavedHourlyReports);
+  end;
+
+  with Self.SessionSummaryCheckBox do
+  begin
+    Create(Self.DiscordPanel.Panel);
+    SetCaption('Session Summary on Stop');
+    SetLeft(Self.HourlyReportsCheckBox.GetRight + TControl.AdjustToDPI(20));
+    SetTop(Self.HourlyReportsCheckBox.GetTop);
+    SetHint('Sends a detailed summary embed when script stops');
+    SetChecked(SavedSessionSummary);
+  end;
+
+  Self.WebhooksCheckboxChanged(nil);
+
+  Self.CreateAntibanManager();
+  
+  for tab in Self.Tabs do
+  begin
+    if tab.GetCaption() = 'Antiban Manager' then
+    begin
+      with Self.LoseFocusCheckBox do
+      begin
+        Create(tab);
+        SetCaption('Lose Focus');
+        SetLeft(TControl.AdjustToDPI(90));
+        SetTop(TControl.AdjustToDPI(220));
+        SetChecked(SavedLoseFocus);
+        SetHint('Enable or disable losing client focus during combat.');
+      end;
+      Break;
+    end;
+  end;
+  
+  Self.CreateWaspLibSettings();
+  Self.CreateAPISettings();
+
+  inherited;
+end;
+
+var
+  Config: TConfig;
+{$ENDIF}
+
+procedure GemStoneCrabSlayer.SendTerminationNotification();
+begin
+  Self.SendSessionSummary();
+end;
+
+procedure GemStoneCrabSlayer.CheckHourlyReport();
+var
+  CurrentTime: Int64;
+begin
+  CurrentTime := Self.RunningTime.ElapsedTime;
+  
+  if (CurrentTime - Self.LastHourlyReportTime) >= 3600000 then
+  begin
+    Self.SendHourlyReport();
+    Self.LastHourlyReportTime := CurrentTime;
+  end;
+end;
+
+function FormatRoundedNumber(Number: Integer): String;
+begin
+  if Number >= 1000000 then
+    Result := FormatFloat('0.0M', Number / 1000000)
+  else if Number >= 1000 then
+    Result := FormatFloat('0K', Number / 1000)
+  else
+    Result := SRL.FormatNumber(Number);
+end;
+
+procedure GemStoneCrabSlayer.SendLevelUpNotification(NewLevel: Int32);
+var
+  EmbedIdx: Int32;
+begin
+  if not SENDLEVELUPNOTIFICATIONMSG or not ENABLEWEBHOOKS then Exit;
+  try
+    Discord.Webhook.Content := '';
+    if DiscordUID <> '' then
+      Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
+    Discord.Webhook.Content += '**LEVEL UP!** :tada:';
+    
+    EmbedIdx := Discord.Webhook.AddEmbed();
+    Discord.Webhook.Embeds[EmbedIdx].Title := 'Combat Level Up!';
+    Discord.Webhook.Embeds[EmbedIdx].Color := $00FF00;
+    Discord.Webhook.Embeds[EmbedIdx].Description := 'New Level: ' + IntToStr(NewLevel) + LineEnding +
+                                                    'XP Gained: ' + FormatRoundedNumber(Self.GainedXP) + LineEnding +
+                                                    'Kills: ' + IntToStr(Self.TotalKills) + LineEnding +
+                                                    'Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short);
+    
+    if Discord.SendScreenshot(False) then
+      WriteLn('[Discord] Level up notification sent!')
+    else
+      WriteLn('[Discord] Failed to send level up notification: ' + Discord.LastError);
+  except
+    WriteLn('[Discord] Error sending level up notification: ' + GetExceptionMessage);
+  end;
+end;
+
+procedure GemStoneCrabSlayer.SendHourlyReport();
+var
+  EmbedIdx: Int32;
+  XPPerHour, KillsPerHour: Int32;
+begin
+  if not SENDHOURLYREPORTMSG or not ENABLEWEBHOOKS then Exit;
+  
+  XPPerHour := Round(Self.XPGained / (ActiveTimer.ElapsedTime / 3600000));
+  KillsPerHour := Round(Self.TotalKills / (Self.RunningTime.ElapsedTime / 3600000));
+  
+  try
+    Discord.Webhook.Content := '';
+    if DiscordUID <> '' then
+      Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
+    Discord.Webhook.Content += '**Hourly Progress Report** :chart_with_upwards_trend:';
+    
+    EmbedIdx := Discord.Webhook.AddEmbed();
+    Discord.Webhook.Embeds[EmbedIdx].Title := 'BigAussies Gemstone Crab Slayer - Hourly Report';
+    Discord.Webhook.Embeds[EmbedIdx].Color := $FFA500;
+    Discord.Webhook.Embeds[EmbedIdx].Description := 'Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short) + LineEnding +
+                                                    'XP Gained: ' + FormatRoundedNumber(Self.XPGained) + LineEnding +
+                                                    'XP/Hour: ' + FormatRoundedNumber(XPPerHour) + LineEnding +
+                                                    'Kills: ' + IntToStr(Self.TotalKills) + ' (' + FormatRoundedNumber(KillsPerHour) + '/hr)';
+    
+    if Discord.Send() then
+      WriteLn('[Discord] Hourly report sent!')
+    else
+      WriteLn('[Discord] Failed to send hourly report: ' + Discord.LastError);
+  except
+    WriteLn('[Discord] Error sending hourly report: ' + GetExceptionMessage);
+  end;
+end;
+
+procedure GemStoneCrabSlayer.SendSessionSummary();
+var
+  EmbedIdx: Int32;
+  XPPerHour, KillsPerHour: Int32;
+begin
+  if not SENDSESSIONSUMMARYMSG or not ENABLEWEBHOOKS then Exit;
+  
+  XPPerHour := Round(Self.XPGained / (ActiveTimer.ElapsedTime / 3600000));
+  KillsPerHour := Round(Self.TotalKills / (Self.RunningTime.ElapsedTime / 3600000));
+  
+  try
+    Discord.Webhook.Content := '';
+    if DiscordUID <> '' then
+      Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
+    Discord.Webhook.Content += '**Session Complete!** :checkered_flag:';
+    
+    EmbedIdx := Discord.Webhook.AddEmbed();
+    Discord.Webhook.Embeds[EmbedIdx].Title := 'BigAussies Gemstone Crab Slayer - Session Summary';
+    Discord.Webhook.Embeds[EmbedIdx].Color := $0000FF;
+    Discord.Webhook.Embeds[EmbedIdx].Description := 'Total Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short) + LineEnding +
+                                                    'Total XP Gained: ' + FormatRoundedNumber(Self.XPGained) + LineEnding +
+                                                    'Average XP/Hour: ' + FormatRoundedNumber(XPPerHour) + LineEnding +
+                                                    'Total Kills: ' + IntToStr(Self.TotalKills) + ' (' + FormatRoundedNumber(KillsPerHour) + '/hr)';
+    
+    if Discord.SendScreenshot(False) then
+      WriteLn('[Discord] Session summary sent!')
+    else
+      WriteLn('[Discord] Failed to send session summary: ' + Discord.LastError);
+  except
+    WriteLn('[Discord] Error sending session summary: ' + GetExceptionMessage);
+  end;
+end;
+
+procedure GemStoneCrabSlayer.TakeScreenshot(Name: String);
+var
+  i: Int32;
+begin
+  CreateDirectory('Screenshots/');
+  i := Length(GetFiles('Screenshots/', 'png'));
+  SaveScreenshot('Screenshots/GemStoneCrab' + Name + '_' + IntToStr(i) + '.png');
+end;
+
+function GemStoneCrabSlayer.FindAndClickCaveEntrance(): Boolean;
+var
+  RedExclamationDots: TPointArray;
+  i, x, y: Int32;
+  MinimapPoint: TPoint;
+  MainscreenPoint: TPoint;
+  ScanPoint: TPoint;
+  FoundCave: Boolean;
+  WaitStart: UInt64;
+  YellowDots, MiningIcons: TPointArray;
+  j: Int32;
+  NearMiningIcon: Boolean;
+  LastCheckTime: UInt64;
+begin
+  Result := False;
+  
+  if SRL.FindColors(RedExclamationDots, CTS2(8422138, 7, 0.05, 0.76), Minimap.Bounds) then
+  begin
+    for i := 0 to High(RedExclamationDots) do
+    begin
+      MinimapPoint := RedExclamationDots[i];
+      
+      MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+      
+      if MainScreen.Bounds.Contains(MainscreenPoint) then
+      begin
+        Mouse.Move(MainscreenPoint);
+        Wait(200, 400);
+        
+        if MainScreen.IsUpText(['Cave']) then
+        begin
+          WriteLn('Entering Cave...');
+          Mouse.Click(MOUSE_LEFT);
+          
+          if MainScreen.DidRedClick() then
+          begin
+            if WaitUntil(Minimap.PercentBlack() > 80, 65, 20000) then
+            begin
+              if WaitUntil(Minimap.PercentBlack() < 20, 65, 10000) then
+              begin
+                WaitStart := GetTickCount();
+                LastCheckTime := GetTickCount();
+                
+                repeat
+                  if (GetTickCount() - LastCheckTime) >= 300 then
+                  begin
+                    SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
+                    
+                    if Length(MiningIcons) > 0 then
+                    begin
+                      YellowDots := Minimap.GetDots(ERSMinimapDot.NPC);
+                      
+                      if Length(YellowDots) > 0 then
+                      begin
+                        for j := 0 to High(YellowDots) do
+                        begin
+                          MinimapPoint := YellowDots[j];
+                          NearMiningIcon := False;
+                          
+                          for x := 0 to High(MiningIcons) do
+                          begin
+                            if MinimapPoint.DistanceTo(MiningIcons[x]) <= 15 then
+                            begin
+                              NearMiningIcon := True;
+                              Break;
+                            end;
+                          end;
+                          
+                          if NearMiningIcon then
+                          begin
+                            MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+                            
+                            if MainScreen.Bounds.Contains(MainscreenPoint) then
+                            begin
+                              Mouse.Move(MainscreenPoint);
+                              Wait(200, 400);
+                              
+                              if MainScreen.IsUpText(['Gemstone', 'Crab']) then
+                              begin
+                                Result := Self.AttackGemStoneCrab();
+                                Exit;
+                              end;
+                            end;
+                          end;
+                        end;
+                      end;
+                    end;
+                    LastCheckTime := GetTickCount();
+                  end;
+                  
+                until (GetTickCount() - WaitStart) > 20000;
+                
+                Result := True;
+                Exit;
+              end;
+            end;
+          end;
+        end
+        else
+        begin
+          FoundCave := False;
+          
+          x := -10;
+          while x <= 10 do
+          begin
+            y := -10;
+            while y <= 10 do
+            begin
+              ScanPoint := [MainscreenPoint.X + x, MainscreenPoint.Y + y];
+              
+              if MainScreen.Bounds.Contains(ScanPoint) then
+              begin
+                Mouse.Move(ScanPoint);
+                Wait(100, 200);
+                
+                if MainScreen.IsUpText(['Cave']) then
+                begin
+                  WriteLn('Entering Cave...');
+                  Mouse.Click(MOUSE_LEFT);
+                  
+                  if MainScreen.DidRedClick() then
+                  begin
+                    Result := True;
+                    FoundCave := True;
+                    Break;
+                  end;
+                end;
+              end;
+              
+              y := y + 5;
+            end;
+            
+            if FoundCave then Break;
+            x := x + 5;
+          end;
+          
+          if FoundCave then Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function GemStoneCrabSlayer.FindGemStoneCrab(): Boolean;
+var
+  YellowDots, MiningIcons: TPointArray;
+  i, j: Int32;
+  MinimapPoint: TPoint;
+  MainscreenPoint: TPoint;
+  NearMiningIcon: Boolean;
+begin
+  Result := False;
+  WriteLn('Looking for Mr Crabs...');
+
+  SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
+  
+  if Length(MiningIcons) = 0 then 
+  begin
+    WriteLn('No boss icon founds??');
+    Exit;
+  end;
+  
+  YellowDots := Minimap.GetDots(ERSMinimapDot.NPC);
+  
+  if Length(YellowDots) = 0 then
+  begin
+    WriteLn('No NPCs detected');
+    Exit;
+  end;
+  
+  for i := 0 to High(YellowDots) do
+  begin
+    MinimapPoint := YellowDots[i];
+    NearMiningIcon := False;
+    
+    for j := 0 to High(MiningIcons) do
+    begin
+      if MinimapPoint.DistanceTo(MiningIcons[j]) <= 15 then
+      begin
+        NearMiningIcon := True;
+        Break;
+      end;
+    end;
+    
+    if not NearMiningIcon then 
+    begin
+      Continue;
+    end;
+
+    MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+    
+    if not MainScreen.Bounds.Contains(MainscreenPoint) then
+    begin
+      Continue;
+    end;
+    
+    Mouse.Move(MainscreenPoint);
+    Wait(300, 600);
+    
+    if MainScreen.IsUpText(['Gemstone', 'Crab']) then
+    begin
+      WriteLn('Found Mr Crab!');
+      Result := True;
+      Exit;
+    end
+    else
+    begin
+      WriteLn('Wrong uptext??');
+    end;
+  end;
+  
+  WriteLn('Mr Crabs not found in current area');
+end;
+
+function GemStoneCrabSlayer.AttackGemStoneCrab(): Boolean;
+var
+  StartXP: Integer;
+  TimeoutStart: UInt64;
+  YellowDots, MiningIcons: TPointArray;
+  MiningClusters, NPCClusters: T2DPointArray;
+  i, j, k: Int32;
+  MinimapPoint: TPoint;
+  MainscreenPoint: TPoint;
+  NearMiningIcon: Boolean;
+  AttackAttempts: Int32;
+  ClickSuccess: Boolean;
+  ClusterDistance: Double;
+  MinDistance: Double;
+begin
+  Result := False;
+  
+  if Self.IsAttacking then 
+  begin
+    Exit(True);
+  end;
+  
+  StartXP := XPBar.Read();
+  AttackAttempts := 0;
+  
+  while (AttackAttempts < 20) and not Result do
+  begin
+    Inc(AttackAttempts);
+    
+    SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
+    
+    if Length(MiningIcons) = 0 then 
+    begin
+      Wait(1000, 2000);
+      Continue;
+    end;
+    
+    MiningClusters := ClusterTPA(MiningIcons, 25);
+    
+    YellowDots := Minimap.GetDots(ERSMinimapDot.NPC);
+    
+    if Length(YellowDots) = 0 then
+    begin
+      Wait(1000, 2000);
+      Continue;
+    end;
+    
+    NPCClusters := ClusterTPA(YellowDots, 15);
+    
+    for i := 0 to High(NPCClusters) do
+    begin
+      MinDistance := 999.0;
+      
+      for j := 0 to High(MiningClusters) do
+      begin
+        ClusterDistance := NPCClusters[i].Mean().DistanceTo(MiningClusters[j].Mean());
+        if ClusterDistance < MinDistance then
+          MinDistance := ClusterDistance;
+      end;
+      
+      if MinDistance <= 25 then
+      begin
+        for k := 0 to High(NPCClusters[i]) do
+        begin
+          MinimapPoint := NPCClusters[i][k];
+          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+          
+          if not MainScreen.Bounds.Contains(MainscreenPoint) then
+          begin
+            Continue;
+          end;
+          
+          Mouse.Move(MainscreenPoint);
+          Wait(300, 600);
+          
+          if MainScreen.IsUpText(['Gemstone', 'Crab']) then
+          begin
+            Mouse.Click(MOUSE_LEFT);
+            ClickSuccess := MainScreen.DidRedClick();
+            
+            if ClickSuccess then
+            begin
+              TimeoutStart := GetTickCount();
+              
+              repeat
+                Wait(500, 1000);
+                
+                if XPBar.Read() > StartXP then
+                begin
+                  Self.IsAttacking := True;
+                  Self.InCombat := True;
+                  Self.PrevXP := XPBar.Read();
+                  Self.LastHealthCheck := GetTickCount();
+                  Result := True;
+                  Exit;
+                end;
+                
+              until (GetTickCount() - TimeoutStart) > 8000;
+            end;
+          end;
+        end;
+      end;
+    end;
+    
+    // 1 spawn location NPC dot was not found, so instead we just MM2MS the mining icon
+    // CBA redoing dots or DTMs so lazy....
+    if not Result then
+    begin
+      for i := 0 to High(MiningClusters) do
+      begin
+        for j := 0 to High(MiningClusters[i]) do
+        begin
+          MinimapPoint := MiningClusters[i][j];
+          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+          
+          if not MainScreen.Bounds.Contains(MainscreenPoint) then
+          begin
+            Continue;
+          end;
+          
+          Mouse.Move(MainscreenPoint);
+          Wait(400, 700);
+          
+          if MainScreen.IsUpText(['Gemstone', 'Crab']) then
+          begin
+            Mouse.Click(MOUSE_LEFT);
+            ClickSuccess := MainScreen.DidRedClick();
+            
+            if ClickSuccess then
+            begin
+              TimeoutStart := GetTickCount();
+              
+              repeat
+                Wait(500, 1000);
+                
+                if XPBar.Read() > StartXP then
+                begin
+                  Self.IsAttacking := True;
+                  Self.InCombat := True;
+                  Self.PrevXP := XPBar.Read();
+                  Self.LastHealthCheck := GetTickCount();
+                  Result := True;
+                  Exit;
+                end;
+                
+              until (GetTickCount() - TimeoutStart) > 8000;
+            end;
+          end;
+        end;
+      end;
+    end;
+
+    if not Result then
+    begin
+      Wait(1000, 2000);
+    end;
+  end;
+  
+  if not Result then
+  begin
+    Self.IsAttacking := False;
+  end;
+end;
+
+function GemStoneCrabSlayer.GetBossHealth(): Integer;
+var
+  GreenTPA, RedTPA: TPointArray;
+  GreenCount, TotalCount: Integer;
+  HealthPercent: Integer;
+  HealthBarBox: TBox;
+begin
+  Result := -1;
+  
+  HealthBarBox := [202, 49, 315, 68];
+
+  SRL.FindColors(GreenTPA, CTS2(51200, 1, 0.01, 0.01), HealthBarBox);
+  SRL.FindColors(RedTPA, CTS2(200, 1, 0.01, 0.01), HealthBarBox);
+
+  GreenCount := GreenTPA.Len;
+  TotalCount := GreenCount + RedTPA.Len;
+
+  if TotalCount > 0 then
+  begin
+    HealthPercent := Round((GreenCount / TotalCount) * 100);
+    if HealthPercent > 100 then
+      HealthPercent := 100;
+    
+    Self.CrabHealth := HealthPercent;
+    Result := HealthPercent;
+  end;
+end;
+
+function GemStoneCrabSlayer.IsInCombat(): Boolean;
+var
+  CurrentXP: Integer;
+begin
+  CurrentXP := XPBar.Read();
+  
+  if CurrentXP > Self.PrevXP then
+  begin
+    Self.PrevXP := CurrentXP;
+    Self.LastHealthCheck := GetTickCount();
+    Self.InCombat := True;
+    Result := True;
+  end
+  else
+  begin
+    if Self.InCombat and ((GetTickCount() - Self.LastHealthCheck) < 15000) then
+      Result := True
+    else
+    begin
+      Self.InCombat := False;
+      Self.IsAttacking := False;
+      Result := False;
+    end;
+  end;
+end;
+
+function GemStoneCrabSlayer.HandleCombat(): Boolean;
+var
+  CurrentXP: Integer;
+  TimeSinceLastXP: UInt64;
+begin
+  Result := True;
+  
+  CurrentXP := XPBar.Read();
+  TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
+  
+  if CurrentXP > Self.PrevXP then
+  begin
+    Self.PrevXP := CurrentXP;
+    Self.LastHealthCheck := GetTickCount();
+    Self.InCombat := True;
+    
+    if ABLOSEFOCUS then
+    begin
+     Antiban.LoseFocus();
+    end;
+  end
+  else
+  begin
+    if TimeSinceLastXP > 15000 then
+    begin
+      WriteLn('Combat ended - no XP gained for 15 seconds');
+      Self.InCombat := False;
+      Self.IsAttacking := False;
+      Self.TotalKills := Self.TotalKills + 1;
+      Result := False;
+    end;
+  end;
+end;
+
+function GemStoneCrabSlayer.GetState(): TGemStoneCrabState;
+var
+  CurrentHealth: Integer;
+  CurrentXP: Integer;
+  TimeSinceLastXP: UInt64;
+begin
+  if Self.IsInCombat() then
+    Exit(STATE_IN_COMBAT);
+  
+  CurrentXP := XPBar.Read();
+  TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
+  
+  if TimeSinceLastXP > 15000 then
+  begin
+    WriteLn('No XP gained for 15+ seconds');
+    Self.InCombat := False;
+    Self.IsAttacking := False;
+  end;
+  
+  CurrentHealth := Self.GetBossHealth();
+  if (CurrentHealth >= 0) and not Self.IsInCombat() then
+  begin
+    WriteLn('Boss health detected and not in combat - Killing Mr Crabs');
+    Exit(STATE_ATTACK_CRAB);
+  end;
+  
+  WriteLn('No boss found - searching for crab');
+  Exit(STATE_FIND_CRAB);
+end;
+
+procedure GemStoneCrabSlayer.CheckForLevelUp();
+begin
+  Self.CurrentLevel := Stats.GetLevel(ERSSkill.ATTACK);
+  if Self.CurrentLevel > Self.LastLevel then
+  begin
+    Self.LastLevel := Self.CurrentLevel;
+    Self.SendLevelUpNotification(Self.CurrentLevel);
+  end;
+end;
+
+procedure GemStoneCrabSlayer.DoAction();
+var
+  State: TGemStoneCrabState;
+  CurrentXP: Integer;
+  TimeSinceLastXP: UInt64;
+begin
+  CurrentXP := XPBar.Read();
+  if CurrentXP > Self.PrevXP then
+  begin
+    Self.PrevXP := CurrentXP;
+    Self.LastHealthCheck := GetTickCount();
+    Self.InCombat := True;
+  end;
+  
+  TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
+  if TimeSinceLastXP > 15000 then
+  begin
+    if Self.InCombat or Self.IsAttacking then
+    begin
+      WriteLn('No XP for 15+ seconds');
+      Self.InCombat := False;
+      Self.IsAttacking := False;
+    end;
+  end;
+  
+  if Self.IsAttacking and (TimeSinceLastXP > 8000) then
+  begin
+    Self.IsAttacking := False;
+  end;
+
+  State := Self.GetState();
+  
+  case State of
+    STATE_FIND_CRAB:
+    begin
+      if not Self.FindGemStoneCrab() then
+      begin
+        WriteLn('Mr Crabs not found nearby, looking for cave entrance');
+        if not Self.FindAndClickCaveEntrance() then
+          Wait(2000, 3000);
+      end
+      else
+      begin
+        Self.AttackGemStoneCrab();
+      end;
+    end;
+    
+    STATE_ATTACK_CRAB:
+    begin
+      Self.AttackGemStoneCrab();
+    end;
+    
+    STATE_IN_COMBAT:
+    begin
+      if not Self.HandleCombat() then
+      begin
+        WriteLn('Combat ended, resetting combat state');
+        Self.InCombat := False;
+        Self.IsAttacking := False;
+      end;
+    end;
+  end;
+end;
+
+procedure GemStoneCrabSlayer.Report();
+var
+  CurrentXP: Integer;
+  GainedXP: Integer;
+  Runtime: Integer;
+  XPPerHour, XPPerHourExcludingBreaks: Integer;
+begin
+  ClearDebug();
+  
+  CurrentXP := XPBar.Read();
+  Self.GainedXP := CurrentXP - Self.StartXP;
+  Runtime := GetTimeRunning();
+    
+  XPPerHour := Round((Self.GainedXP) / (Self.RunningTime.ElapsedTime / 3600000));
+  XPPerHourExcludingBreaks := Round((Self.GainedXP) / (ActiveTimer.ElapsedTime / 3600000));
+    
+  WriteLn('========================================');
+  WriteLn('    BigAussies Gemstone Crab Slayer   ');
+  WriteLn('========================================');
+  WriteLn('   Runtime: ' + SRL.MsToTime(Runtime, Time_Short));
+  WriteLn('   XP Gained: ' + FormatRoundedNumber(Self.GainedXP));
+  WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
+  if Length(Antiban.Breaks) > 0 then
+    WriteLn('   Next break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
+  if Length(Antiban.Sleeps) > 0 then
+    if Antiban.Sleeps[0].NextAtTime > GetTimeRunning then
+      WriteLn('   Next sleep: ' + SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
+  WriteLn('========================================');
+  WriteLn('    BigAussies Gemstone Crab Slayer   ');
+  WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
+  WriteLn('========================================');
+end;
+
+procedure GemStoneCrabSlayer.Init(MaxActions: UInt32; MaxTime: UInt64); override;
+begin
+  inherited;
+  
+  if ENABLEWEBHOOKS then
+    Discord.Setup(WEBHOOKURL);
+  
+  if SENDSESSIONSUMMARYMSG and ENABLEWEBHOOKS then
+    AddOnTerminate(@Self.SendTerminationNotification);
+  
+  Self.AFKMode := True;
+  
+  Self.StartXP := XPBar.Read();
+  Self.PrevXP := Self.StartXP;
+  Self.TotalKills := 0;
+  Self.LastLevel := Stats.GetLevel(ERSSkill.ATTACK);
+  Self.LastHourlyReportTime := 0;
+  
+  Self.InCombat := False;
+  Self.IsAttacking := False;
+  Self.CrabHealth := -1;
+  Self.LastHealthCheck := GetTickCount();
+  
+  Self.RunningTime.Start();
+  ActiveTimer.Start();
+end;
+
+procedure GemStoneCrabSlayer.Run(MaxActions: UInt32; MaxTime: UInt64);
+var
+  LastExceptionTime: UInt64;
+  ExceptionCount: Integer;
+begin
+  try
+    Self.Init(MaxActions, MaxTime);
+    repeat
+      try
+        Self.CheckForLevelUp();
+        Self.CheckHourlyReport();
+        
+        if WL.Activity.IsFinished() then
+        begin
+          WriteLn('No activity detected in 5 minutes! Shutting down.');
+          Break;
+        end;
+        
+        Self.DoAction();
+        Self.DoAntiban();
+        
+        if (GetTimeRunning() mod 10000) < 1000 then
+          Self.Report();
+          
+        Wait(100, 300);
+        
+        if (GetTickCount() - LastExceptionTime) > 600000 then
+          ExceptionCount := 0;
+          
+      except
+        Inc(ExceptionCount);
+        LastExceptionTime := GetTickCount();
+        
+        WriteLn('Exception caught: ' + GetExceptionMessage());
+        Self.TakeScreenshot('_Exception');
+        
+        if ExceptionCount >= 5 then
+        begin
+          if ENABLEWEBHOOKS then
+          begin
+            try
+              Discord.Webhook.Content := '';
+              if DiscordUID <> '' then
+                Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
+              Discord.Webhook.Content += '**SCRIPT CRASHED** :warning: Too many exceptions (' + IntToStr(ExceptionCount) + '). Last error: ' + GetExceptionMessage();
+              Discord.Send();
+            except
+              WriteLn('[Discord] Failed to send crash notification');
+            end;
+          end;
+          TerminateScript('Too many exceptions - script terminated');
+        end;
+        
+        Wait(1000, 2000);
+      end;
+      
+    until Self.ShouldStop();
+    
+    Self.Report();
+    if ENABLEWEBHOOKS then
+    begin
+      try
+        Discord.Webhook.Content := '';
+        if DiscordUID <> '' then
+          Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
+        Discord.Webhook.Content += '**Script finished normally** :checkered_flag: Runtime: ' + SRL.MsToTime(GetTimeRunning(), Time_Short);
+        Discord.Send();
+      except
+        WriteLn('[Discord] Failed to send completion notification');
+      end;
+    end;
+    WriteLn('Script finished');
+    
+  except
+    Self.TakeScreenshot('_FatalCrash');
+    if ENABLEWEBHOOKS then
+    begin
+      try
+        Discord.Webhook.Content := '';
+        if DiscordUID <> '' then
+          Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
+        Discord.Webhook.Content += '**FATAL CRASH** :skull: Script terminated unexpectedly: ' + GetExceptionMessage();
+        Discord.SendScreenshot(True);
+      except
+        WriteLn('[Discord] Failed to send notification');
+      end;
+    end;
+    raise;
+  end;
+end;
+
+begin
+  {$IFDEF SCRIPT_GUI}
+  Sync(@Config.Run);
+  {$ENDIF}
+  GemStoneCrabBot.Run(WLSettings.MaxActions, WLSettings.MaxTime);
+end. 
