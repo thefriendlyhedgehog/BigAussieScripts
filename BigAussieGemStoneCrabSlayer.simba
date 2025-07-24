@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.4'}
+{$DEFINE SCRIPT_REVISION := '1.5'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -809,6 +809,7 @@ var
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
   NearMiningIcon: Boolean;
+  CurrentUpText: String;
 begin
   Result := False;
   WriteLn('Looking for Mr Crabs...');
@@ -817,7 +818,7 @@ begin
   
   if Length(MiningIcons) = 0 then 
   begin
-    WriteLn('No boss icon founds??');
+    WriteLn('No boss icon found');
     Exit;
   end;
   
@@ -858,15 +859,19 @@ begin
     Mouse.Move(MainscreenPoint);
     Wait(300, 600);
     
-    if MainScreen.IsUpText(['Gemstone', 'Crab']) then
+    CurrentUpText := MainScreen.GetUpText();
+    WriteLn('Detected uptext: "' + CurrentUpText + '"');
+    
+    // More specific check - require both "Gemstone" AND "crab" to be present
+    if (Pos('Gemstone', CurrentUpText) > 0) and (Pos('crab', CurrentUpText) > 0) then
     begin
       WriteLn('Found Mr Crab!');
       Result := True;
       Exit;
     end
-    else
+    else if Pos('crab', LowerCase(CurrentUpText)) > 0 then
     begin
-      WriteLn('Wrong uptext??');
+      WriteLn('Found crab but not Gemstone crab: "' + CurrentUpText + '"');
     end;
   end;
   
@@ -1208,28 +1213,17 @@ begin
   case State of
     STATE_FIND_CRAB:
     begin
+      // First check if there's a health bar (most reliable indicator)
       if Self.GetCrabTimeRemaining() >= 0 then
       begin
-        WriteLn('Timer bar detected! Mr Crabs must be in this area, searching...');
-        if not Self.FindGemStoneCrab() then
-        begin
-          WriteLn('Timer detected but could not find Mr Crabs, waiting...');
-          Wait(2000, 3000);
-        end
-        else
-        begin
-          Self.AttackGemStoneCrab();
-        end;
-      end
-      else if not Self.FindGemStoneCrab() then
-      begin
-        WriteLn('No timer bar and Mr Crabs not found nearby, looking for cave entrance');
-        if not Self.FindAndClickCaveEntrance() then
-          Wait(2000, 3000);
+        WriteLn('HP bar detected! Gemstone Crab is present, attempting to attack...');
+        Self.AttackGemStoneCrab();
       end
       else
       begin
-        Self.AttackGemStoneCrab();
+        WriteLn('No HP bar detected - Gemstone Crab not present, looking for cave entrance');
+        if not Self.FindAndClickCaveEntrance() then
+          Wait(2000, 3000);
       end;
     end;
     
