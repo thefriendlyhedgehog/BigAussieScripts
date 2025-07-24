@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.0'}
+{$DEFINE SCRIPT_REVISION := '1.1'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -47,6 +47,89 @@ var
   ConfigINI: TConfigINI;
   Discord: TDiscordClient;
   ActiveTimer: TStopWatch;
+  
+  NPC_DTM1, NPC_DTM2, NPC_DTM3, NPC_DTM4, NPC_DTM5, NPC_DTM6, NPC_DTM7: Int64;
+
+procedure SetupNPCDTMs();
+begin
+  NPC_DTM1 := DTMFromString('mQwAAAHicY2ZgYGhnguAOIA4G8kOBOASI374FEgyMUIwAjKiiANXeBHs=');
+  NPC_DTM2 := DTMFromString('mQwAAAHicY2ZgYKhnguA6IA4A8gMZIPTdu0CCgRGKEYARVRQAyRcENg==');
+  NPC_DTM3 := DTMFromString('mQwAAAHicY2ZgYGhgguBGIPYD8n0ZIPTXrwwM//7xMdy9y4ACGJEwEAAASrQIJQ==');
+  NPC_DTM4 := DTMFromString('mQwAAAHicY2ZgYKhnguA6IPYD8n0ZIPSfP0wM//4JgzEyYETCQAAAVqMIig==');
+  NPC_DTM5 := DTMFromString('mQwAAAHicY2ZgYGhgYmBohOIQID8MiIOA+M8foAADI8O/f8IMyIARCQMBABS6BpU=');
+  NPC_DTM6 := DTMFromString('mQwAAAHicY2ZgYGhhguBWIA4B8sOg+M8foAADIxQjACOqKADZUASW');
+  NPC_DTM7 := DTMFromString('mQwAAAHicY2ZgYGhhguBmIA4G8kOBOAiI794FEgyMDP/+8TEgA0YkDAQADEUGVw==');
+end;
+
+procedure FreeNPCDTMs();
+begin
+  FreeDTM(NPC_DTM1);
+  FreeDTM(NPC_DTM2);
+  FreeDTM(NPC_DTM3);
+  FreeDTM(NPC_DTM4);
+  FreeDTM(NPC_DTM5);
+  FreeDTM(NPC_DTM6);
+  FreeDTM(NPC_DTM7);
+end;
+
+function FilterDuplicateDots(Dots: TPointArray): TPointArray;
+var
+  I, J: Integer;
+  TooClose: Boolean;
+  MinDistance: Integer = 7;
+begin
+  Result := [];
+  
+  for I := 0 to High(Dots) do
+  begin
+    TooClose := False;
+    
+    for J := 0 to High(Result) do
+    begin
+      if Dots[I].DistanceTo(Result[J]) < MinDistance then
+      begin
+        TooClose := True;
+        Break;
+      end;
+    end;
+    
+    if not TooClose then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := Dots[I];
+    end;
+  end;
+end;
+
+function FindYellowNPCDots(): TPointArray;
+var
+  TempPoints: TPointArray;
+begin
+  Result := [];
+  
+  if FindDTMs(NPC_DTM1, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  if FindDTMs(NPC_DTM2, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  if FindDTMs(NPC_DTM3, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  if FindDTMs(NPC_DTM4, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  if FindDTMs(NPC_DTM5, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  if FindDTMs(NPC_DTM6, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  if FindDTMs(NPC_DTM7, TempPoints, Minimap.Bounds) then
+    Result := Result + TempPoints;
+  
+  Result := FilterDuplicateDots(Result);
+end;
 
 procedure OnBreakStart(Task: PBreakTask);
 begin
@@ -619,144 +702,61 @@ end;
 function GemStoneCrabSlayer.FindAndClickCaveEntrance(): Boolean;
 var
   RedExclamationDots: TPointArray;
-  i, x, y: Int32;
+  i, Attempts: Int32;
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
-  ScanPoint: TPoint;
-  FoundCave: Boolean;
-  WaitStart: UInt64;
-  YellowDots, MiningIcons: TPointArray;
-  j: Int32;
-  NearMiningIcon: Boolean;
-  LastCheckTime: UInt64;
 begin
   Result := False;
   
-  if SRL.FindColors(RedExclamationDots, CTS2(8422138, 7, 0.05, 0.76), Minimap.Bounds) then
+  for Attempts := 1 to 5 do
   begin
-    for i := 0 to High(RedExclamationDots) do
+    WriteLn('Looking for cave entrance... Attempt ', Attempts);
+    
+    if SRL.FindColors(RedExclamationDots, CTS2(8422138, 7, 0.05, 0.76), Minimap.Bounds) then
     begin
-      MinimapPoint := RedExclamationDots[i];
-      
-      MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-      
-      if MainScreen.Bounds.Contains(MainscreenPoint) then
+      for i := 0 to High(RedExclamationDots) do
       begin
+        MinimapPoint := RedExclamationDots[i];
+        MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+        
+        if not MainScreen.Bounds.Contains(MainscreenPoint) then
+          Continue;
+        
         Mouse.Move(MainscreenPoint);
         Wait(200, 400);
         
         if MainScreen.IsUpText(['Cave']) then
         begin
-          WriteLn('Entering Cave...');
+          WriteLn('Found cave entrance, clicking...');
           Mouse.Click(MOUSE_LEFT);
           
           if MainScreen.DidRedClick() then
           begin
-            if WaitUntil(Minimap.PercentBlack() > 80, 65, 20000) then
+            WriteLn('Successfully clicked cave entrance');
+            
+            if WaitUntil(Minimap.PercentBlack() > 80, 100, 15000) then
             begin
-              if WaitUntil(Minimap.PercentBlack() < 20, 65, 10000) then
+              if WaitUntil(Minimap.PercentBlack() < 20, 100, 10000) then
               begin
-                WaitStart := GetTickCount();
-                LastCheckTime := GetTickCount();
-                
-                repeat
-                  if (GetTickCount() - LastCheckTime) >= 300 then
-                  begin
-                    SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
-                    
-                    if Length(MiningIcons) > 0 then
-                    begin
-                      YellowDots := Minimap.GetDots(ERSMinimapDot.NPC);
-                      
-                      if Length(YellowDots) > 0 then
-                      begin
-                        for j := 0 to High(YellowDots) do
-                        begin
-                          MinimapPoint := YellowDots[j];
-                          NearMiningIcon := False;
-                          
-                          for x := 0 to High(MiningIcons) do
-                          begin
-                            if MinimapPoint.DistanceTo(MiningIcons[x]) <= 15 then
-                            begin
-                              NearMiningIcon := True;
-                              Break;
-                            end;
-                          end;
-                          
-                          if NearMiningIcon then
-                          begin
-                            MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-                            
-                            if MainScreen.Bounds.Contains(MainscreenPoint) then
-                            begin
-                              Mouse.Move(MainscreenPoint);
-                              Wait(200, 400);
-                              
-                              if MainScreen.IsUpText(['Gemstone', 'Crab']) then
-                              begin
-                                Result := Self.AttackGemStoneCrab();
-                                Exit;
-                              end;
-                            end;
-                          end;
-                        end;
-                      end;
-                    end;
-                    LastCheckTime := GetTickCount();
-                  end;
-                  
-                until (GetTickCount() - WaitStart) > 20000;
-                
+                WriteLn('Successfully entered cave');
                 Result := True;
                 Exit;
               end;
             end;
           end;
-        end
-        else
-        begin
-          FoundCave := False;
-          
-          x := -10;
-          while x <= 10 do
-          begin
-            y := -10;
-            while y <= 10 do
-            begin
-              ScanPoint := [MainscreenPoint.X + x, MainscreenPoint.Y + y];
-              
-              if MainScreen.Bounds.Contains(ScanPoint) then
-              begin
-                Mouse.Move(ScanPoint);
-                Wait(100, 200);
-                
-                if MainScreen.IsUpText(['Cave']) then
-                begin
-                  WriteLn('Entering Cave...');
-                  Mouse.Click(MOUSE_LEFT);
-                  
-                  if MainScreen.DidRedClick() then
-                  begin
-                    Result := True;
-                    FoundCave := True;
-                    Break;
-                  end;
-                end;
-              end;
-              
-              y := y + 5;
-            end;
-            
-            if FoundCave then Break;
-            x := x + 5;
-          end;
-          
-          if FoundCave then Exit;
         end;
       end;
     end;
+    
+    if not Result then
+    begin
+      WriteLn('Cave entrance not found on attempt ', Attempts);
+      Wait(1000, 2000);
+    end;
   end;
+  
+  if not Result then
+    WriteLn('Failed to find cave entrance after 5 attempts');
 end;
 
 function GemStoneCrabSlayer.FindGemStoneCrab(): Boolean;
@@ -778,7 +778,7 @@ begin
     Exit;
   end;
   
-  YellowDots := Minimap.GetDots(ERSMinimapDot.NPC);
+  YellowDots := FindYellowNPCDots();
   
   if Length(YellowDots) = 0 then
   begin
@@ -869,7 +869,7 @@ begin
     
     MiningClusters := ClusterTPA(MiningIcons, 25);
     
-    YellowDots := Minimap.GetDots(ERSMinimapDot.NPC);
+    YellowDots := FindYellowNPCDots();
     
     if Length(YellowDots) = 0 then
     begin
@@ -934,8 +934,6 @@ begin
       end;
     end;
     
-    // 1 spawn location NPC dot was not found, so instead we just MM2MS the mining icon
-    // CBA redoing dots or DTMs so lazy....
     if not Result then
     begin
       for i := 0 to High(MiningClusters) do
@@ -1225,6 +1223,8 @@ procedure GemStoneCrabSlayer.Init(MaxActions: UInt32; MaxTime: UInt64); override
 begin
   inherited;
   
+  SetupNPCDTMs();
+  
   if ENABLEWEBHOOKS then
     Discord.Setup(WEBHOOKURL);
   
@@ -1342,5 +1342,10 @@ begin
   {$IFDEF SCRIPT_GUI}
   Sync(@Config.Run);
   {$ENDIF}
-  GemStoneCrabBot.Run(WLSettings.MaxActions, WLSettings.MaxTime);
+  
+  try
+    GemStoneCrabBot.Run(WLSettings.MaxActions, WLSettings.MaxTime);
+  finally
+    FreeNPCDTMs();
+  end;
 end. 
