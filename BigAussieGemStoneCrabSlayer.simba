@@ -862,7 +862,6 @@ begin
     CurrentUpText := MainScreen.GetUpText();
     WriteLn('Detected uptext: "' + CurrentUpText + '"');
     
-    // More specific check - require both "Gemstone" AND "crab" to be present
     if (Pos('Gemstone', CurrentUpText) > 0) and (Pos('crab', CurrentUpText) > 0) then
     begin
       WriteLn('Found Mr Crab!');
@@ -1213,7 +1212,6 @@ begin
   case State of
     STATE_FIND_CRAB:
     begin
-      // First check if there's a health bar (most reliable indicator)
       if Self.GetCrabTimeRemaining() >= 0 then
       begin
         WriteLn('HP bar detected! Gemstone Crab is present, attempting to attack...');
