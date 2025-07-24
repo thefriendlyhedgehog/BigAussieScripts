@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.1'}
+{$DEFINE SCRIPT_REVISION := '1.2'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -923,6 +923,7 @@ begin
                   Self.InCombat := True;
                   Self.PrevXP := XPBar.Read();
                   Self.LastHealthCheck := GetTickCount();
+                  WL.Activity.Restart();
                   Result := True;
                   Exit;
                 end;
@@ -969,6 +970,7 @@ begin
                   Self.InCombat := True;
                   Self.PrevXP := XPBar.Read();
                   Self.LastHealthCheck := GetTickCount();
+                  WL.Activity.Restart();
                   Result := True;
                   Exit;
                 end;
@@ -1134,6 +1136,7 @@ begin
     Self.PrevXP := CurrentXP;
     Self.LastHealthCheck := GetTickCount();
     Self.InCombat := True;
+    WL.Activity.Restart();
   end;
   
   TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
