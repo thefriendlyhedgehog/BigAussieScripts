@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.3'}
+{$DEFINE SCRIPT_REVISION := '1.4'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -37,6 +37,10 @@ type
     GainedXP: Integer;
     
     AFKMode: Boolean;
+    
+    CaveEntranceAttempts: Int32;
+    LastCaveAttemptTime: UInt64;
+    FailsafeActive: Boolean;
     
     RunningTime: TStopWatch;
     ActiveTimer: TStopWatch;
@@ -715,9 +719,35 @@ var
 begin
   Result := False;
   
-  for Attempts := 1 to 5 do
+  if (GetTickCount() - Self.LastCaveAttemptTime) > 60000 then
   begin
-    WriteLn('Looking for cave entrance... Attempt ', Attempts);
+    Self.CaveEntranceAttempts := 0;
+    Self.FailsafeActive := False;
+  end;
+  
+  if Self.CaveEntranceAttempts >= 3 then
+  begin
+    WriteLn('FAILSAFE: Already tried cave entrance 3 times, assuming Mr Crabs is here!');
+    Self.FailsafeActive := True;
+    
+    if Self.FindGemStoneCrab() then
+    begin
+      WriteLn('FAILSAFE: Found Mr Crabs! Resetting cave attempts.');
+      Self.CaveEntranceAttempts := 0;
+      Self.FailsafeActive := False;
+      Exit(True);
+    end
+    else
+    begin
+      WriteLn('FAILSAFE: Could not find Mr Crabs after 3 cave attempts. Terminating script.');
+      Self.TakeScreenshot('_FailsafeTermination');
+      TerminateScript('Failsafe activated: Could not find cave entrance or Mr Crabs after multiple attempts');
+    end;
+  end;
+  
+  for Attempts := 1 to 3 do
+  begin
+    WriteLn('Looking for cave entrance... Attempt ', Attempts, ' (Total: ', Self.CaveEntranceAttempts + 1, ')');
     
     if SRL.FindColors(RedExclamationDots, CTS2(8422138, 7, 0.05, 0.76), Minimap.Bounds) then
     begin
@@ -746,6 +776,8 @@ begin
               if WaitUntil(Minimap.PercentBlack() < 20, 100, 10000) then
               begin
                 WriteLn('Successfully entered cave');
+                Self.CaveEntranceAttempts := 0;
+                Self.FailsafeActive := False;
                 Result := True;
                 Exit;
               end;
@@ -763,7 +795,11 @@ begin
   end;
   
   if not Result then
-    WriteLn('Failed to find cave entrance after 5 attempts');
+  begin
+    Self.CaveEntranceAttempts := Self.CaveEntranceAttempts + 1;
+    Self.LastCaveAttemptTime := GetTickCount();
+    WriteLn('Failed to find cave entrance. Total attempts: ', Self.CaveEntranceAttempts);
+  end;
 end;
 
 function GemStoneCrabSlayer.FindGemStoneCrab(): Boolean;
@@ -1004,8 +1040,8 @@ end;
 function GemStoneCrabSlayer.GetCrabTimeRemaining(): Integer;
 var
   GreenTPA, RedTPA: TPointArray;
-  GreenCount, TotalCount: Integer;
-  TimePercent: Integer;
+  GreenCount, RedCount, TotalCount: Integer;
+  TimePercent: Double;
   TimerBarBox: TBox;
 begin
   Result := -1;
@@ -1016,16 +1052,21 @@ begin
   SRL.FindColors(RedTPA, CTS2(200, 1, 0.01, 0.01), TimerBarBox);
 
   GreenCount := GreenTPA.Len;
-  TotalCount := GreenCount + RedTPA.Len;
+  RedCount := RedTPA.Len;
+  TotalCount := GreenCount + RedCount;
 
   if TotalCount > 0 then
   begin
-    TimePercent := Round((GreenCount / TotalCount) * 100);
-    if TimePercent > 100 then
-      TimePercent := 100;
+    TimePercent := (GreenCount / TotalCount) * 100.0;
+    Result := Round(TimePercent) + 1;
     
-    Self.CrabHealth := TimePercent;
-    Result := TimePercent;
+    if Result > 100 then
+      Result := 100;
+    if Result < 0 then
+      Result := 0;
+    
+    Self.CrabHealth := Result;
+    
   end;
 end;
 
@@ -1167,9 +1208,22 @@ begin
   case State of
     STATE_FIND_CRAB:
     begin
-      if not Self.FindGemStoneCrab() then
+      if Self.GetCrabTimeRemaining() >= 0 then
       begin
-        WriteLn('Mr Crabs not found nearby, looking for cave entrance');
+        WriteLn('Timer bar detected! Mr Crabs must be in this area, searching...');
+        if not Self.FindGemStoneCrab() then
+        begin
+          WriteLn('Timer detected but could not find Mr Crabs, waiting...');
+          Wait(2000, 3000);
+        end
+        else
+        begin
+          Self.AttackGemStoneCrab();
+        end;
+      end
+      else if not Self.FindGemStoneCrab() then
+      begin
+        WriteLn('No timer bar and Mr Crabs not found nearby, looking for cave entrance');
         if not Self.FindAndClickCaveEntrance() then
           Wait(2000, 3000);
       end
@@ -1262,6 +1316,10 @@ begin
   Self.IsAttacking := False;
   Self.CrabHealth := -1;
   Self.LastHealthCheck := GetTickCount();
+  
+  Self.CaveEntranceAttempts := 0;
+  Self.LastCaveAttemptTime := 0;
+  Self.FailsafeActive := False;
   
   Self.RunningTime.Start();
   ActiveTimer.Start();
