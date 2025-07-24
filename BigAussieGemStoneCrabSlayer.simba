@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.6'}
+{$DEFINE SCRIPT_REVISION := '1.7'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -6,8 +6,9 @@
 
 var
   WEBHOOKURL: String                     = '';
-  DiscordUID: String                     = '';
   ENABLEWEBHOOKS: Boolean                = True; 
+  ENABLEWORLDHOPPING: Boolean            = True;
+  WORLDHOPINTERVAL: Integer              = 45;
   SENDLEVELUPNOTIFICATIONMSG: Boolean    = True;
   SENDSESSIONSUMMARYMSG: Boolean         = True;
   SENDHOURLYREPORTMSG: Boolean           = True;
@@ -45,6 +46,17 @@ type
     
     RunningTime: TStopWatch;
     ActiveTimer: TStopWatch;
+    
+    LastAPIUpdate: UInt64;
+    ApiUpdateInterval: UInt64;
+    
+    NextWorldHopTime: UInt64;
+    WorldHopsCompleted: Int32;
+    LastWorldHopTime: Int64;
+    
+    LastReportTime: UInt64;
+    LastSystemUpdateCheck: UInt64;
+    SystemUpdateWarningShown: Boolean;
   end;
 
 var
@@ -106,6 +118,154 @@ begin
   end;
 end;
 
+function GemStoneCrabSlayer.GetRandomWorldHopTime(): UInt64;
+var
+  BaseInterval: UInt64;
+  RandomVariation: Integer;
+begin
+  BaseInterval := WORLDHOPINTERVAL * 60000;
+  
+  // ±25% random variation to the interval eitherside
+  RandomVariation := Random(-25, 25);
+  Result := BaseInterval + Round(BaseInterval * (RandomVariation / 100.0));
+  
+  if Result < 900000 then
+    Result := 900000;
+    
+  WriteLn('Next world hop scheduled in: ' + SRL.MsToTime(Result, Time_Short) + 
+          ' (Base: ' + IntToStr(WORLDHOPINTERVAL) + 'min, Variation: ' + IntToStr(RandomVariation) + '%)');
+end;
+
+function GemStoneCrabSlayer.GetWorldHopTimeRange(): String;
+var
+  MinInterval, MaxInterval: Integer;
+begin
+  MinInterval := Round(WORLDHOPINTERVAL * 0.75);
+  MaxInterval := Round(WORLDHOPINTERVAL * 1.25);
+  
+  if MinInterval < 15 then
+    MinInterval := 15;
+    
+  Result := IntToStr(MinInterval) + '-' + IntToStr(MaxInterval) + ' min';
+end;
+
+procedure GemStoneCrabSlayer.SetupWorldHopping();
+begin
+  WriteLn('Setting up world hopping...');
+  
+  if not ENABLEWORLDHOPPING then
+  begin
+    WriteLn('World hopping is disabled.');
+    Exit;
+  end;
+
+  if Length(Login.GetPlayer().Worlds) < 2 then
+  begin
+    WriteLn('ERROR: World hopping is enabled but you have less than 2 worlds configured!');
+    WriteLn('Please configure at least 2 worlds in your player setup or disable world hopping.');
+    Logout.ClickLogout();
+    TerminateScript();
+  end;
+
+  Self.NextWorldHopTime := GetTickCount() + Self.GetRandomWorldHopTime();
+  WriteLn('World hopping enabled. Next hop in: ' + SRL.MsToTime(Self.NextWorldHopTime - GetTickCount(), Time_Short));
+end;
+
+function GemStoneCrabSlayer.ShouldHopWorld(): Boolean;
+var
+  TimeSinceLastCombat: UInt64;
+  RequiredCombatCooldown: UInt64;
+begin
+  if not ENABLEWORLDHOPPING then
+    Exit(False);
+    
+  // Don't trynhop if we're currently in combat
+  if Self.InCombat or Self.IsAttacking then
+    Exit(False);
+  
+  TimeSinceLastCombat := GetTickCount() - Self.LastHealthCheck;
+  
+  // Require 15-30 seconds out of combat before allowing world hop for combat drop
+  RequiredCombatCooldown := Random(15000, 30000); // 15-30 seconds
+  
+  if TimeSinceLastCombat < RequiredCombatCooldown then
+  begin
+    Exit(False);
+  end;
+    
+  Result := GetTickCount() >= Self.NextWorldHopTime;
+end;
+
+procedure GemStoneCrabSlayer.DoWorldHop();
+var
+  currentWorld: Int32;
+  playerWorlds: TIntegerArray;
+  targetWorld: Int32;
+  availableWorlds: TIntegerArray;
+  i: Int32;
+begin
+  if not ENABLEWORLDHOPPING then
+    Exit;
+
+  if Self.InCombat or Self.IsAttacking then
+  begin
+    WriteLn('Skipping world hop - currently in combat');
+    Self.NextWorldHopTime := GetTickCount() + 120000;
+    Exit;
+  end;
+
+  WriteLn('Time to hop worlds!');
+  
+  playerWorlds := Login.GetPlayer().Worlds;
+  
+  if not Logout.Open() then
+  begin
+    WriteLn('Failed to open logout menu');
+    Self.NextWorldHopTime := GetTickCount() + 120000;
+    Exit;
+  end;
+
+  if not Logout.IsWorldSwitcherOpen() then
+    Logout.GetButton(ERSLogoutButton.WORLD_SWITCHER).Click(MOUSE_LEFT);
+  WaitUntil((currentWorld := WorldHopper.GetCurrentWorld()) <> 0, 200, 12000);
+  
+  WriteLn('Current world: ' + ToStr(currentWorld));
+  WriteLn('Available worlds: ' + ToStr(playerWorlds));
+
+  availableWorlds := [];
+  for i := 0 to High(playerWorlds) do
+  begin
+    if playerWorlds[i] <> currentWorld then
+      availableWorlds += playerWorlds[i];
+  end;
+  
+  if Length(availableWorlds) = 0 then
+  begin
+    WriteLn('No other worlds available to hop to, disabling world hopping!');
+    ENABLEWORLDHOPPING := False;
+    Exit;
+  end;
+  
+  targetWorld := availableWorlds[Random(Length(availableWorlds))];
+  WriteLn('Randomly selected target world: ' + ToStr(targetWorld));
+
+  if WorldHopper.Hop([targetWorld]) then
+  begin
+    WriteLn('Successfully hopped to world ' + ToStr(targetWorld) + '!');
+    
+    Inc(Self.WorldHopsCompleted);
+    Self.LastWorldHopTime := GetTickCount();
+
+    Self.NextWorldHopTime := GetTickCount() + Self.GetRandomWorldHopTime();
+    WriteLn('Next world hop in: ' + SRL.MsToTime(Self.NextWorldHopTime - GetTickCount(), Time_Short));
+  end
+  else
+  begin
+    WriteLn('World hop to ' + ToStr(targetWorld) + ' failed, trying again in 2 minutes');
+    Self.NextWorldHopTime := GetTickCount() + 120000;
+  end;
+end;
+
 function FindYellowNPCDots(): TPointArray;
 var
   TempPoints: TPointArray;
@@ -136,6 +296,34 @@ begin
   Result := FilterDuplicateDots(Result);
 end;
 
+// Thanks Bootie
+function TRSChat.CheckSystemUpdate(minuteTreshold: Integer): Boolean;
+var
+  b: TBox;
+  s: String;
+  numbers: TExtendedArray;
+begin
+  b := Chat.Bounds;
+  b.X1 += 4;
+  b.Y1 -= 16;
+  b.Y2 := Chat.Bounds.Y1 -1;
+  b.X2 := b.X1 + 140;
+
+  s := OCR.Recognize(
+      b,
+      TOCRColorFilter.Create([65535]),
+      RS_FONT_PLAIN_12
+    );
+
+  if s.Contains('System update') then
+  begin
+    s := s.After(': ');
+    numbers := s.ExtractNumbers();
+    if (length(numbers) > 0) and (numbers[0] <= minuteTreshold) then
+      Result := True;
+  end;
+end; 
+
 procedure OnBreakStart(Task: PBreakTask);
 begin
   ActiveTimer.Pause();
@@ -158,9 +346,13 @@ end;
 
 procedure TAntiban.Setup(); override;
 begin
-  Self.Skills := [ERSSkill.TOTAL, ERSSkill.ATTACK, ERSSkill.STRENGTH, ERSSkill.DEFENCE, ERSSkill.HITPOINTS, ERSSkill.MINING];
+  Self.Skills := [ERSSkill.TOTAL, ERSSkill.ATTACK, ERSSkill.STRENGTH, ERSSkill.DEFENCE, ERSSkill.HITPOINTS];
   Self.MinZoom := 0;
   Self.MaxZoom := 10;
+  
+  // Disable random tab switching for chatbot and like who does this
+  WLSettings.Antiban.GameTabs := False;
+  
   Antiban.OnStartBreak := @OnBreakStart;
   Antiban.OnFinishBreak := @OnBreakFinish;
   Antiban.OnStartSleep := @OnSleepStart;
@@ -181,13 +373,15 @@ end;
 {$IFDEF SCRIPT_GUI}
 type
   TConfig = record(TScriptForm)
-    WebhookLabel , DiscordUIDLabel, DiscordUIDInfo: TLabel;
-    WebHookInput, DiscordUIDInput: TLabeledEdit;
+    WebhookLabel: TLabel;
+    WebHookInput: TLabeledEdit;
+    WorldHopIntervalInput: TLabeledEdit;
     EnableWebhooksCheckBox,
-    HourlyReportsCheckBox, ScreenshotOnLevelCheckBox, SessionSummaryCheckBox, LoseFocusCheckBox: TLabeledCheckBox;
+    HourlyReportsCheckBox, ScreenshotOnLevelCheckBox, SessionSummaryCheckBox, 
+    LoseFocusCheckBox, EnableWorldHoppingCheckBox: TLabeledCheckBox;
     WebhookInfo: TLabel;
     TestButton: TButton;
-    SavedDiscordUID, SavedWebhookURL: String;
+    SavedWebhookURL: String;
     DiscordPanel: TLabeledPanel;
     Username: String;
   end;
@@ -242,9 +436,10 @@ end;
   
 procedure TConfig.LoadUserSettings();
 var
-  SavedDiscordUID, SavedWebhookURL: String;
+  SavedWebhookURL: String;
   SavedEnableWebhooks: Boolean;
-  SavedHourlyReports, SavedLevelUpNotifications, SavedSessionSummary, SavedLoseFocus: Boolean;
+  SavedHourlyReports, SavedLevelUpNotifications, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping: Boolean;
+  SavedWorldHopInterval: Integer;
   Username: String;
 begin
  if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
@@ -258,9 +453,10 @@ begin
   SavedLevelUpNotifications := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', 'Configs/BASettings.ini'), True);
   SavedSessionSummary := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'SessionSummary', 'Configs/BASettings.ini'), True);
   SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
-  SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
   SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
   SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
+  SavedEnableWorldHopping := StrToBoolDef(ReadINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', 'Configs/BASettings.ini'), False);
+  SavedWorldHopInterval := StrToIntDef(ReadINI(Username + ' Gemstone Crab Settings', 'WorldHopInterval', 'Configs/BASettings.ini'), 45);
 
   if Assigned(Self.HourlyReportsCheckBox) then
     Self.HourlyReportsCheckBox.SetChecked(SavedHourlyReports);
@@ -280,8 +476,11 @@ begin
     Self.WebhooksCheckboxChanged(Self.EnableWebhooksCheckBox.CheckBox);
   end;
 
-  if Assigned(Self.DiscordUIDInput) then
-    Self.DiscordUIDInput.SetText(SavedDiscordUID);
+  if Assigned(Self.EnableWorldHoppingCheckBox) then
+    Self.EnableWorldHoppingCheckBox.SetChecked(SavedEnableWorldHopping);
+
+  if Assigned(Self.WorldHopIntervalInput) then
+    Self.WorldHopIntervalInput.SetText(IntToStr(SavedWorldHopInterval));
 
   if Assigned(Self.WebHookInput) then
     Self.WebHookInput.SetText(SavedWebhookURL);
@@ -313,46 +512,45 @@ begin
   if Assigned(Self.EnableWebhooksCheckBox) then
     ENABLEWEBHOOKS := Self.EnableWebhooksCheckBox.IsChecked();
 
-  if Assigned(Self.DiscordUIDInput) then
-    DiscordUID := Self.DiscordUIDInput.GetText();
+  if Assigned(Self.EnableWorldHoppingCheckBox) then
+    ENABLEWORLDHOPPING := Self.EnableWorldHoppingCheckBox.IsChecked();
+
+  if Assigned(Self.WorldHopIntervalInput) then
+    WORLDHOPINTERVAL := StrToIntDef(Self.WorldHopIntervalInput.GetText(), 45);
 
   if Assigned(Self.WebHookInput) then
     WEBHOOKURL := Self.WebHookInput.GetText();
 
-  WriteINI(Username + ' Webhook Settings', 'DiscordUID', DiscordUID, 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'HourlyReports', BoolToStr(SENDHOURLYREPORTMSG, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', BoolToStr(SENDLEVELUPNOTIFICATIONMSG, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'SessionSummary', BoolToStr(SENDSESSIONSUMMARYMSG, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Antiban Manager', 'LoseFocus', BoolToStr(ABLOSEFOCUS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', BoolToStr(ENABLEWORLDHOPPING, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Gemstone Crab Settings', 'WorldHopInterval', IntToStr(WORLDHOPINTERVAL), 'Configs/BASettings.ini');
 end;
 
 procedure TConfig.StartScript(sender: TObject); override; 
 begin
   Self.SaveUserSettings();
-  Discord.SetWebhook(WEBHOOKURL);
-  Discord.SetUsername('BigAussies Gemstone Crab Slayer');
-  Discord.SetAvatar('https://oldschool.runescape.wiki/images/thumb/2/2e/Gemstone_crab.png/150px-Gemstone_crab.png');
+   Discord.SetWebhook(WEBHOOKURL);
+   Discord.SetUsername('BigAussies Gemstone Crab Slayer'); 
+   Discord.SetAvatar('https://oldschool.runescape.wiki/images/thumb/2/2e/Gemstone_crab.png/150px-Gemstone_crab.png');
   inherited;
 end;
 
 procedure TConfig.OpenURL(Sender: TObject);
 begin
   if Sender = Self.WebhookInfo then
-    OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks')
-  else if Sender = Self.DiscordUIDInfo then
-    OpenWebPage('https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID');
+    OpenWebPage('https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks');
 end;
 
 procedure TConfig.WebhooksCheckboxChanged({$H-}sender: TObject){$H+};
 begin
   Self.WebhookInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
-  Self.DiscordUIDInfo.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.DiscordPanel) then
     Self.DiscordPanel.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
-  if Assigned(Self.DiscordUIDInput) then
-    Self.DiscordUIDInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.WebHookInput) then
     Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.TestButton) then
@@ -363,6 +561,12 @@ begin
     Self.HourlyReportsCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.SessionSummaryCheckBox) then
     Self.SessionSummaryCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
+end;
+
+procedure TConfig.WorldHoppingCheckboxChanged({$H-}sender: TObject){$H+};
+begin
+  if Assigned(Self.WorldHopIntervalInput) then
+    Self.WorldHopIntervalInput.SetVisible(Self.EnableWorldHoppingCheckBox.IsChecked());
 end;
 
 function TConfig.CreateLabeledPanel(owner: TControl; title: String; top, height: Int32; FontSize: Int32 = 10; Color: TColor = clBlack; FontStyles: TFontStyles = [fsBold]): TLabeledPanel;
@@ -406,9 +610,10 @@ end;
 procedure TConfig.Run(); override;
 var
   tab: TTabSheet;
-  SavedDiscordUID, SavedWebhookURL: String;
+  SavedWebhookURL: String;
   SavedEnableWebhooks: Boolean;
-  SavedScreenshotOnLevel, SavedHourlyReports, SavedSessionSummary, SavedLoseFocus: Boolean;
+  SavedScreenshotOnLevel, SavedHourlyReports, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping: Boolean;
+  SavedWorldHopInterval: Integer;
   panelTop: Int32;
 begin
   ClearDebug();
@@ -430,20 +635,44 @@ begin
   InitializeAccountManager();
   Self.LoadUserSettings();
 
-  SavedDiscordUID := ReadINI(Username + ' Webhook Settings', 'DiscordUID', 'Configs/BASettings.ini');
   SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
   SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
   SavedScreenshotOnLevel := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', 'Configs/BASettings.ini'), True);
   SavedHourlyReports := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'HourlyReports', 'Configs/BASettings.ini'), True);
   SavedSessionSummary := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'SessionSummary', 'Configs/BASettings.ini'), True);
   SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
+  SavedEnableWorldHopping := StrToBoolDef(ReadINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', 'Configs/BASettings.ini'), False);
+  SavedWorldHopInterval := StrToIntDef(ReadINI(Username + ' Gemstone Crab Settings', 'WorldHopInterval', 'Configs/BASettings.ini'), 45);
+
+  with Self.EnableWorldHoppingCheckBox do
+  begin
+    Create(tab);
+    SetCaption('Enable World Hopping');
+    SetLeft(TControl.AdjustToDPI(37));
+    SetTop(TControl.AdjustToDPI(140));
+    SetHint('Hop worlds at random intervals. Requires at least 2 worlds in player setup.');
+    SetChecked(SavedEnableWorldHopping);
+    CheckBox.SetOnChange(@WorldHoppingCheckboxChanged);
+  end;
+
+  with Self.WorldHopIntervalInput do
+  begin
+    Create(tab);
+    SetCaption('World Hop Interval (minutes)');
+    SetLeft(Self.EnableWorldHoppingCheckBox.GetRight() + TControl.AdjustToDPI(20));
+    SetTop(Self.EnableWorldHoppingCheckBox.GetTop() - TControl.AdjustToDPI(5));
+    SetWidth(TControl.AdjustToDPI(160));
+    SetText(IntToStr(SavedWorldHopInterval));
+    SetHint('Base interval in minutes between world hops (±25% random variation)');
+    Edit.SetOnKeyPress(@Edit.NumberField);
+  end;
 
   with Self.EnableWebhooksCheckBox do
   begin
     Create(tab);
     SetCaption("Discord Notifications");
     SetLeft(TControl.AdjustToDPI(37));
-    SetTop(TControl.AdjustToDPI(140));
+    SetTop(Self.EnableWorldHoppingCheckBox.GetTop() + TControl.AdjustToDPI(25));
     SetHint('Enable Discord notifications for crashes and updates.');
     SetChecked(SavedEnableWebhooks);
     CheckBox.SetOnChange(@WebhooksCheckboxChanged);
@@ -465,23 +694,12 @@ begin
     SetFontColor(clBlue);
   end;
 
-  with Self.DiscordUIDInput do
-  begin
-    Create(Self.DiscordPanel.Panel);
-    SetCaption('Discord UID');
-    SetLeft(TControl.AdjustToDPI(20));
-    SetTop(TControl.AdjustToDPI(25));
-    SetWidth(TControl.AdjustToDPI(100));
-    SetText(SavedDiscordUID);
-    SetHint('Your Discord User ID for mentions.');
-  end;
-
   with Self.WebHookInput do
   begin
     Create(Self.DiscordPanel.Panel);
     SetCaption('Webhook URL');
-    SetLeft(Self.DiscordUIDInput.GetRight + TControl.AdjustToDPI(10));
-    SetTop(Self.DiscordUIDInput.GetTop);
+    SetLeft(TControl.AdjustToDPI(20));
+    SetTop(TControl.AdjustToDPI(25));
     SetWidth(TControl.AdjustToDPI(350));
     SetText(SavedWebhookURL);
     SetPasswordChar('*');
@@ -500,24 +718,12 @@ begin
     SetHint('Send a test message to your webhook.');
   end;
 
-  with Self.DiscordUIDInfo do
-  begin
-    Create(Self.DiscordPanel.Panel);
-    SetFontColor(clBlue);
-    SetLeft(Self.DiscordUIDInput.GetLeft() + Self.DiscordUIDInput.GetWidth() + TControl.AdjustToDPI(10));
-    SetTop(Self.DiscordUIDInput.GetTop() + TControl.AdjustToDPI(18));
-    SetCaption('Click here to learn how to find your Discord User ID');
-    SetHint('Click here to learn how to find your Discord User ID');
-    setOnClick(@OpenURL);
-    SetFontSize(TControl.AdjustToDPI(9));
-  end;
-
   with Self.ScreenshotOnLevelCheckBox do
   begin
     Create(Self.DiscordPanel.Panel);
     SetCaption('Screenshot on Level Up');
     SetLeft(TControl.AdjustToDPI(20));
-    SetTop(Self.DiscordUIDInput.GetTop + TControl.AdjustToDPI(50));
+    SetTop(Self.WebHookInput.GetTop + TControl.AdjustToDPI(50));
     SetHint('Takes a screenshot and sends to Discord when you level up');
     SetChecked(SavedScreenshotOnLevel);
   end;
@@ -543,6 +749,7 @@ begin
   end;
 
   Self.WebhooksCheckboxChanged(nil);
+  Self.WorldHoppingCheckboxChanged(nil);
 
   Self.CreateAntibanManager();
   
@@ -575,6 +782,15 @@ var
 
 procedure GemStoneCrabSlayer.SendTerminationNotification();
 begin
+  try
+    if not APIClient.Disabled then
+    begin
+      Self.SubmitAPIStats();
+    end;
+  except
+    WriteLn('[API] Error submitting final stats: ' + GetExceptionMessage);
+  end;
+  
   Self.SendSessionSummary();
 end;
 
@@ -588,6 +804,65 @@ begin
   begin
     Self.SendHourlyReport();
     Self.LastHourlyReportTime := CurrentTime;
+  end;
+end;
+
+procedure GemStoneCrabSlayer.CheckSystemUpdate();
+var
+  CurrentTime: UInt64;
+  SystemUpdateThreshold: Integer;
+begin
+  CurrentTime := GetTickCount();
+  
+  if (CurrentTime - Self.LastSystemUpdateCheck) < 30000 then
+    Exit;
+    
+  Self.LastSystemUpdateCheck := CurrentTime;
+  
+  SystemUpdateThreshold := 15;
+  
+  if Chat.CheckSystemUpdate(SystemUpdateThreshold) then
+  begin
+    WriteLn('SYSTEM UPDATE DETECTED! Server going down in ' + IntToStr(SystemUpdateThreshold) + ' minutes or less!');
+    
+    if not Self.SystemUpdateWarningShown then
+    begin
+      Self.SystemUpdateWarningShown := True;
+      
+      if ENABLEWEBHOOKS then
+      begin
+        try
+          Discord.Webhook.Content := '**SYSTEM UPDATE DETECTED** :warning: Server going down in ' + IntToStr(SystemUpdateThreshold) + ' minutes or less! Preparing for safe logout...';
+          Discord.Send();
+        except
+          WriteLn('[Discord] Failed to send system update warning');
+        end;
+      end;
+    end;
+    
+    // Only logout if we're NOT in combat
+    if not (Self.InCombat or Self.IsAttacking) then
+    begin
+      WriteLn('Not in combat - logging out safely for system update');
+      
+      if ENABLEWEBHOOKS then
+      begin
+        try
+          Discord.Webhook.Content := '**SAFE LOGOUT** :white_check_mark: Successfully logged out before system update. Runtime: ' + SRL.MsToTime(GetTimeRunning(), Time_Short);
+          Discord.SendScreenshot(False);
+        except
+          WriteLn('[Discord] Failed to send safe logout notification');
+        end;
+      end;
+      
+      Logout.ClickLogout();
+      TerminateScript('System update - safe logout completed');
+    end
+    else
+    begin
+      WriteLn('Currently in combat - CANNOT logout during combat! Waiting for combat to end...');
+      WriteLn('WARNING: Server will shutdown soon! Combat must end naturally before logout!');
+    end;
   end;
 end;
 
@@ -611,10 +886,7 @@ begin
     CurrentXP := XPBar.Read();
     TotalXPGained := CurrentXP - Self.StartXP;
     
-    Discord.Webhook.Content := '';
-    if DiscordUID <> '' then
-      Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
-    Discord.Webhook.Content += '**LEVEL UP!** :tada:';
+    Discord.Webhook.Content := '**LEVEL UP!** :tada:';
     
     EmbedIdx := Discord.Webhook.AddEmbed();
     Discord.Webhook.Embeds[EmbedIdx].Title := 'Combat Level Up!';
@@ -646,10 +918,7 @@ begin
   XPPerHour := Round(TotalXPGained / (ActiveTimer.ElapsedTime / 3600000));
   
   try
-    Discord.Webhook.Content := '';
-    if DiscordUID <> '' then
-      Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
-    Discord.Webhook.Content += '**Hourly Progress Report** :chart_with_upwards_trend:';
+    Discord.Webhook.Content := '**Hourly Progress Report** :chart_with_upwards_trend:';
     
     EmbedIdx := Discord.Webhook.AddEmbed();
     Discord.Webhook.Embeds[EmbedIdx].Title := 'BigAussies Gemstone Crab Slayer - Hourly Report';
@@ -681,10 +950,7 @@ begin
   XPPerHour := Round(TotalXPGained / (ActiveTimer.ElapsedTime / 3600000));
   
   try
-    Discord.Webhook.Content := '';
-    if DiscordUID <> '' then
-      Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
-    Discord.Webhook.Content += '**Session Complete!** :checkered_flag:';
+    Discord.Webhook.Content := '**Session Complete!** :checkered_flag:';
     
     EmbedIdx := Discord.Webhook.AddEmbed();
     Discord.Webhook.Embeds[EmbedIdx].Title := 'BigAussies Gemstone Crab Slayer - Session Summary';
@@ -699,6 +965,36 @@ begin
       WriteLn('[Discord] Failed to send session summary: ' + Discord.LastError);
   except
     WriteLn('[Discord] Error sending session summary: ' + GetExceptionMessage);
+  end;
+end;
+
+procedure GemStoneCrabSlayer.SubmitAPIStats();
+var
+  CurrentXP, TotalXPGained: Int32;
+  CurrentTime: UInt64;
+begin
+  if not APIClient.Disabled then
+    Exit;
+    
+  CurrentTime := GetTickCount();
+  
+  if (CurrentTime - Self.LastAPIUpdate) < Self.ApiUpdateInterval then
+    Exit;
+    
+  CurrentXP := XPBar.Read();
+  TotalXPGained := CurrentXP - Self.StartXP;
+  
+  try
+    APIClient.UpdatePayload(TotalXPGained, 0, Round((CurrentTime - Self.LastAPIUpdate) / 1000));
+    
+    if APIClient.SubmitStats(APIClient.GetUUID()) then
+    begin
+      Self.LastAPIUpdate := CurrentTime;
+    end
+    else
+      WriteLn('[API] Failed to submit stats');
+  except
+    WriteLn('[API] Error submitting stats: ' + GetExceptionMessage);
   end;
 end;
 
@@ -1119,10 +1415,10 @@ begin
     Self.LastHealthCheck := GetTickCount();
     Self.InCombat := True;
     WL.Activity.Restart();
-    
+
     if ABLOSEFOCUS then
     begin
-     Antiban.LoseFocus();
+      Antiban.LoseFocus();
     end;
   end
   else
@@ -1229,9 +1525,17 @@ begin
         end
         else
         begin
-          WriteLn('No HP bar detected - Gemstone Crab not present, looking for cave entrance');
-          if not Self.FindAndClickCaveEntrance() then
-            Wait(2000, 3000);
+          if Self.FindGemStoneCrab() then
+          begin
+            WriteLn('Found Gemstone Crab! Attempting to attack...');
+            Self.AttackGemStoneCrab();
+          end
+          else
+          begin
+            WriteLn('No HP bar detected and no Gemstone Crab found - looking for cave entrance');
+            if not Self.FindAndClickCaveEntrance() then
+              Wait(2000, 3000);
+          end;
         end;
       end;
     end;
@@ -1261,7 +1565,15 @@ var
   XPPerHour, XPPerHourExcludingBreaks: Integer;
   CrabTimeRemaining: Integer;
   EstimatedSecondsLeft: Integer;
+  CurrentTime: UInt64;
 begin
+  CurrentTime := GetTickCount();
+  
+  if (CurrentTime - Self.LastReportTime) < 3000 then
+    Exit;
+    
+  Self.LastReportTime := CurrentTime;
+  
   ClearDebug();
   
   CurrentXP := XPBar.Read();
@@ -1272,6 +1584,8 @@ begin
   XPPerHourExcludingBreaks := Round((Self.GainedXP) / (ActiveTimer.ElapsedTime / 3600000));
   
   CrabTimeRemaining := Self.GetCrabTimeRemaining();
+  
+  Self.SubmitAPIStats();
     
   WriteLn('========================================');
   WriteLn('    BigAussies Gemstone Crab Slayer   ');
@@ -1289,6 +1603,22 @@ begin
   if Length(Antiban.Sleeps) > 0 then
     if Antiban.Sleeps[0].NextAtTime > GetTimeRunning then
       WriteLn('   Next sleep: ' + SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
+  
+  if ENABLEWORLDHOPPING then
+  begin
+    WriteLn('   World Hopping: ENABLED (' + Self.GetWorldHopTimeRange() + ')');
+    WriteLn('   Hops Completed: ' + IntToStr(Self.WorldHopsCompleted));
+    if Self.NextWorldHopTime > GetTickCount() then
+      WriteLn('   Next Hop: ' + SRL.MsToTime(Self.NextWorldHopTime - GetTickCount(), Time_Short))
+    else
+      WriteLn('   Next Hop: READY!');
+  end
+  else
+    WriteLn('   World Hopping: DISABLED');
+    
+  if Self.SystemUpdateWarningShown then
+    WriteLn('   WARNING: System update detected! Will logout when combat ends.');
+    
   WriteLn('========================================');
   WriteLn('    BigAussies Gemstone Crab Slayer   ');
   WriteLn('           Version: ' + {$MACRO SCRIPT_REVISION});
@@ -1301,8 +1631,8 @@ begin
   
   SetupNPCDTMs();
   
-  if ENABLEWEBHOOKS then
-    Discord.Setup(WEBHOOKURL);
+   if ENABLEWEBHOOKS then
+     Discord.Setup(WEBHOOKURL); 
   
   if SENDSESSIONSUMMARYMSG and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
@@ -1325,8 +1655,20 @@ begin
   Self.LastCaveEntryTime := 0;
   Self.FailsafeActive := False;
   
+  Self.LastAPIUpdate := GetTickCount();
+  Self.ApiUpdateInterval := 5 * 60000;
+  
+  APIClient.Setup();
+  
   Self.RunningTime.Start();
   ActiveTimer.Start();
+  
+  Self.WorldHopsCompleted := 0;
+  Self.LastWorldHopTime := 0;
+  Self.SetupWorldHopping();
+  Self.LastReportTime := 0;
+  Self.LastSystemUpdateCheck := 0;
+  Self.SystemUpdateWarningShown := False;
 end;
 
 procedure GemStoneCrabSlayer.Run(MaxActions: UInt32; MaxTime: UInt64);
@@ -1340,6 +1682,7 @@ begin
       try
         Self.CheckForLevelUp();
         Self.CheckHourlyReport();
+        Self.CheckSystemUpdate();
         
         if WL.Activity.IsFinished() then
         begin
@@ -1347,8 +1690,21 @@ begin
           Break;
         end;
         
+        if Self.ShouldHopWorld() then
+        begin
+          Self.DoWorldHop();
+          Continue;
+        end;
+        
         Self.DoAction();
-        Self.DoAntiban();
+        if Self.InCombat or Self.IsAttacking then
+        begin
+          Self.DoAntiban(False, False); // No breaks or sleeps during combat
+        end
+        else
+        begin
+          Self.DoAntiban(True, True); // This way we only check out of combat
+        end;
         
         if (GetTimeRunning() mod 10000) < 1000 then
           Self.Report();
@@ -1371,8 +1727,6 @@ begin
           begin
             try
               Discord.Webhook.Content := '';
-              if DiscordUID <> '' then
-                Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
               Discord.Webhook.Content += '**SCRIPT CRASHED** :warning: Too many exceptions (' + IntToStr(ExceptionCount) + '). Last error: ' + GetExceptionMessage();
               Discord.Send();
             except
@@ -1392,8 +1746,6 @@ begin
     begin
       try
         Discord.Webhook.Content := '';
-        if DiscordUID <> '' then
-          Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
         Discord.Webhook.Content += '**Script finished normally** :checkered_flag: Runtime: ' + SRL.MsToTime(GetTimeRunning(), Time_Short);
         Discord.Send();
       except
@@ -1407,8 +1759,6 @@ begin
     begin
       try
         Discord.Webhook.Content := '';
-        if DiscordUID <> '' then
-          Discord.Webhook.Content := Discord.MentionUser(DiscordUID) + ' ';
         Discord.Webhook.Content += '**FATAL CRASH** :skull: Script terminated unexpectedly: ' + GetExceptionMessage();
         Discord.SendScreenshot(True);
       except
