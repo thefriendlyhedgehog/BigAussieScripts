@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.9'}
+{$DEFINE SCRIPT_REVISION := '1.91 Boobs'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -43,6 +43,11 @@ type
     LastCaveAttemptTime: UInt64;
     LastCaveEntryTime: UInt64;
     FailsafeActive: Boolean;
+    
+    // Attack failsafe for no ammo/runes
+    ConsecutiveFailedAttacks: Int32;
+    LastFailedAttackTime: UInt64;
+    LastSuccessfulClick: Boolean;
     
     RunningTime: TStopWatch;
     ActiveTimer: TStopWatch;
@@ -1065,7 +1070,9 @@ begin
         repeat
           Inc(MouseOverAttempts);
           Mouse.Move(MainscreenPoint);
-          Wait(200, 400);
+          
+          WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
+          Wait(500, 800);
           
           if MainScreen.IsUpText(['Cave']) then
           begin
@@ -1101,13 +1108,13 @@ begin
               
               if CaveBlocked then
               begin
-                WriteLn('Cave is blocked! The crab must still be here.');
+                WriteLn('Cave is blocked! Mr Crabs must still be here.');
                 Chat.ClickContinue();
                 Wait(500, 1000);
                 
                 if Self.FindGemStoneCrab() then
                 begin
-                  WriteLn('Found blocked cave crab! Attacking Mr Crabs...');
+                  WriteLn('Found blocked cave! Attacking Mr Crabs...');
                   if Self.AttackGemStoneCrab() then
                   begin
                     WriteLn('Successfully started attacking Mr Crabs');
@@ -1138,7 +1145,6 @@ begin
                     Antiban.RandomRotate();
                     Wait(1000, 1500);
                     
-                    // Try once more after rotation
                     if Self.FindGemStoneCrab() then
                     begin
                       WriteLn('Found crab after camera rotation! Attacking Mr Crabs...');
@@ -1279,19 +1285,21 @@ begin
     repeat
       Inc(MouseOverAttempts);
       Mouse.Move(MainscreenPoint);
-      Wait(300, 600);
+      
+      WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
+      Wait(500, 800);
       
       CurrentUpText := MainScreen.GetUpText();
       
-      if (Pos('crab', CurrentUpText) > 0) then
+      if (Pos('Attack', CurrentUpText) > 0) and (Pos('Gemstone', CurrentUpText) > 0) then
       begin
-        WriteLn('Found Mr Crab!');
+        WriteLn('Found Gemstone Crab!');
         Result := True;
         Exit;
       end
       else if MouseOverAttempts >= 2 then
       begin
-        WriteLn('Failed to get Gemstone crab uptext after 2 attempts, rotating camera...');
+        WriteLn('Failed to get uptext after 2 attempts, rotating');
         Antiban.RandomRotate();
         Wait(500, 1000);
         Break;
@@ -1302,60 +1310,33 @@ begin
   WriteLn('Mr Crabs not found in current area');
 end;
 
-function GemStoneCrabSlayer.AttackGemStoneCrab(): Boolean;
+function GemStoneCrabSlayer.GetBossAttackPoints(): TPointArray;
 var
-  StartXP: Integer;
-  TimeoutStart: UInt64;
   YellowDots, MiningIcons: TPointArray;
   MiningClusters, NPCClusters: T2DPointArray;
   i, j, k: Int32;
-  MinimapPoint: TPoint;
-  MainscreenPoint: TPoint;
-  NearMiningIcon: Boolean;
-  AttackAttempts: Int32;
-  ClickSuccess: Boolean;
   ClusterDistance: Double;
   MinDistance: Double;
-  MouseOverAttempts: Int32;
+  AttackPoints: TPointArray;
 begin
-  Result := False;
+  Result := [];
   
-  if Self.IsAttacking then 
+  // Find mining icon
+  SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
+  if Length(MiningIcons) = 0 then Exit;
+  
+  MiningClusters := ClusterTPA(MiningIcons, 25);
+  
+  YellowDots := FindYellowNPCDots();
+  if Length(YellowDots) > 0 then
   begin
-    Exit(True);
-  end;
-  
-  StartXP := XPBar.Read();
-  AttackAttempts := 0;
-  
-  while (AttackAttempts < 20) and not Result do
-  begin
-    Inc(AttackAttempts);
-    
-    SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
-    
-    if Length(MiningIcons) = 0 then 
-    begin
-      Wait(1000, 2000);
-      Continue;
-    end;
-    
-    MiningClusters := ClusterTPA(MiningIcons, 25);
-    
-    YellowDots := FindYellowNPCDots();
-    
-    if Length(YellowDots) = 0 then
-    begin
-      Wait(1000, 2000);
-      Continue;
-    end;
-    
     NPCClusters := ClusterTPA(YellowDots, 15);
     
     for i := 0 to High(NPCClusters) do
     begin
       MinDistance := 999.0;
       
+      // Check if this NPC cluster is near mining icon
       for j := 0 to High(MiningClusters) do
       begin
         ClusterDistance := NPCClusters[i].Mean().DistanceTo(MiningClusters[j].Mean());
@@ -1366,115 +1347,184 @@ begin
       if MinDistance <= 25 then
       begin
         for k := 0 to High(NPCClusters[i]) do
-        begin
-          MinimapPoint := NPCClusters[i][k];
-          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+          AttackPoints := AttackPoints + [NPCClusters[i][k]];
+      end;
+    end;
+  end;
+  
+  for i := 0 to High(MiningClusters) do
+  begin
+    for j := 0 to High(MiningClusters[i]) do
+      AttackPoints := AttackPoints + [MiningClusters[i][j]];
+  end;
+  
+  Result := AttackPoints;
+end;
+
+function GemStoneCrabSlayer.TryAttackAtPoint(MinimapPoint: TPoint; StartXP: Integer): Boolean;
+var
+  MainscreenPoint: TPoint;
+  MouseOverAttempts: Int32;
+  TimeoutStart: UInt64;
+begin
+  Result := False;
+  Self.LastSuccessfulClick := False; // Reset flag at start of each position try
+  
+  MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+  
+  if not MainScreen.Bounds.Contains(MainscreenPoint) then
+    Exit(False);
+    
+  MouseOverAttempts := 0;
+  repeat
+    Inc(MouseOverAttempts);
+    Mouse.Move(MainscreenPoint);
+    
+    WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
+    Wait(500, 800);
+    
+    if MainScreen.IsUpText(['Attack', 'Gemstone']) then
+    begin
+      WriteLn('Found "Attack Gemstone" uptext, clicking...');
+      Mouse.Click(MOUSE_LEFT);
+      
+      if MainScreen.DidRedClick() then
+      begin
+        WriteLn('Red click successful, waiting for XP...');
+        Self.LastSuccessfulClick := True; // We successfully clicked the boss
+        TimeoutStart := GetTickCount();
+        
+        repeat
+          Wait(500, 1000);
           
-          if not MainScreen.Bounds.Contains(MainscreenPoint) then
+          if XPBar.Read() > StartXP then
           begin
-            Continue;
+            Self.IsAttacking := True;
+            Self.InCombat := True;
+            Self.PrevXP := XPBar.Read();
+            Self.LastHealthCheck := GetTickCount();
+            WL.Activity.Restart();
+            
+            Self.ConsecutiveFailedAttacks := 0;
+            WriteLn('Successfully attacked boss and gained XP!');
+            
+            Result := True;
+            Exit;
           end;
           
-          MouseOverAttempts := 0;
-          repeat
-            Inc(MouseOverAttempts);
-            Mouse.Move(MainscreenPoint);
-            Wait(300, 600);
-            
-            if MainScreen.IsUpText(['Gemstone', 'Crab']) then
-            begin
-              Mouse.Click(MOUSE_LEFT);
-              ClickSuccess := MainScreen.DidRedClick();
-              
-              if ClickSuccess then
-              begin
-                TimeoutStart := GetTickCount();
-                
-                repeat
-                  Wait(500, 1000);
-                  
-                  if XPBar.Read() > StartXP then
-                  begin
-                    Self.IsAttacking := True;
-                    Self.InCombat := True;
-                    Self.PrevXP := XPBar.Read();
-                    Self.LastHealthCheck := GetTickCount();
-                    WL.Activity.Restart();
-                    Result := True;
-                    Exit;
-                  end;
-                  
-                until (GetTickCount() - TimeoutStart) > 8000;
-              end;
-              Break;
-            end
-            else if MouseOverAttempts >= 2 then
-            begin
-              WriteLn('Failed to get Gemstone crab uptext after 2 attempts in NPCClusters, rotating camera...');
-              Antiban.RandomRotate();
-              Wait(500, 1000);
-              Break;
+        until (GetTickCount() - TimeoutStart) > 5000;
+        
+        WriteLn('No XP gained within 5 seconds after clicking');
+        
+        Inc(Self.ConsecutiveFailedAttacks);
+        Self.LastFailedAttackTime := GetTickCount();
+        WriteLn('Boss clicked but no XP gained. Consecutive failed attacks: ', Self.ConsecutiveFailedAttacks, '/3');
+        
+        if Self.ConsecutiveFailedAttacks >= 3 then
+        begin
+          WriteLn('3 consecutive boss clicks failed to gain XP!');
+          WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
+          
+          Self.TakeScreenshot('_NoAmmoFailsafe');
+          
+          if ENABLEWEBHOOKS then
+          begin
+            try
+              Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
+              Discord.SendScreenshot(False);
+            except
+              WriteLn('[Discord] Failed to send no ammo notification');
             end;
-          until MouseOverAttempts >= 2;
+          end;
+          
+          Logout.ClickLogout();
+          TerminateScript('No XP gained from 3 consecutive attacks');
         end;
+      end
+      else
+      begin
+        WriteLn('Red click failed - click was not successful');
+      end;
+      Break;
+    end
+    else 
+    begin
+      WriteLn('No "Attack Gemstone" uptext found. Current uptext: "', MainScreen.GetUpText(), '"');
+      if MouseOverAttempts >= 2 then
+      begin
+        WriteLn('Failed to get uptext after 2 attempts, rotating.');
+        Antiban.RandomRotate();
+        Wait(500, 1000);
+        Break;
+      end;
+    end;
+  until MouseOverAttempts >= 2;
+end;
+
+function GemStoneCrabSlayer.AttackGemStoneCrab(): Boolean;
+var
+  StartXP: Integer;
+  AttackAttempts: Int32;
+  AttackPoints: TPointArray;
+  i: Int32;
+begin
+  Result := False;
+  
+  if Self.IsAttacking then 
+    Exit(True);
+  
+  if Self.ConsecutiveFailedAttacks >= 3 then
+  begin
+    WriteLn('Failed to gain XP!');
+    WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
+    
+    Self.TakeScreenshot('_NoAmmoFailsafe');
+    
+    if ENABLEWEBHOOKS then
+    begin
+      try
+        Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
+        Discord.SendScreenshot(False);
+      except
+        WriteLn('[Discord] Failed to send no ammo notification');
       end;
     end;
     
-    if not Result then
+    Logout.ClickLogout();
+    TerminateScript('No XP gained from 3 consecutive attacks');
+  end;
+  
+  StartXP := XPBar.Read();
+  AttackAttempts := 0;
+  
+  while (AttackAttempts < 5) and not Result do
+  begin
+    Inc(AttackAttempts);
+    WriteLn('Attack attempt ', AttackAttempts);
+    Self.LastSuccessfulClick := False; 
+    
+    AttackPoints := Self.GetBossAttackPoints();
+    
+    if Length(AttackPoints) = 0 then 
     begin
-      for i := 0 to High(MiningClusters) do
+      WriteLn('No attack points found');
+      Wait(1000, 2000);
+      Continue;
+    end;
+
+    for i := 0 to High(AttackPoints) do
+    begin
+      if Self.TryAttackAtPoint(AttackPoints[i], StartXP) then
       begin
-        for j := 0 to High(MiningClusters[i]) do
+        WriteLn('Attack successful! XP gained.');
+        Result := True;
+        Exit;
+      end
+      else
+      begin
+        if Self.LastSuccessfulClick then
         begin
-          MinimapPoint := MiningClusters[i][j];
-          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-          
-          if not MainScreen.Bounds.Contains(MainscreenPoint) then
-          begin
-            Continue;
-          end;
-          
-          MouseOverAttempts := 0;
-          repeat
-            Inc(MouseOverAttempts);
-            Mouse.Move(MainscreenPoint);
-            Wait(400, 700);
-            
-            if MainScreen.IsUpText(['Gemstone', 'Crab']) then
-            begin
-              Mouse.Click(MOUSE_LEFT);
-              ClickSuccess := MainScreen.DidRedClick();
-              
-              if ClickSuccess then
-              begin
-                TimeoutStart := GetTickCount();
-                
-                repeat
-                  Wait(500, 1000);
-                  
-                  if XPBar.Read() > StartXP then
-                  begin
-                    Self.IsAttacking := True;
-                    Self.InCombat := True;
-                    Self.PrevXP := XPBar.Read();
-                    Self.LastHealthCheck := GetTickCount();
-                    WL.Activity.Restart();
-                    Result := True;
-                    Exit;
-                  end;
-                  
-                until (GetTickCount() - TimeoutStart) > 8000;
-              end;
-              Break;
-            end
-            else if MouseOverAttempts >= 2 then
-            begin
-              WriteLn('Failed to get Gemstone crab uptext after 2 attempts in MiningClusters, rotating camera...');
-              Antiban.RandomRotate();
-              Wait(500, 1000);
-              Break;
-            end;
-          until MouseOverAttempts >= 2;
+          Break;
         end;
       end;
     end;
@@ -1488,6 +1538,11 @@ begin
   if not Result then
   begin
     Self.IsAttacking := False;
+    
+    if not Self.LastSuccessfulClick then
+    begin
+      WriteLn('Could not find or click the boss in this attempt');
+    end;
   end;
 end;
 
@@ -1567,7 +1622,6 @@ begin
     begin
       MiningIconCenter := Minimap.PointToMS(MiningClusters[j].Mean());
       
-      // Only check if the mining icon projects to a valid mainscreen point
       if MainScreen.Bounds.Contains(MiningIconCenter) then
       begin
         Distance := HPBarCenter.DistanceTo(MiningIconCenter);
@@ -1720,6 +1774,14 @@ var
   CurrentXP: Integer;
   TimeSinceLastXP: UInt64;
 begin
+  if (Self.ConsecutiveFailedAttacks > 0) and 
+     (Self.LastFailedAttackTime > 0) and 
+     ((GetTickCount() - Self.LastFailedAttackTime) > 600000) then
+  begin
+    Self.ConsecutiveFailedAttacks := 0;
+    Self.LastFailedAttackTime := 0;
+  end;
+  
   CurrentXP := XPBar.Read();
   if CurrentXP > Self.PrevXP then
   begin
@@ -1836,7 +1898,8 @@ begin
   WriteLn('   XP Gained: ' + FormatRoundedNumber(Self.GainedXP));
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
   
-  if BossPresent then
+  // Removed because supports boss bars only and its not needed, maybe add back.
+  {if BossPresent then
   begin
     if CrabTimeRemaining >= 0 then
     begin
@@ -1847,7 +1910,7 @@ begin
     begin
       WriteLn('   Crab Health: ' + IntToStr(Self.CrabHealth) + '%');
     end;
-  end
+  end}
   
   if Length(Antiban.Breaks) > 0 then
     WriteLn('   Next break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
@@ -1857,7 +1920,6 @@ begin
   
   if ENABLEWORLDHOPPING then
   begin
-    WriteLn('   World Hopping: ENABLED');
     WriteLn('   Hops Completed: ' + IntToStr(Self.WorldHopsCompleted));
     if Self.NextWorldHopTime > GetTickCount() then
       WriteLn('   Next Hop: ' + SRL.MsToTime(Self.NextWorldHopTime - GetTickCount(), Time_Short))
@@ -1881,6 +1943,7 @@ begin
   inherited;
   
   SetupNPCDTMs();
+  Options.SetZoomLevel(RandomRange(5, 15));
   
    if ENABLEWEBHOOKS then
      Discord.Setup(WEBHOOKURL); 
@@ -1906,6 +1969,10 @@ begin
   Self.LastCaveEntryTime := 0;
   Self.FailsafeActive := False;
   
+  Self.ConsecutiveFailedAttacks := 0;
+  Self.LastFailedAttackTime := 0;
+  Self.LastSuccessfulClick := False;
+  
   Self.LastAPIUpdate := GetTickCount();
   Self.ApiUpdateInterval := 5 * 60000;
   
@@ -1920,8 +1987,6 @@ begin
   Self.LastReportTime := 0;
   Self.LastSystemUpdateCheck := 0;
   Self.SystemUpdateWarningShown := False;
-
-  Options.SetZoomLevel(RandomRange(5, 15));
 end;
 
 procedure GemStoneCrabSlayer.Run(MaxActions: UInt32; MaxTime: UInt64);
@@ -1936,12 +2001,6 @@ begin
         Self.CheckForLevelUp();
         Self.CheckHourlyReport();
         Self.CheckSystemUpdate();
-        
-        if WL.Activity.IsFinished() then
-        begin
-          WriteLn('No activity detected in 5 minutes! Shutting down.');
-          Break;
-        end;
         
         if Self.ShouldHopWorld() then
         begin
@@ -1991,6 +2050,12 @@ begin
         
         Wait(1000, 2000);
       end;
+      
+    if WL.Activity.IsFinished() then
+    begin
+      WriteLn('No activity detected in 5 minutes! Shutting down.');
+      Break;
+    end;
       
     until Self.ShouldStop();
     
