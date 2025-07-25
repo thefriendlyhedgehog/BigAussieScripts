@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := 'Boobies'}
+{$DEFINE SCRIPT_REVISION := '1.99'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -881,7 +881,7 @@ var
 begin
   if not SENDLEVELUPNOTIFICATIONMSG or not ENABLEWEBHOOKS then Exit;
   try
-    CurrentXP := XPBar.Read();
+    CurrentXP := Self.SafeReadXPBar();
     WriteLn('XPBar Read returns: ' + IntToStr(CurrentXP));
     TotalXPGained := CurrentXP - Self.StartXP;
     
@@ -911,7 +911,7 @@ var
 begin
   if not SENDHOURLYREPORTMSG or not ENABLEWEBHOOKS then Exit;
   
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   TotalXPGained := CurrentXP - Self.StartXP;
   
   XPPerHour := Round(TotalXPGained / (ActiveTimer.ElapsedTime / 3600000));
@@ -943,7 +943,7 @@ var
 begin
   if not SENDSESSIONSUMMARYMSG or not ENABLEWEBHOOKS then Exit;
   
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   TotalXPGained := CurrentXP - Self.StartXP;
   
   XPPerHour := Round(TotalXPGained / (ActiveTimer.ElapsedTime / 3600000));
@@ -980,7 +980,7 @@ begin
   if (CurrentTime - Self.LastAPIUpdate) < Self.ApiUpdateInterval then
     Exit;
     
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   TotalXPGained := CurrentXP - Self.StartXP;
   
   try
@@ -1191,7 +1191,7 @@ begin
   Result := False;
   WriteLn('Looking for Mr Crabs...');
   
-  StartXP := XPBar.Read();
+  StartXP := Self.SafeReadXPBar();
   SearchAttempts := 0;
   
   while (SearchAttempts < 3) and not Result do
@@ -1272,11 +1272,11 @@ begin
             repeat
               Wait(500, 1000);
               
-              if XPBar.Read() > StartXP then
+              if Self.SafeReadXPBar() > StartXP then
               begin
                 Self.IsAttacking := True;
                 Self.InCombat := True;
-                Self.PrevXP := XPBar.Read();
+                Self.PrevXP := Self.SafeReadXPBar();
                 Self.LastHealthCheck := GetTickCount();
                 WL.Activity.Restart();
                 
@@ -1344,7 +1344,7 @@ function GemStoneCrabSlayer.IsInCombat(): Boolean;
 var
   CurrentXP: Integer;
 begin
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   
   if CurrentXP > Self.PrevXP then
   begin
@@ -1374,7 +1374,7 @@ var
 begin
   Result := True;
   
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
   
   if CurrentXP > Self.PrevXP then
@@ -1433,7 +1433,7 @@ begin
     Self.LastFailedAttackTime := 0;
   end;
   
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   if CurrentXP > Self.PrevXP then
   begin
     Self.PrevXP := CurrentXP;
@@ -1469,7 +1469,7 @@ begin
   end
   else
   begin
-    if (Self.LastCaveEntryTime > 0) and ((GetTickCount() - Self.LastCaveEntryTime) < 5000) then
+    if (Self.LastCaveEntryTime > 0) and ((GetTickCount() - Self.LastCaveEntryTime) < 15000) then
     begin
       WriteLn('Waiting for boss to spawn after cave entry... (' + 
               IntToStr(Round((GetTickCount() - Self.LastCaveEntryTime) / 1000)) + 's)');
@@ -1525,7 +1525,7 @@ begin
   
   //ClearDebug();
   
-  CurrentXP := XPBar.Read();
+  CurrentXP := Self.SafeReadXPBar();
   Self.GainedXP := CurrentXP - Self.StartXP;
   Runtime := GetTimeRunning();
     
@@ -1582,7 +1582,7 @@ begin
   
   Self.AFKMode := True;
   
-  Self.StartXP := XPBar.Read();
+  Self.StartXP := Self.SafeReadXPBar();
   Self.PrevXP := Self.StartXP;
   Self.TotalKills := 0;
   Self.LastLevel := Stats.GetLevel(ERSSkill.ATTACK);
@@ -1616,6 +1616,84 @@ begin
   Self.LastReportTime := 0;
   Self.LastSystemUpdateCheck := 0;
   Self.SystemUpdateWarningShown := False;
+end;
+
+function GemStoneCrabSlayer.SafeReadXPBar(): Integer;
+var
+  XPValue: Integer;
+  AttemptCount: Int32;
+  ValidReading: Boolean;
+  PreviousValidXP: Integer;
+  XPDifference: Integer;
+  TimeSinceLastRead: UInt64;
+  MaxPossibleGain: Integer;
+begin
+  Result := Self.PrevXP;
+  ValidReading := False;
+  AttemptCount := 0;
+  
+  if Self.PrevXP > 0 then
+    PreviousValidXP := Self.PrevXP
+  else
+    PreviousValidXP := Self.StartXP;
+  
+  while (not ValidReading) and (AttemptCount < 3) do
+  begin
+    Inc(AttemptCount);
+    XPValue := XPBar.Read();
+    
+    if XPValue <= 0 then
+    begin
+      WriteLn('Invalid XP reading: ', XPValue, ' (zero or negative)');
+    end
+    else if XPValue < 10000 then
+    begin
+      WriteLn('Invalid XP reading: ', XPValue, ' (too low)');
+    end
+    else if (PreviousValidXP > 0) then
+    begin
+      XPDifference := XPValue - PreviousValidXP;
+      TimeSinceLastRead := GetTickCount() - Self.LastHealthCheck;
+      
+      MaxPossibleGain := Round((TimeSinceLastRead / 1000.0) * 100);
+      if MaxPossibleGain < 1000 then MaxPossibleGain := 1000;
+      
+      if XPDifference > MaxPossibleGain then
+      begin
+        WriteLn('Invalid XP reading: ', XPValue, ' (impossible gain of ', XPDifference, ' XP in ', Round(TimeSinceLastRead/1000), 's)');
+      end
+      else if XPDifference < -1000 then
+      begin
+        WriteLn('Invalid XP reading: ', XPValue, ' (impossible loss of ', Abs(XPDifference), ' XP)');
+      end
+      else
+      begin
+        ValidReading := True;
+        Result := XPValue;
+      end;
+    end
+    else
+    begin
+      ValidReading := True;
+      Result := XPValue;
+    end;
+    
+    if not ValidReading then
+    begin
+      if AttemptCount < 3 then
+      begin
+        WriteLn('Rotating camera for xp bar.');
+        Antiban.RandomRotate();
+        Wait(1000, 1500);
+      end;
+    end;
+  end;
+  
+  if not ValidReading then
+  begin
+    WriteLn('Failed to get valid XP reading after 3 attempts: ', PreviousValidXP);
+    Result := PreviousValidXP;
+  end;
 end;
 
 procedure GemStoneCrabSlayer.Run(MaxActions: UInt32; MaxTime: UInt64);
