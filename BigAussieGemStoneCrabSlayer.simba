@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.91 Boobs'}
+{$DEFINE SCRIPT_REVISION := '1.92 Boobies'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1204,7 +1204,16 @@ begin
             WriteLn('Failed to get cave uptext, rotating camera...');
             Antiban.RandomRotate();
             Wait(500, 1000);
-            Break;
+            
+            // Recalculate after rotation
+            MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+            if not MainScreen.Bounds.Contains(MainscreenPoint) then
+            begin
+              WriteLn('Cave position moved off-screen after rotation');
+              Break;
+            end;
+            
+            MouseOverAttempts := 0;
           end;
         until MouseOverAttempts >= 2;
       end;
@@ -1290,18 +1299,31 @@ begin
       
       CurrentUpText := MainScreen.GetUpText();
       
-      if (Pos('Attack', CurrentUpText) > 0) and (Pos('Gemstone', CurrentUpText) > 0) then
+      if MainScreen.IsUpText(['Attack', 'Gemstone']) then
       begin
         WriteLn('Found Gemstone Crab!');
         Result := True;
         Exit;
       end
-      else if MouseOverAttempts >= 2 then
+      else 
       begin
-        WriteLn('Failed to get uptext after 2 attempts, rotating');
-        Antiban.RandomRotate();
-        Wait(500, 1000);
-        Break;
+        WriteLn('Current uptext: "', CurrentUpText, '"');
+        if MouseOverAttempts >= 2 then
+        begin
+          WriteLn('Failed to get uptext after 2 attempts, rotating');
+          Antiban.RandomRotate();
+          Wait(500, 1000);
+          
+          // Recalculate mainscreen position after rotation
+          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+          if not MainScreen.Bounds.Contains(MainscreenPoint) then
+          begin
+            WriteLn('Position moved off-screen after rotation');
+            Exit(False);
+          end;
+          
+          MouseOverAttempts := 0; // Reset attempts for new position
+        end;
       end;
     until MouseOverAttempts >= 2;
   end;
@@ -1454,7 +1476,16 @@ begin
         WriteLn('Failed to get uptext after 2 attempts, rotating.');
         Antiban.RandomRotate();
         Wait(500, 1000);
-        Break;
+        
+        // Recalculate mainscreen position after rotation
+        MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+        if not MainScreen.Bounds.Contains(MainscreenPoint) then
+        begin
+          WriteLn('Position moved off-screen after rotation');
+          Exit(False);
+        end;
+        
+        MouseOverAttempts := 0; // Reset attempts for new position
       end;
     end;
   until MouseOverAttempts >= 2;
