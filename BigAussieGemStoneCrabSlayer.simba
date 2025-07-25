@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.99'}
+{$DEFINE SCRIPT_REVISION := '80085'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -18,7 +18,6 @@ type
   GemStoneCrabSlayer = record(TBaseBankScript)
     InCombat: Boolean;
     IsAttacking: Boolean;
-    CrabHealth: Int32;
     LastHealthCheck: UInt64;
     
     TotalKills: Int32;
@@ -30,8 +29,6 @@ type
     CurrentLevel: Int32;
     LastHourlyReportTime: Int64;
     GainedXP: Integer;
-    
-    AFKMode: Boolean;
     
     CaveEntranceAttempts: Int32;
     LastCaveAttemptTime: UInt64;
@@ -53,13 +50,13 @@ type
     LastWorldHopTime: Int64;
     
     LastReportTime: UInt64;
+    LastImageClear: UInt64;
     LastSystemUpdateCheck: UInt64;
     SystemUpdateWarningShown: Boolean;
   end;
 
 var
   GemStoneCrabBot: GemStoneCrabSlayer;
-  ConfigINI: TConfigINI;
   Discord: TDiscordClient;
   ActiveTimer: TStopWatch;
   
@@ -425,7 +422,6 @@ end;
 
 procedure TConfig.InitializeAccountManager;
 var
-  accountManagerTab: TTabSheet;
   selector: TComboBox;
 begin
   selector := TComboBox(Self.Form.GetChild('am_selector_combobox'));
@@ -1510,10 +1506,8 @@ end;
 procedure GemStoneCrabSlayer.Report();
 var
   CurrentXP: Integer;
-  GainedXP: Integer;
   Runtime: Integer;
   XPPerHour, XPPerHourExcludingBreaks: Integer;
-  EstimatedSecondsLeft: Integer;
   CurrentTime: UInt64;
 begin
   CurrentTime := GetTickCount();
@@ -1580,8 +1574,6 @@ begin
   if SENDSESSIONSUMMARYMSG and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
   
-  Self.AFKMode := True;
-  
   Self.StartXP := Self.SafeReadXPBar();
   Self.PrevXP := Self.StartXP;
   Self.TotalKills := 0;
@@ -1590,7 +1582,6 @@ begin
   
   Self.InCombat := False;
   Self.IsAttacking := False;
-  Self.CrabHealth := -1;
   Self.LastHealthCheck := GetTickCount();
   
   Self.CaveEntranceAttempts := 0;
@@ -1614,6 +1605,7 @@ begin
   Self.LastWorldHopTime := 0;
   Self.SetupWorldHopping();
   Self.LastReportTime := 0;
+  Self.LastImageClear := 0;
   Self.LastSystemUpdateCheck := 0;
   Self.SystemUpdateWarningShown := False;
 end;
@@ -1705,7 +1697,12 @@ begin
     Self.Init(MaxActions, MaxTime);
     repeat
       try
-        RSClient.Image.Clear;
+        if (GetTickCount() - Self.LastImageClear) >= 30000 then
+        begin
+          RSClient.Image.Clear;
+          Self.LastImageClear := GetTickCount();
+        end;
+        
         Self.CheckForLevelUp();
         Self.CheckHourlyReport();
         Self.CheckSystemUpdate();
