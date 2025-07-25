@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '80085'}
+{$DEFINE SCRIPT_REVISION := 'Boobies'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1013,6 +1013,7 @@ var
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
   MouseOverAttempts: Int32;
+  RotationAttempts: Int32;
   StartTime: UInt64;
   MaxWaitTime: UInt64;
   CaveBlocked: Boolean;
@@ -1061,12 +1062,10 @@ begin
           Continue;
         
         MouseOverAttempts := 0;
+        RotationAttempts := 0;
         repeat
           Inc(MouseOverAttempts);
           Mouse.Move(MainscreenPoint);
-          
-          WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
-          Wait(500, 800);
           
           if MainScreen.IsUpText(['Cave']) then
           begin
@@ -1135,6 +1134,13 @@ begin
           end
           else if MouseOverAttempts >= 2 then
           begin
+            Inc(RotationAttempts);
+            if RotationAttempts >= 3 then
+            begin
+              WriteLn('Too many rotations for this cave dot, trying next');
+              Break;
+            end;
+            
             WriteLn('Failed to get cave uptext, rotating camera...');
             Antiban.RandomRotate();
             Wait(500, 1000);
@@ -1145,6 +1151,10 @@ begin
               WriteLn('Cave position moved off-screen after rotation');
               Break;
             end;
+            
+            WriteLn('Recalculated cave position after rotation, moving mouse...');
+            Mouse.Move(MainscreenPoint);
+            Wait(300, 500);
             
             MouseOverAttempts := 0;
           end;
@@ -1229,7 +1239,8 @@ begin
     
     if Length(NearbyDots) = 0 then
     begin
-      WriteLn('No NPCs found near mining icons');
+      WriteLn('No NPCs found near mining icon going to cave');
+      Exit(False);
     end
     else
     begin
@@ -1244,8 +1255,6 @@ begin
         end;
 
         Mouse.Move(MainscreenPoint);
-        WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
-        Wait(500, 800);
         
         CurrentUpText := MainScreen.GetUpText();
         WriteLn('Current uptext: "', CurrentUpText, '"');
@@ -1382,7 +1391,15 @@ begin
   end
   else
   begin
-    if TimeSinceLastXP > 15000 then
+    if Length(MainScreen.FindHPBars()) = 0 then
+    begin
+      WriteLn('Combat ended - no bars found');
+      Self.InCombat := False;
+      Self.IsAttacking := False;
+      Self.TotalKills := Self.TotalKills + 1;
+      Result := False;
+    end
+    else if TimeSinceLastXP > 15000 then
     begin
       WriteLn('Combat ended - no XP gained for 15 seconds');
       Self.InCombat := False;
@@ -1408,7 +1425,6 @@ var
   CurrentXP: Integer;
   TimeSinceLastXP: UInt64;
 begin
-  // Reset failed attack counter if enough time has passed
   if (Self.ConsecutiveFailedAttacks > 0) and 
      (Self.LastFailedAttackTime > 0) and 
      ((GetTickCount() - Self.LastFailedAttackTime) > 600000) then
@@ -1417,7 +1433,6 @@ begin
     Self.LastFailedAttackTime := 0;
   end;
   
-  // Update XP and combat status
   CurrentXP := XPBar.Read();
   if CurrentXP > Self.PrevXP then
   begin
@@ -1443,7 +1458,6 @@ begin
     Self.IsAttacking := False;
   end;
 
-  // Main logic: Handle combat or find/attack boss
   if Self.IsInCombat() then
   begin
     if not Self.HandleCombat() then
@@ -1455,23 +1469,39 @@ begin
   end
   else
   begin
-    // Try to find and attack boss
-    if Self.FindGemStoneCrab() then
+    if (Self.LastCaveEntryTime > 0) and ((GetTickCount() - Self.LastCaveEntryTime) < 5000) then
     begin
-      WriteLn('Found and attacked Gemstone Crab!');
-    end
-    else
-    begin
-      // No boss found, try to enter cave
-      WriteLn('No boss found - attempting to enter cave');
-      if Self.FindAndClickCaveEntrance() then
+      WriteLn('Waiting for boss to spawn after cave entry... (' + 
+              IntToStr(Round((GetTickCount() - Self.LastCaveEntryTime) / 1000)) + 's)');
+      
+      if Self.FindGemStoneCrab() then
       begin
-        WriteLn('Cave entry successful - boss should spawn soon');
-        Self.LastCaveEntryTime := GetTickCount();
+        WriteLn('Boss spawned! Found and attacked Gemstone Crab!');
+        Self.LastCaveEntryTime := 0;
       end
       else
       begin
-        WriteLn('Cave blocked - boss must still be here, searching again');
+        Wait(1000, 1500);
+      end;
+    end
+    else
+    begin
+      if Self.FindGemStoneCrab() then
+      begin
+        WriteLn('Found and attacked Gemstone Crab!');
+      end
+      else
+      begin
+        WriteLn('No boss found - attempting to enter cave');
+        if Self.FindAndClickCaveEntrance() then
+        begin
+          WriteLn('Cave entry successful - boss should spawn soon');
+          Self.LastCaveEntryTime := GetTickCount();
+        end
+        else
+        begin
+          WriteLn('Cave blocked - boss must still be here, searching again');
+        end;
       end;
     end;
   end;
