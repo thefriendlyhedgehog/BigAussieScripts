@@ -44,7 +44,6 @@ type
     LastCaveEntryTime: UInt64;
     FailsafeActive: Boolean;
     
-    // Attack failsafe for no ammo/runes
     ConsecutiveFailedAttacks: Int32;
     LastFailedAttackTime: UInt64;
     LastSuccessfulClick: Boolean;
