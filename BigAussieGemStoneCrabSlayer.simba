@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.8'}
+{$DEFINE SCRIPT_REVISION := '1.9'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1131,6 +1131,38 @@ begin
                       Result := True;
                       Exit;
                     end;
+                  end
+                  else
+                  begin
+                    WriteLn('No boss detected after blocked cave');
+                    Antiban.RandomRotate();
+                    Wait(1000, 1500);
+                    
+                    // Try once more after rotation
+                    if Self.FindGemStoneCrab() then
+                    begin
+                      WriteLn('Found crab after camera rotation! Attacking Mr Crabs...');
+                      if Self.AttackGemStoneCrab() then
+                      begin
+                        WriteLn('Successfully started attacking Mr Crabs after rotation');
+                        Self.CaveEntranceAttempts := 0;
+                        Self.FailsafeActive := False;
+                        Result := True;
+                        Exit;
+                      end;
+                    end
+                    else if Self.IsBossPresent() then
+                    begin
+                      WriteLn('Boss detected via HP bars after rotation');
+                      if Self.AttackGemStoneCrab() then
+                      begin
+                        WriteLn('Successfully started attacking Mr Crabs after rotation');
+                        Self.CaveEntranceAttempts := 0;
+                        Self.FailsafeActive := False;
+                        Result := True;
+                        Exit;
+                      end;
+                    end;
                   end;
                 end;
                 
@@ -1251,16 +1283,11 @@ begin
       
       CurrentUpText := MainScreen.GetUpText();
       
-      if (Pos('Gemstone', CurrentUpText) > 0) and (Pos('crab', CurrentUpText) > 0) then
+      if (Pos('crab', CurrentUpText) > 0) then
       begin
         WriteLn('Found Mr Crab!');
         Result := True;
         Exit;
-      end
-      else if Pos('crab', LowerCase(CurrentUpText)) > 0 then
-      begin
-        WriteLn('Found crab but not Gemstone crab: "' + CurrentUpText + '"');
-        Break;
       end
       else if MouseOverAttempts >= 2 then
       begin
@@ -1894,7 +1921,7 @@ begin
   Self.LastSystemUpdateCheck := 0;
   Self.SystemUpdateWarningShown := False;
 
-  Options.SetZoomLevel(RandomRange(15, 30));
+  Options.SetZoomLevel(RandomRange(5, 15));
 end;
 
 procedure GemStoneCrabSlayer.Run(MaxActions: UInt32; MaxTime: UInt64);
