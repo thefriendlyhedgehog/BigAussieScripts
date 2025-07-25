@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.92 Boobies'}
+{$DEFINE SCRIPT_REVISION := '1.93 Boobies'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -355,7 +355,7 @@ begin
   Self.MaxZoom := 10;
   
   // Disable random tab switching for chatbot and like who does this
-  WLSettings.Antiban.GameTabs := False;
+  WLSettings.SetAntibanGametabs(False);
   
   Antiban.OnStartBreak := @OnBreakStart;
   Antiban.OnFinishBreak := @OnBreakFinish;
@@ -888,6 +888,7 @@ begin
   if not SENDLEVELUPNOTIFICATIONMSG or not ENABLEWEBHOOKS then Exit;
   try
     CurrentXP := XPBar.Read();
+    WriteLn('XPBar Read returns: ' + IntToStr(CurrentXP));
     TotalXPGained := CurrentXP - Self.StartXP;
     
     Discord.Webhook.Content := '**LEVEL UP!** :tada:';
@@ -1107,72 +1108,11 @@ begin
               
               if CaveBlocked then
               begin
-                WriteLn('Cave is blocked! Mr Crabs must still be here.');
+                WriteLn('Cave is blocked! Boss must still be here - returning to boss search');
                 Chat.ClickContinue();
                 Wait(500, 1000);
-                
-                if Self.FindGemStoneCrab() then
-                begin
-                  WriteLn('Found blocked cave! Attacking Mr Crabs...');
-                  if Self.AttackGemStoneCrab() then
-                  begin
-                    WriteLn('Successfully started attacking Mr Crabs');
-                    Self.CaveEntranceAttempts := 0;
-                    Self.FailsafeActive := False;
-                    Result := True;
-                    Exit;
-                  end;
-                end
-                else
-                begin
-                  WriteLn('Cave blocked but could not find crab');
-                  if Self.IsBossPresent() then
-                  begin
-                    WriteLn('Boss detected via HP bars after blocked cave');
-                    if Self.AttackGemStoneCrab() then
-                    begin
-                      WriteLn('Successfully started attacking Mr Crabs');
-                      Self.CaveEntranceAttempts := 0;
-                      Self.FailsafeActive := False;
-                      Result := True;
-                      Exit;
-                    end;
-                  end
-                  else
-                  begin
-                    WriteLn('No boss detected after blocked cave');
-                    Antiban.RandomRotate();
-                    Wait(1000, 1500);
-                    
-                    if Self.FindGemStoneCrab() then
-                    begin
-                      WriteLn('Found crab after camera rotation! Attacking Mr Crabs...');
-                      if Self.AttackGemStoneCrab() then
-                      begin
-                        WriteLn('Successfully started attacking Mr Crabs after rotation');
-                        Self.CaveEntranceAttempts := 0;
-                        Self.FailsafeActive := False;
-                        Result := True;
-                        Exit;
-                      end;
-                    end
-                    else if Self.IsBossPresent() then
-                    begin
-                      WriteLn('Boss detected via HP bars after rotation');
-                      if Self.AttackGemStoneCrab() then
-                      begin
-                        WriteLn('Successfully started attacking Mr Crabs after rotation');
-                        Self.CaveEntranceAttempts := 0;
-                        Self.FailsafeActive := False;
-                        Result := True;
-                        Exit;
-                      end;
-                    end;
-                  end;
-                end;
-                
-                WriteLn('Cave blocked but failed to find');
-                Continue;
+                Result := False;
+                Exit;
               end
               else if EnteredCave then
               begin
@@ -1205,7 +1145,6 @@ begin
             Antiban.RandomRotate();
             Wait(500, 1000);
             
-            // Recalculate after rotation
             MainscreenPoint := Minimap.PointToMS(MinimapPoint);
             if not MainScreen.Bounds.Contains(MainscreenPoint) then
             begin
@@ -1236,376 +1175,165 @@ end;
 
 function GemStoneCrabSlayer.FindGemStoneCrab(): Boolean;
 var
-  YellowDots, MiningIcons: TPointArray;
+  YellowDots, MiningIcons, NearbyDots: TPointArray;
   i, j: Int32;
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
-  NearMiningIcon: Boolean;
   CurrentUpText: String;
-  MouseOverAttempts: Int32;
-begin
-  Result := False;
-  WriteLn('Looking for Mr Crabs...');
-
-  SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
-  
-  if Length(MiningIcons) = 0 then 
-  begin
-    WriteLn('No boss icon found');
-    Exit;
-  end;
-  
-  YellowDots := FindYellowNPCDots();
-  
-  if Length(YellowDots) = 0 then
-  begin
-    WriteLn('No NPCs detected');
-    Exit;
-  end;
-  
-  for i := 0 to High(YellowDots) do
-  begin
-    MinimapPoint := YellowDots[i];
-    NearMiningIcon := False;
-    
-    for j := 0 to High(MiningIcons) do
-    begin
-      if MinimapPoint.DistanceTo(MiningIcons[j]) <= 15 then
-      begin
-        NearMiningIcon := True;
-        Break;
-      end;
-    end;
-    
-    if not NearMiningIcon then 
-    begin
-      Continue;
-    end;
-
-    MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-    
-    if not MainScreen.Bounds.Contains(MainscreenPoint) then
-    begin
-      Continue;
-    end;
-    
-    MouseOverAttempts := 0;
-    repeat
-      Inc(MouseOverAttempts);
-      Mouse.Move(MainscreenPoint);
-      
-      WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
-      Wait(500, 800);
-      
-      CurrentUpText := MainScreen.GetUpText();
-      
-      if MainScreen.IsUpText(['Attack', 'Gemstone']) then
-      begin
-        WriteLn('Found Gemstone Crab!');
-        Result := True;
-        Exit;
-      end
-      else 
-      begin
-        WriteLn('Current uptext: "', CurrentUpText, '"');
-        if MouseOverAttempts >= 2 then
-        begin
-          WriteLn('Failed to get uptext after 2 attempts, rotating');
-          Antiban.RandomRotate();
-          Wait(500, 1000);
-          
-          // Recalculate mainscreen position after rotation
-          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-          if not MainScreen.Bounds.Contains(MainscreenPoint) then
-          begin
-            WriteLn('Position moved off-screen after rotation');
-            Exit(False);
-          end;
-          
-          MouseOverAttempts := 0; // Reset attempts for new position
-        end;
-      end;
-    until MouseOverAttempts >= 2;
-  end;
-  
-  WriteLn('Mr Crabs not found in current area');
-end;
-
-function GemStoneCrabSlayer.GetBossAttackPoints(): TPointArray;
-var
-  YellowDots, MiningIcons: TPointArray;
-  MiningClusters, NPCClusters: T2DPointArray;
-  i, j, k: Int32;
-  ClusterDistance: Double;
-  MinDistance: Double;
-  AttackPoints: TPointArray;
-begin
-  Result := [];
-  
-  // Find mining icon
-  SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
-  if Length(MiningIcons) = 0 then Exit;
-  
-  MiningClusters := ClusterTPA(MiningIcons, 25);
-  
-  YellowDots := FindYellowNPCDots();
-  if Length(YellowDots) > 0 then
-  begin
-    NPCClusters := ClusterTPA(YellowDots, 15);
-    
-    for i := 0 to High(NPCClusters) do
-    begin
-      MinDistance := 999.0;
-      
-      // Check if this NPC cluster is near mining icon
-      for j := 0 to High(MiningClusters) do
-      begin
-        ClusterDistance := NPCClusters[i].Mean().DistanceTo(MiningClusters[j].Mean());
-        if ClusterDistance < MinDistance then
-          MinDistance := ClusterDistance;
-      end;
-      
-      if MinDistance <= 25 then
-      begin
-        for k := 0 to High(NPCClusters[i]) do
-          AttackPoints := AttackPoints + [NPCClusters[i][k]];
-      end;
-    end;
-  end;
-  
-  for i := 0 to High(MiningClusters) do
-  begin
-    for j := 0 to High(MiningClusters[i]) do
-      AttackPoints := AttackPoints + [MiningClusters[i][j]];
-  end;
-  
-  Result := AttackPoints;
-end;
-
-function GemStoneCrabSlayer.TryAttackAtPoint(MinimapPoint: TPoint; StartXP: Integer): Boolean;
-var
-  MainscreenPoint: TPoint;
-  MouseOverAttempts: Int32;
+  SearchAttempts: Int32;
+  StartXP: Integer;
   TimeoutStart: UInt64;
 begin
   Result := False;
-  Self.LastSuccessfulClick := False; // Reset flag at start of each position try
-  
-  MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-  
-  if not MainScreen.Bounds.Contains(MainscreenPoint) then
-    Exit(False);
-    
-  MouseOverAttempts := 0;
-  repeat
-    Inc(MouseOverAttempts);
-    Mouse.Move(MainscreenPoint);
-    
-    WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
-    Wait(500, 800);
-    
-    if MainScreen.IsUpText(['Attack', 'Gemstone']) then
-    begin
-      WriteLn('Found "Attack Gemstone" uptext, clicking...');
-      Mouse.Click(MOUSE_LEFT);
-      
-      if MainScreen.DidRedClick() then
-      begin
-        WriteLn('Red click successful, waiting for XP...');
-        Self.LastSuccessfulClick := True; // We successfully clicked the boss
-        TimeoutStart := GetTickCount();
-        
-        repeat
-          Wait(500, 1000);
-          
-          if XPBar.Read() > StartXP then
-          begin
-            Self.IsAttacking := True;
-            Self.InCombat := True;
-            Self.PrevXP := XPBar.Read();
-            Self.LastHealthCheck := GetTickCount();
-            WL.Activity.Restart();
-            
-            Self.ConsecutiveFailedAttacks := 0;
-            WriteLn('Successfully attacked boss and gained XP!');
-            
-            Result := True;
-            Exit;
-          end;
-          
-        until (GetTickCount() - TimeoutStart) > 5000;
-        
-        WriteLn('No XP gained within 5 seconds after clicking');
-        
-        Inc(Self.ConsecutiveFailedAttacks);
-        Self.LastFailedAttackTime := GetTickCount();
-        WriteLn('Boss clicked but no XP gained. Consecutive failed attacks: ', Self.ConsecutiveFailedAttacks, '/3');
-        
-        if Self.ConsecutiveFailedAttacks >= 3 then
-        begin
-          WriteLn('3 consecutive boss clicks failed to gain XP!');
-          WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
-          
-          Self.TakeScreenshot('_NoAmmoFailsafe');
-          
-          if ENABLEWEBHOOKS then
-          begin
-            try
-              Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
-              Discord.SendScreenshot(False);
-            except
-              WriteLn('[Discord] Failed to send no ammo notification');
-            end;
-          end;
-          
-          Logout.ClickLogout();
-          TerminateScript('No XP gained from 3 consecutive attacks');
-        end;
-      end
-      else
-      begin
-        WriteLn('Red click failed - click was not successful');
-      end;
-      Break;
-    end
-    else 
-    begin
-      WriteLn('No "Attack Gemstone" uptext found. Current uptext: "', MainScreen.GetUpText(), '"');
-      if MouseOverAttempts >= 2 then
-      begin
-        WriteLn('Failed to get uptext after 2 attempts, rotating.');
-        Antiban.RandomRotate();
-        Wait(500, 1000);
-        
-        // Recalculate mainscreen position after rotation
-        MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-        if not MainScreen.Bounds.Contains(MainscreenPoint) then
-        begin
-          WriteLn('Position moved off-screen after rotation');
-          Exit(False);
-        end;
-        
-        MouseOverAttempts := 0; // Reset attempts for new position
-      end;
-    end;
-  until MouseOverAttempts >= 2;
-end;
-
-function GemStoneCrabSlayer.AttackGemStoneCrab(): Boolean;
-var
-  StartXP: Integer;
-  AttackAttempts: Int32;
-  AttackPoints: TPointArray;
-  i: Int32;
-begin
-  Result := False;
-  
-  if Self.IsAttacking then 
-    Exit(True);
-  
-  if Self.ConsecutiveFailedAttacks >= 3 then
-  begin
-    WriteLn('Failed to gain XP!');
-    WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
-    
-    Self.TakeScreenshot('_NoAmmoFailsafe');
-    
-    if ENABLEWEBHOOKS then
-    begin
-      try
-        Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
-        Discord.SendScreenshot(False);
-      except
-        WriteLn('[Discord] Failed to send no ammo notification');
-      end;
-    end;
-    
-    Logout.ClickLogout();
-    TerminateScript('No XP gained from 3 consecutive attacks');
-  end;
+  WriteLn('Looking for Mr Crabs...');
   
   StartXP := XPBar.Read();
-  AttackAttempts := 0;
+  SearchAttempts := 0;
   
-  while (AttackAttempts < 5) and not Result do
+  while (SearchAttempts < 3) and not Result do
   begin
-    Inc(AttackAttempts);
-    WriteLn('Attack attempt ', AttackAttempts);
-    Self.LastSuccessfulClick := False; 
+    Inc(SearchAttempts);
+    WriteLn('Boss search attempt ', SearchAttempts, '/3');
     
-    AttackPoints := Self.GetBossAttackPoints();
+    // Find mining icons
+    SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
     
-    if Length(AttackPoints) = 0 then 
+    if Length(MiningIcons) = 0 then 
     begin
-      WriteLn('No attack points found');
-      Wait(1000, 2000);
-      Continue;
+      WriteLn('No mining icon found');
+      Exit(False);
     end;
-
-    for i := 0 to High(AttackPoints) do
+    
+    WriteLn('Found ', Length(MiningIcons), ' mining icon(s)');
+    
+    // Find all yellow NPC dots
+    YellowDots := FindYellowNPCDots();
+    
+    if Length(YellowDots) = 0 then
     begin
-      if Self.TryAttackAtPoint(AttackPoints[i], StartXP) then
+      WriteLn('No NPCs detected');
+      Exit(False);
+    end;
+    
+    WriteLn('Found ', Length(YellowDots), ' NPC dot(s)');
+    
+    // Filter to only dots near mining icons
+    NearbyDots := [];
+    for i := 0 to High(YellowDots) do
+    begin
+      for j := 0 to High(MiningIcons) do
       begin
-        WriteLn('Attack successful! XP gained.');
-        Result := True;
-        Exit;
-      end
-      else
-      begin
-        if Self.LastSuccessfulClick then
+        if YellowDots[i].DistanceTo(MiningIcons[j]) <= 15 then
         begin
+          NearbyDots := NearbyDots + [YellowDots[i]];
           Break;
         end;
       end;
     end;
-
-    if not Result then
+    
+    WriteLn('Found ', Length(NearbyDots), ' NPC dot(s) near mining icons');
+    
+    if Length(NearbyDots) = 0 then
     begin
-      Wait(1000, 2000);
+      WriteLn('No NPCs found near mining icons');
+    end
+    else
+    begin
+      for i := 0 to High(NearbyDots) do
+      begin
+        MinimapPoint := NearbyDots[i];
+        MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+        
+        if not MainScreen.Bounds.Contains(MainscreenPoint) then
+        begin
+          Continue;
+        end;
+
+        Mouse.Move(MainscreenPoint);
+        WaitUntil(Mouse.Position().DistanceTo(MainscreenPoint) < 5, 50, 2000);
+        Wait(500, 800);
+        
+        CurrentUpText := MainScreen.GetUpText();
+        WriteLn('Current uptext: "', CurrentUpText, '"');
+        
+        if MainScreen.IsUpText(['level-160']) then
+        begin
+          WriteLn('Found Gemstone Crab! Clicking to attack...');
+          Mouse.Click(MOUSE_LEFT);
+          
+          if MainScreen.DidRedClick() then
+          begin
+            WriteLn('Red click successful, waiting for XP...');
+            TimeoutStart := GetTickCount();
+            
+            repeat
+              Wait(500, 1000);
+              
+              if XPBar.Read() > StartXP then
+              begin
+                Self.IsAttacking := True;
+                Self.InCombat := True;
+                Self.PrevXP := XPBar.Read();
+                Self.LastHealthCheck := GetTickCount();
+                WL.Activity.Restart();
+                
+                Self.ConsecutiveFailedAttacks := 0;
+                WriteLn('Successfully attacked boss and gained XP!');
+                
+                Result := True;
+                Exit;
+              end;
+              
+            until (GetTickCount() - TimeoutStart) > 5000;
+            
+            WriteLn('No XP gained within 5 seconds after clicking');
+            
+            Inc(Self.ConsecutiveFailedAttacks);
+            Self.LastFailedAttackTime := GetTickCount();
+            WriteLn('Boss clicked but no XP gained. Consecutive failed attacks: ', Self.ConsecutiveFailedAttacks, '/3');
+            
+            if Self.ConsecutiveFailedAttacks >= 3 then
+            begin
+              WriteLn('3 consecutive boss clicks failed to gain XP!');
+              WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
+              
+              Self.TakeScreenshot('_NoAmmoFailsafe');
+              
+              if ENABLEWEBHOOKS then
+              begin
+                try
+                  Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
+                  Discord.SendScreenshot(False);
+                except
+                  WriteLn('[Discord] Failed to send no ammo notification');
+                end;
+              end;
+              
+              Logout.ClickLogout();
+              TerminateScript('No XP gained from 3 consecutive attacks');
+            end;
+            
+            Result := True;
+            Exit;
+          end
+          else
+          begin
+            WriteLn('Red click failed - click was not successful');
+          end;
+        end;
+      end;
+    end;
+    
+    if not Result and (SearchAttempts < 3) then
+    begin
+      Antiban.RandomRotate();
+      Wait(1000, 1500);
     end;
   end;
-  
+
   if not Result then
   begin
-    Self.IsAttacking := False;
-    
-    if not Self.LastSuccessfulClick then
-    begin
-      WriteLn('Could not find or click the boss in this attempt');
-    end;
-  end;
-end;
-
-function GemStoneCrabSlayer.GetCrabTimeRemaining(): Integer;
-var
-  GreenTPA, RedTPA: TPointArray;
-  GreenCount, RedCount, TotalCount: Integer;
-  TimePercent: Double;
-  TimerBarBox: TBox;
-begin
-  Result := -1;
-  
-  TimerBarBox := [202, 49, 315, 68];
-
-  SRL.FindColors(GreenTPA, CTS2(51200, 1, 0.01, 0.01), TimerBarBox);
-  SRL.FindColors(RedTPA, CTS2(200, 1, 0.01, 0.01), TimerBarBox);
-
-  GreenCount := GreenTPA.Len;
-  RedCount := RedTPA.Len;
-  TotalCount := GreenCount + RedCount;
-
-  if TotalCount > 0 then
-  begin
-    TimePercent := (GreenCount / TotalCount) * 100.0;
-    Result := Round(TimePercent) + 1;
-    
-    if Result > 100 then
-      Result := 100;
-    if Result < 0 then
-      Result := 0;
-    
-    Self.CrabHealth := Result;
-    
+    WriteLn('Mr Crabs not found after ', SearchAttempts, ' search attempts');
   end;
 end;
 
@@ -1630,7 +1358,6 @@ begin
     Exit(False);
   end;
   
-  // Cluster mining icons to get better center points
   MiningClusters := ClusterTPA(MiningIcons, 25);
   
   // Find all HP bars on mainscreen
@@ -1672,29 +1399,19 @@ end;
 
 function GemStoneCrabSlayer.IsBossPresent(): Boolean;
 var
-  TimerBarResult: Integer;
   HPBarResult: Boolean;
 begin
-  TimerBarResult := Self.GetCrabTimeRemaining();
-  
-  if TimerBarResult >= 0 then
-  begin
-    WriteLn('Boss detected via timer bar method: ', TimerBarResult, '%');
-    Result := True;
-    Exit;
-  end;
-  
   // Look for HP bars near mining icons
   HPBarResult := Self.FindHPBarsNearMiningIcon();
   
   if HPBarResult then
   begin
-    WriteLn('Boss detected via FindHPBars');
+    WriteLn('Boss detected via HP bars');
     Result := True;
     Exit;
   end;
   
-  WriteLn('No boss detected by either method');
+  WriteLn('No boss detected');
   Result := False;
 end;
 
@@ -1842,39 +1559,28 @@ begin
   case State of
     STATE_FIND_CRAB:
     begin
-      if Self.IsBossPresent() then
+      if Self.FindGemStoneCrab() then
       begin
-        WriteLn('Boss detected! Gemstone Crab is present, attempting to attack...');
-        Self.AttackGemStoneCrab();
+        WriteLn('Found and attacked Gemstone Crab!');
       end
       else
       begin
-        if (Self.LastCaveEntryTime > 0) and ((GetTickCount() - Self.LastCaveEntryTime) < 10000) then
+        WriteLn('No boss found - attempting to enter cave');
+        if Self.FindAndClickCaveEntrance() then
         begin
-          WriteLn('Recently entered cave, waiting for Gemstone Crab to spawn... (' + 
-                  IntToStr(Round((GetTickCount() - Self.LastCaveEntryTime) / 1000)) + 's)');
-          Wait(1000, 2000);
+          WriteLn('Cave entry successful - boss should spawn soon');
+          Self.LastCaveEntryTime := GetTickCount();
         end
         else
         begin
-          if Self.FindGemStoneCrab() then
-          begin
-            WriteLn('Found Gemstone Crab! Attempting to attack...');
-            Self.AttackGemStoneCrab();
-          end
-          else
-          begin
-            WriteLn('No boss detected and no Gemstone Crab found - looking for cave entrance');
-            if not Self.FindAndClickCaveEntrance() then
-              Wait(2000, 3000);
-          end;
+          WriteLn('Cave blocked - boss must still be here, searching again');
         end;
       end;
     end;
     
     STATE_ATTACK_CRAB:
     begin
-      Self.AttackGemStoneCrab();
+      Self.FindGemStoneCrab();
     end;
     
     STATE_IN_COMBAT:
@@ -1895,7 +1601,6 @@ var
   GainedXP: Integer;
   Runtime: Integer;
   XPPerHour, XPPerHourExcludingBreaks: Integer;
-  CrabTimeRemaining: Integer;
   EstimatedSecondsLeft: Integer;
   CurrentTime: UInt64;
   BossPresent: Boolean;
@@ -1917,7 +1622,6 @@ begin
   XPPerHourExcludingBreaks := Round((Self.GainedXP) / (ActiveTimer.ElapsedTime / 3600000));
   
   BossPresent := Self.IsBossPresent();
-  CrabTimeRemaining := Self.GetCrabTimeRemaining();
   
   Self.SubmitAPIStats();
     
@@ -1927,21 +1631,7 @@ begin
   WriteLn('   Runtime: ' + SRL.MsToTime(Runtime, Time_Short));
   WriteLn('   XP Gained: ' + FormatRoundedNumber(Self.GainedXP));
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
-  
-  // Removed because supports boss bars only and its not needed, maybe add back.
-  {if BossPresent then
-  begin
-    if CrabTimeRemaining >= 0 then
-    begin
-      EstimatedSecondsLeft := Round((CrabTimeRemaining / 100.0) * 600);
-      WriteLn('   Crab Time Remaining: ' + IntToStr(CrabTimeRemaining) + '% (' + SRL.MsToTime(EstimatedSecondsLeft * 1000, Time_Short) + ')');
-    end
-    else
-    begin
-      WriteLn('   Crab Health: ' + IntToStr(Self.CrabHealth) + '%');
-    end;
-  end}
-  
+
   if Length(Antiban.Breaks) > 0 then
     WriteLn('   Next break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
   if Length(Antiban.Sleeps) > 0 then
@@ -2028,6 +1718,7 @@ begin
     Self.Init(MaxActions, MaxTime);
     repeat
       try
+        RSClient.Image.Clear;
         Self.CheckForLevelUp();
         Self.CheckHourlyReport();
         Self.CheckSystemUpdate();
