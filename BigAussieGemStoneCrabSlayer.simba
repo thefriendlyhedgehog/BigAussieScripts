@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.93 Boobies'}
+{$DEFINE SCRIPT_REVISION := '80085'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -15,12 +15,6 @@ var
   ABLOSEFOCUS: Boolean                   = True;
 
 type
-  TGemStoneCrabState = (
-    STATE_FIND_CRAB,
-    STATE_ATTACK_CRAB,
-    STATE_IN_COMBAT
-  );
-
   GemStoneCrabSlayer = record(TBaseBankScript)
     InCombat: Boolean;
     IsAttacking: Boolean;
@@ -1256,7 +1250,7 @@ begin
         CurrentUpText := MainScreen.GetUpText();
         WriteLn('Current uptext: "', CurrentUpText, '"');
         
-        if MainScreen.IsUpText(['level-160']) then
+        if MainScreen.IsUpText(['(level-160)']) then
         begin
           WriteLn('Found Gemstone Crab! Clicking to attack...');
           Mouse.Click(MOUSE_LEFT);
@@ -1337,84 +1331,6 @@ begin
   end;
 end;
 
-function GemStoneCrabSlayer.FindHPBarsNearMiningIcon(): Boolean;
-var
-  HPBars: TRSHPBarArray;
-  MiningIcons: TPointArray;
-  MiningClusters: T2DPointArray;
-  i, j: Int32;
-  HPBarCenter, MiningIconCenter: TPoint;
-  Distance: Double;
-  MaxDistance: Double;
-begin
-  Result := False;
-  MaxDistance := 80.0;
-  
-  // Find mining icons first
-  SRL.FindColors(MiningIcons, CTS2(2181491, 13, 0.08, 1.33), Minimap.Bounds);
-  
-  if Length(MiningIcons) = 0 then
-  begin
-    Exit(False);
-  end;
-  
-  MiningClusters := ClusterTPA(MiningIcons, 25);
-  
-  // Find all HP bars on mainscreen
-  HPBars := MainScreen.FindHPBars();
-  
-  if Length(HPBars) = 0 then
-  begin
-    Exit(False);
-  end;
-  
-  //WriteLn('Found ', Length(HPBars), ' HP bar(s) and ', Length(MiningClusters), ' mining icon cluster(s)');
-  
-  // Check if any HP bars are near mining icons
-  for i := 0 to High(HPBars) do
-  begin
-    HPBarCenter := HPBars[i].Bounds.Center();
-    
-    for j := 0 to High(MiningClusters) do
-    begin
-      MiningIconCenter := Minimap.PointToMS(MiningClusters[j].Mean());
-      
-      if MainScreen.Bounds.Contains(MiningIconCenter) then
-      begin
-        Distance := HPBarCenter.DistanceTo(MiningIconCenter);
-        
-        if Distance <= MaxDistance then
-        begin
-          //WriteLn('Found HP bar near mining icon! Distance: ', Round(Distance), ' pixels, HP: ', HPBars[i].Percent, '%');
-          Self.CrabHealth := Round(HPBars[i].Percent);
-          Result := True;
-          Exit;
-        end;
-      end;
-    end;
-  end;
-  
-  WriteLn('No HP bars found within ', Round(MaxDistance), ' pixels of mining icons');
-end;
-
-function GemStoneCrabSlayer.IsBossPresent(): Boolean;
-var
-  HPBarResult: Boolean;
-begin
-  // Look for HP bars near mining icons
-  HPBarResult := Self.FindHPBarsNearMiningIcon();
-  
-  if HPBarResult then
-  begin
-    WriteLn('Boss detected via HP bars');
-    Result := True;
-    Exit;
-  end;
-  
-  WriteLn('No boss detected');
-  Result := False;
-end;
-
 function GemStoneCrabSlayer.IsInCombat(): Boolean;
 var
   CurrentXP: Integer;
@@ -1477,34 +1393,6 @@ begin
   end;
 end;
 
-function GemStoneCrabSlayer.GetState(): TGemStoneCrabState;
-var
-  CurrentXP: Integer;
-  TimeSinceLastXP: UInt64;
-begin
-  if Self.IsInCombat() then
-    Exit(STATE_IN_COMBAT);
-  
-  CurrentXP := XPBar.Read();
-  TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
-  
-  if TimeSinceLastXP > 15000 then
-  begin
-    WriteLn('No XP gained for 15+ seconds');
-    Self.InCombat := False;
-    Self.IsAttacking := False;
-  end;
-  
-  if Self.IsBossPresent() and not Self.IsInCombat() then
-  begin
-    WriteLn('Boss detected and not in combat - Attacking Mr Crabs');
-    Exit(STATE_ATTACK_CRAB);
-  end;
-  
-  WriteLn('No boss detected - searching for crab');
-  Exit(STATE_FIND_CRAB);
-end;
-
 procedure GemStoneCrabSlayer.CheckForLevelUp();
 begin
   Self.CurrentLevel := Stats.GetLevel(ERSSkill.ATTACK);
@@ -1517,10 +1405,10 @@ end;
 
 procedure GemStoneCrabSlayer.DoAction();
 var
-  State: TGemStoneCrabState;
   CurrentXP: Integer;
   TimeSinceLastXP: UInt64;
 begin
+  // Reset failed attack counter if enough time has passed
   if (Self.ConsecutiveFailedAttacks > 0) and 
      (Self.LastFailedAttackTime > 0) and 
      ((GetTickCount() - Self.LastFailedAttackTime) > 600000) then
@@ -1529,6 +1417,7 @@ begin
     Self.LastFailedAttackTime := 0;
   end;
   
+  // Update XP and combat status
   CurrentXP := XPBar.Read();
   if CurrentXP > Self.PrevXP then
   begin
@@ -1543,7 +1432,7 @@ begin
   begin
     if Self.InCombat or Self.IsAttacking then
     begin
-      WriteLn('No XP for 15+ seconds');
+      WriteLn('No XP for 15+ seconds - combat ended');
       Self.InCombat := False;
       Self.IsAttacking := False;
     end;
@@ -1554,42 +1443,35 @@ begin
     Self.IsAttacking := False;
   end;
 
-  State := Self.GetState();
-  
-  case State of
-    STATE_FIND_CRAB:
+  // Main logic: Handle combat or find/attack boss
+  if Self.IsInCombat() then
+  begin
+    if not Self.HandleCombat() then
     begin
-      if Self.FindGemStoneCrab() then
+      WriteLn('Combat ended, resetting combat state');
+      Self.InCombat := False;
+      Self.IsAttacking := False;
+    end;
+  end
+  else
+  begin
+    // Try to find and attack boss
+    if Self.FindGemStoneCrab() then
+    begin
+      WriteLn('Found and attacked Gemstone Crab!');
+    end
+    else
+    begin
+      // No boss found, try to enter cave
+      WriteLn('No boss found - attempting to enter cave');
+      if Self.FindAndClickCaveEntrance() then
       begin
-        WriteLn('Found and attacked Gemstone Crab!');
+        WriteLn('Cave entry successful - boss should spawn soon');
+        Self.LastCaveEntryTime := GetTickCount();
       end
       else
       begin
-        WriteLn('No boss found - attempting to enter cave');
-        if Self.FindAndClickCaveEntrance() then
-        begin
-          WriteLn('Cave entry successful - boss should spawn soon');
-          Self.LastCaveEntryTime := GetTickCount();
-        end
-        else
-        begin
-          WriteLn('Cave blocked - boss must still be here, searching again');
-        end;
-      end;
-    end;
-    
-    STATE_ATTACK_CRAB:
-    begin
-      Self.FindGemStoneCrab();
-    end;
-    
-    STATE_IN_COMBAT:
-    begin
-      if not Self.HandleCombat() then
-      begin
-        WriteLn('Combat ended, resetting combat state');
-        Self.InCombat := False;
-        Self.IsAttacking := False;
+        WriteLn('Cave blocked - boss must still be here, searching again');
       end;
     end;
   end;
@@ -1603,7 +1485,6 @@ var
   XPPerHour, XPPerHourExcludingBreaks: Integer;
   EstimatedSecondsLeft: Integer;
   CurrentTime: UInt64;
-  BossPresent: Boolean;
 begin
   CurrentTime := GetTickCount();
   
@@ -1620,8 +1501,6 @@ begin
     
   XPPerHour := Round((Self.GainedXP) / (Self.RunningTime.ElapsedTime / 3600000));
   XPPerHourExcludingBreaks := Round((Self.GainedXP) / (ActiveTimer.ElapsedTime / 3600000));
-  
-  BossPresent := Self.IsBossPresent();
   
   Self.SubmitAPIStats();
     
