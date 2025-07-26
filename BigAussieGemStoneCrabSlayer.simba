@@ -1894,17 +1894,21 @@ begin
                 
                 if Length(MiningIcons) > 0 then
                 begin
-                  MiningPoint := Minimap.PointToMS(MiningIcons[0]);
+                  MinimapPoint := MiningIcons[0]; // Adjust the 15s if randoness is to much
+                  MinimapPoint.X := MinimapPoint.X + Random(-15, 15);
+                  MinimapPoint.Y := MinimapPoint.Y + Random(-15, 15);
+                  
+                  MiningPoint := Minimap.PointToMS(MinimapPoint);
                   
                   if MainScreen.Bounds.Contains(MiningPoint) then
                   begin
-                    WriteLn('Clicking on mining icon to move closer to boss spawn point...');
+                    WriteLn('Clicking near mining icon to move closer to boss spawn area...');
                     Mouse.Move(MiningPoint);
                     
                     if MainScreen.IsUpText(['Walk here']) then
                     begin
                       Mouse.Click(MOUSE_LEFT);
-                      WriteLn('Successfully clicked to move closer to boss spawn location');
+                      WriteLn('Successfully clicked to move closer to boss spawn area');
                     end
                     else
                     begin
@@ -1913,7 +1917,7 @@ begin
                   end
                   else
                   begin
-                    WriteLn('Mining icon not visible on mainscreen');
+                    WriteLn('Random point near mining icon not visible on mainscreen');
                   end;
                 end
                 else
