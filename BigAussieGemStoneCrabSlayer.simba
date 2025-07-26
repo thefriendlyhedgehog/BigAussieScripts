@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.7'}
+{$DEFINE SCRIPT_REVISION := '0.8'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1801,6 +1801,12 @@ var
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
   StartTime: UInt64;
+  MiningIcons: TPointArray;
+  j: Int32;
+  MiningPoint: TPoint;
+  YellowDots: TPointArray;
+  BossNearSpawn: Boolean;
+  Distance: Double;
 begin
   Result := False;
   
@@ -1846,7 +1852,7 @@ begin
             Exit(True);
           end;
           
-          // Check if we successfully entered (minimap goes black)
+          // Check if we successfully entered (minimap black)
           if Minimap.PercentBlack() > 80 then
           begin
             WriteLn('Entering cave...');
@@ -1855,6 +1861,67 @@ begin
             begin
               WriteLn('Successfully exited cave');
               Self.LastCaveExitTime := GetTickCount();
+              
+              WriteLn('Checking if boss is already available...');
+              YellowDots := FindYellowNPCDots();
+              MiningIcons := FindMiningIcons();
+              
+              BossNearSpawn := False;
+              if (Length(YellowDots) > 0) and (Length(MiningIcons) > 0) then
+              begin
+                for i := 0 to High(YellowDots) do
+                begin
+                  for j := 0 to High(MiningIcons) do
+                  begin
+                    Distance := YellowDots[i].DistanceTo(MiningIcons[j]);
+                    if Distance <= 10 then
+                    begin
+                      BossNearSpawn := True;
+                      Break;
+                    end;
+                  end;
+                  if BossNearSpawn then Break;
+                end;
+              end;
+              
+              if BossNearSpawn then
+              begin
+                WriteLn('Boss already available near spawn - no need to move closer');
+              end
+              else
+              begin
+                WriteLn('No boss found near spawn - moving closer to spawn point...');
+                
+                if Length(MiningIcons) > 0 then
+                begin
+                  MiningPoint := Minimap.PointToMS(MiningIcons[0]);
+                  
+                  if MainScreen.Bounds.Contains(MiningPoint) then
+                  begin
+                    WriteLn('Clicking on mining icon to move closer to boss spawn point...');
+                    Mouse.Move(MiningPoint);
+                    
+                    if MainScreen.IsUpText(['Walk here']) then
+                    begin
+                      Mouse.Click(MOUSE_LEFT);
+                      WriteLn('Successfully clicked to move closer to boss spawn location');
+                    end
+                    else
+                    begin
+                      WriteLn('Unexpected uptext when trying to move closer: "', MainScreen.GetUpText(), '"');
+                    end;
+                  end
+                  else
+                  begin
+                    WriteLn('Mining icon not visible on mainscreen');
+                  end;
+                end
+                else
+                begin
+                  WriteLn('No mining icons found to move closer to boss spawn');
+                end;
+              end;
+              
               Exit(False);
             end
             else
@@ -1930,6 +1997,9 @@ begin
 end;
 
 function GemStoneCrabSlayer.TryConsumeAnyBoost(): Boolean;
+var
+  BoostTypes: array of ERSConsumable;
+  BoostType: ERSConsumable;
 begin
   Result := False;
   
@@ -1939,37 +2009,24 @@ begin
   if not Inventory.IsOpen() then
     Inventory.Open();
   
-  // Try different boost could this be done easier? probably.
-  if Inventory.Consume(ERSConsumable.BOOST) then
+  BoostTypes := [ERSConsumable.BOOST, ERSConsumable.STRENGTH_BOOST, ERSConsumable.ATTACK_BOOST, 
+                 ERSConsumable.DEFENCE_BOOST, ERSConsumable.RANGING_BOOST, ERSConsumable.MAGIC_BOOST];
+  
+  for BoostType in BoostTypes do
   begin
-    WriteLn('Consumed combat boost');
-    Result := True;
-  end
-  else if Inventory.Consume(ERSConsumable.ATTACK_BOOST) then
-  begin
-    WriteLn('Consumed attack boost');
-    Result := True;
-  end
-  else if Inventory.Consume(ERSConsumable.STRENGTH_BOOST) then
-  begin
-    WriteLn('Consumed strength boost');
-    Result := True;
-  end
-  else if Inventory.Consume(ERSConsumable.RANGING_BOOST) then
-  begin
-    WriteLn('Consumed ranging boost');
-    Result := True;
-  end
-  else if Inventory.Consume(ERSConsumable.MAGIC_BOOST) then
-  begin
-    WriteLn('Consumed magic boost');
-    Result := True;
-  end
-  else
-  begin
-    WriteLn('No boost potions found in inventory');
-    Result := False;
+    if Inventory.ContainsConsumable(BoostType) then
+    begin
+      if Inventory.Consume(BoostType) then
+      begin
+        WriteLn('Consumed ', ToStr(BoostType).Replace('ERSConsumable.', '').Replace('_', ' ').ToLower());
+        Result := True;
+        Exit;
+      end;
+    end;
   end;
+  
+  if not Result then
+    WriteLn('No boost potions found in inventory');
 end;
 
 begin
