@@ -1,8 +1,10 @@
-{$DEFINE SCRIPT_REVISION := '1.999.1'}
+{$DEFINE SCRIPT_REVISION := '1.9999.9.9 FOR REAL'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 {$I WaspLib/optional/handlers/discord.simba}
+
+// Add failsafe for attack options hidden
 
 var
   WEBHOOKURL: String                     = '';
@@ -30,14 +32,11 @@ type
     LastHourlyReportTime: Int64;
     GainedXP: Integer;
     
-    CaveEntranceAttempts: Int32;
-    LastCaveAttemptTime: UInt64;
-    LastCaveEntryTime: UInt64;
-    FailsafeActive: Boolean;
-    
     ConsecutiveFailedAttacks: Int32;
     LastFailedAttackTime: UInt64;
     LastSuccessfulClick: Boolean;
+    
+    LastCaveExitTime: UInt64;
     
     RunningTime: TStopWatch;
     ActiveTimer: TStopWatch;
@@ -60,7 +59,7 @@ var
   Discord: TDiscordClient;
   ActiveTimer: TStopWatch;
   
-  NPC_DTM1, NPC_DTM2, NPC_DTM3, NPC_DTM4, NPC_DTM5, NPC_DTM6, NPC_DTM7: Int64;
+  NPC_DTM1, NPC_DTM2, NPC_DTM3, NPC_DTM4, NPC_DTM5, NPC_DTM6, NPC_DTM7, CAVE_DTM: Int64;
 
 procedure SetupNPCDTMs();
 begin
@@ -71,6 +70,7 @@ begin
   NPC_DTM5 := DTMFromString('mQwAAAHicY2ZgYGhgYmBohOIQID8MiIOA+M8foAADI8O/f8IMyIARCQMBABS6BpU=');
   NPC_DTM6 := DTMFromString('mQwAAAHicY2ZgYGhhguBWIA4B8sOg+M8foAADIxQjACOqKADZUASW');
   NPC_DTM7 := DTMFromString('mQwAAAHicY2ZgYGhhguBmIA4G8kOBOAiI794FEgyMDP/+8TEgA0YkDAQADEUGVw==');
+  CAVE_DTM := DTMFromString('mQwAAAHicY2ZgYGhiYmCoB+JmII5mgOBYIJ7Pzc3wQUuTYf/+/QzIgBEJAwEAGLoG2Q==');
 end;
 
 procedure FreeNPCDTMs();
@@ -82,6 +82,7 @@ begin
   FreeDTM(NPC_DTM5);
   FreeDTM(NPC_DTM6);
   FreeDTM(NPC_DTM7);
+  FreeDTM(CAVE_DTM);
 end;
 
 function FilterDuplicateDots(Dots: TPointArray): TPointArray;
@@ -1002,177 +1003,6 @@ begin
   SaveScreenshot('Screenshots/GemStoneCrab' + Name + '_' + IntToStr(i) + '.png');
 end;
 
-function GemStoneCrabSlayer.FindAndClickCaveEntrance(): Boolean;
-var
-  RedExclamationDots: TPointArray;
-  i, Attempts: Int32;
-  MinimapPoint: TPoint;
-  MainscreenPoint: TPoint;
-  MouseOverAttempts: Int32;
-  RotationAttempts: Int32;
-  StartTime: UInt64;
-  MaxWaitTime: UInt64;
-  CaveBlocked: Boolean;
-  EnteredCave: Boolean;
-begin
-  Result := False;
-  
-  if (GetTickCount() - Self.LastCaveAttemptTime) > 60000 then
-  begin
-    Self.CaveEntranceAttempts := 0;
-    Self.FailsafeActive := False;
-  end;
-  
-  if Self.CaveEntranceAttempts >= 3 then
-  begin
-    WriteLn('FAILSAFE: Already tried cave entrance 3 times, assuming Mr Crabs is here!');
-    Self.FailsafeActive := True;
-    
-    if Self.FindGemStoneCrab() then
-    begin
-      WriteLn('FAILSAFE: Found Mr Crabs! Resetting cave attempts.');
-      Self.CaveEntranceAttempts := 0;
-      Self.FailsafeActive := False;
-      Exit(True);
-    end
-    else
-    begin
-      WriteLn('FAILSAFE: Could not find Mr Crabs after 3 cave attempts. Terminating script.');
-      Self.TakeScreenshot('_FailsafeTermination');
-      TerminateScript('Failsafe activated: Could not find cave entrance or Mr Crabs after multiple attempts');
-    end;
-  end;
-  
-  for Attempts := 1 to 3 do
-  begin
-    WriteLn('Looking for cave entrance... Attempt ', Attempts, ' (Total: ', Self.CaveEntranceAttempts + 1, ')');
-    
-    if SRL.FindColors(RedExclamationDots, CTS2(8422138, 7, 0.05, 0.76), Minimap.Bounds) then
-    begin
-      for i := 0 to High(RedExclamationDots) do
-      begin
-        MinimapPoint := RedExclamationDots[i];
-        MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-        
-        if not MainScreen.Bounds.Contains(MainscreenPoint) then
-          Continue;
-        
-        MouseOverAttempts := 0;
-        RotationAttempts := 0;
-        repeat
-          Inc(MouseOverAttempts);
-          Mouse.Move(MainscreenPoint);
-          
-          if MainScreen.IsUpText(['Cave']) then
-          begin
-            WriteLn('Found cave entrance, clicking...');
-            Mouse.Click(MOUSE_LEFT);
-            
-            if MainScreen.DidRedClick() then
-            begin
-              WriteLn('Successfully clicked cave.');
-              
-              StartTime := GetTickCount();
-              MaxWaitTime := 15000;
-              CaveBlocked := False;
-              EnteredCave := False;
-              
-              repeat
-                Wait(200, 400);
-                
-                if Chat.HasContinue() then
-                begin
-                  CaveBlocked := True;
-                  Break;
-                end;
-                
-                // Check if we started entering the cave (minimap blck
-                if Minimap.PercentBlack() > 80 then
-                begin
-                  EnteredCave := True;
-                  Break;
-                end;
-                
-              until (GetTickCount() - StartTime) > MaxWaitTime;
-              
-              if CaveBlocked then
-              begin
-                WriteLn('Cave is blocked! Boss must still be here - returning to boss search');
-                Chat.ClickContinue();
-                Wait(500, 1000);
-                Result := False;
-                Exit;
-              end
-              else if EnteredCave then
-              begin
-                WriteLn('Entered cave');
-                
-                if WaitUntil(Minimap.PercentBlack() < 20, 100, 10000) then
-                begin
-                  WriteLn('We are in the cave');
-                  Self.CaveEntranceAttempts := 0;
-                  Self.FailsafeActive := False;
-                  Self.LastCaveEntryTime := GetTickCount();
-                  Result := True;
-                  Exit;
-                end
-                else
-                begin
-                  WriteLn('Cave entry timed out');
-                end;
-              end
-              else
-              begin
-                WriteLn('Timed out waiting for cave response');
-              end;
-            end;
-            Break;
-          end
-          else if MouseOverAttempts >= 2 then
-          begin
-            Inc(RotationAttempts);
-            if RotationAttempts >= 3 then
-            begin
-              WriteLn('Too many rotations for this cave dot, trying next');
-              Break;
-            end;
-            
-            WriteLn('Failed to get cave uptext, rotating camera...');
-            Antiban.RandomRotate();
-            Wait(500, 1000);
-            
-            MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-            if not MainScreen.Bounds.Contains(MainscreenPoint) then
-            begin
-              WriteLn('Cave position moved off-screen after rotation');
-              Break;
-            end;
-            
-            WriteLn('Recalculated cave position after rotation, moving mouse...');
-            Mouse.Move(MainscreenPoint);
-            Wait(300, 500);
-            
-            MouseOverAttempts := 0;
-          end;
-        until MouseOverAttempts >= 2;
-      end;
-    end;
-    
-    if not Result then
-    begin
-      WriteLn('Cave entrance not found on attempt ', Attempts);
-      Wait(1000, 2000);
-    end;
-  end;
-  
-  if not Result then
-  begin
-    Self.CaveEntranceAttempts := Self.CaveEntranceAttempts + 1;
-    Self.LastCaveAttemptTime := GetTickCount();
-    WriteLn('Failed to find cave entrance. Total attempts: ', Self.CaveEntranceAttempts);
-  end;
-end;
-
 function GemStoneCrabSlayer.FindGemStoneCrab(): Boolean;
 var
   YellowDots, MiningIcons, NearbyDots: TPointArray;
@@ -1201,6 +1031,7 @@ begin
   if Length(MiningIcons) = 0 then 
   begin
     WriteLn('No mining icon found');
+    TakeScreenshot('_NoMiningIcon');
     Exit(False);
   end;
   
@@ -1409,6 +1240,7 @@ procedure GemStoneCrabSlayer.DoAction();
 var
   CurrentXP: Integer;
   TimeSinceLastXP: UInt64;
+  CaveBlocked: Boolean;
 begin
   if (Self.ConsecutiveFailedAttacks > 0) and 
      (Self.LastFailedAttackTime > 0) and 
@@ -1454,38 +1286,30 @@ begin
   end
   else
   begin
-    if (Self.LastCaveEntryTime > 0) and ((GetTickCount() - Self.LastCaveEntryTime) < 15000) then
+    WriteLn('Not in combat - looking for boss...');
+    
+    if Self.FindGemStoneCrab() then
     begin
-      WriteLn('Waiting for boss to spawn after cave entry... (' + 
-              IntToStr(Round((GetTickCount() - Self.LastCaveEntryTime) / 1000)) + 's)');
-      
-      if Self.FindGemStoneCrab() then
-      begin
-        WriteLn('Boss spawned! Found and attacked Gemstone Crab!');
-        Self.LastCaveEntryTime := 0;
-      end
-      else
-      begin
-        Wait(1000, 1500);
-      end;
+      WriteLn('Found and attacked Gemstone Crab!');
     end
     else
     begin
-      if Self.FindGemStoneCrab() then
+      if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
       begin
-        WriteLn('Found and attacked Gemstone Crab!');
+        WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
       end
       else
       begin
         WriteLn('No boss found - attempting to enter cave');
-        if Self.FindAndClickCaveEntrance() then
+        CaveBlocked := Self.TryEnterCave();
+        
+        if CaveBlocked then
         begin
-          WriteLn('Cave entry successful - boss should spawn soon');
-          Self.LastCaveEntryTime := GetTickCount();
+          WriteLn('Cave is blocked - Searching for boss again...');
         end
         else
         begin
-          WriteLn('Cave blocked - boss must still be here, searching again');
+          WriteLn('Successfully entered cave - waiting for boss to spawn...');
         end;
       end;
     end;
@@ -1573,14 +1397,11 @@ begin
   Self.IsAttacking := False;
   Self.LastHealthCheck := GetTickCount();
   
-  Self.CaveEntranceAttempts := 0;
-  Self.LastCaveAttemptTime := 0;
-  Self.LastCaveEntryTime := 0;
-  Self.FailsafeActive := False;
-  
   Self.ConsecutiveFailedAttacks := 0;
   Self.LastFailedAttackTime := 0;
   Self.LastSuccessfulClick := False;
+  
+  Self.LastCaveExitTime := 0;
   
   Self.LastAPIUpdate := GetTickCount();
   Self.ApiUpdateInterval := 5 * 60000;
@@ -1779,6 +1600,92 @@ begin
     end;
     raise;
   end;
+end;
+
+function GemStoneCrabSlayer.TryEnterCave(): Boolean;
+var
+  CaveEntranceDots: TPointArray;
+  i: Int32;
+  MinimapPoint: TPoint;
+  MainscreenPoint: TPoint;
+  StartTime: UInt64;
+begin
+  Result := False;
+  
+  WriteLn('Looking for cave entrance...');
+  
+  // Find cave entrance using DTM
+  if not FindDTMs(CAVE_DTM, CaveEntranceDots, Minimap.Bounds) then
+  begin
+    WriteLn('No cave entrance found on minimap');
+    TakeScreenshot('NoCaveEntrance');
+    Exit(False);
+  end;
+  
+  WriteLn('Found ', Length(CaveEntranceDots), ' cave entrance(s)');
+  
+  for i := 0 to High(CaveEntranceDots) do
+  begin
+    MinimapPoint := CaveEntranceDots[i];
+    MainscreenPoint := Minimap.PointToMS(MinimapPoint);
+    
+    if not MainScreen.Bounds.Contains(MainscreenPoint) then
+      Continue;
+    
+    Mouse.Move(MainscreenPoint);
+    
+    if MainScreen.IsUpText(['Cave']) then
+    begin
+      WriteLn('Found cave entrance, clicking...');
+      Mouse.Click(MOUSE_LEFT);
+      
+      if MainScreen.DidRedClick() then
+      begin
+        WriteLn('Successfully clicked cave.');
+        StartTime := GetTickCount();
+        
+        repeat  
+          // Check if we get themessage
+          if Chat.HasContinue() then
+          begin
+            WriteLn('Cave is blocked!');
+            Self.TakeScreenshot('CaveBlocked');
+            Chat.ClickContinue();
+            Exit(True);
+          end;
+          
+          // Check if we successfully entered (minimap goes black)
+          if Minimap.PercentBlack() > 80 then
+          begin
+            WriteLn('Entering cave...');
+            
+            if WaitUntil(Minimap.PercentBlack() < 20, 100, 10000) then
+            begin
+              WriteLn('Successfully exited cave');
+              Self.LastCaveExitTime := GetTickCount();
+              Exit(False);
+            end
+            else
+            begin
+              WriteLn('Cave loading timed out how we get here?');
+              Exit(False);
+            end;
+          end;
+          
+        until (GetTickCount() - StartTime) > 15000; // 15 second timeout
+        
+        WriteLn('Cave timed out');
+        Exit(False);
+      end
+      else
+      begin
+        WriteLn('Failed to red click cave entrance');
+      end;
+    end;
+  end;
+  
+  WriteLn('No valid cave entrance found');
+  Exit(False);
 end;
 
 begin
