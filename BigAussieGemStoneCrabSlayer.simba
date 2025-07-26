@@ -1280,12 +1280,6 @@ begin
       Result := False;
     end;
   end;
-
-  if WL.Activity.IsFinished() then
-  begin
-    WriteLn('No activity detected in 5 minutes! Shutting down.');
-    TerminateScript('No activity detected in 5 minutes');
-  end;
 end;
 
 function GemStoneCrabSlayer.HandleCombat(): Boolean;
@@ -1449,6 +1443,12 @@ begin
         end;
       end;
     end;
+  end;
+
+  if WL.Activity.IsFinished() then
+    begin
+    WriteLn('No activity detected in 5 minutes! Shutting down.');
+    TerminateScript('No activity detected in 5 minutes');
   end;
 end;
 
@@ -1659,67 +1659,35 @@ begin
   try
     Self.Init(MaxActions, MaxTime);
     repeat
-      try
-        if (GetTickCount() - Self.LastImageClear) >= 30000 then
-        begin
-          RSClient.Image.Clear;
-          Self.LastImageClear := GetTickCount();
-        end;
-        
-        Self.CheckForLevelUp();
-        Self.CheckHourlyReport();
-        Self.CheckSystemUpdate();
-        
-        if Self.ShouldHopWorld() then
-        begin
-          Self.DoWorldHop();
-          Continue;
-        end;
-        
-        Self.DoAction();
-
-        if Self.InCombat or Self.IsAttacking then
-        begin
-          Self.DoAntiban(False, False); // No breaks or sleeps during combat
-        end
-        else
-        begin
-          Self.DoAntiban(True, True); // This way we only check out of combat
-        end;
-        
-        if (GetTimeRunning() mod 10000) < 1000 then
-          Self.Report();
-          
-        Wait(100, 300);
-        
-        if (GetTickCount() - LastExceptionTime) > 600000 then
-          ExceptionCount := 0;
-          
-      except
-        Inc(ExceptionCount);
-        LastExceptionTime := GetTickCount();
-        
-        WriteLn('Exception caught: ' + GetExceptionMessage());
-        Self.TakeScreenshot('_Exception');
-        
-        if ExceptionCount >= 5 then
-        begin
-          if ENABLEWEBHOOKS then
-          begin
-            try
-              Discord.Webhook.Content := '';
-              Discord.Webhook.Content += '**SCRIPT CRASHED** :warning: Too many exceptions (' + IntToStr(ExceptionCount) + '). Last error: ' + GetExceptionMessage();
-              Discord.Send();
-            except
-              WriteLn('[Discord] Failed to send crash notification');
-            end;
-          end;
-          TerminateScript('Too many exceptions - script terminated');
-        end;
-        
-        Wait(1000, 2000);
+      if (GetTickCount() - Self.LastImageClear) >= 30000 then
+      begin
+        RSClient.Image.Clear;
+        Self.LastImageClear := GetTickCount();
       end;
-    end;
+        
+      Self.CheckForLevelUp();
+      Self.CheckHourlyReport();
+      Self.CheckSystemUpdate();
+        
+      if Self.ShouldHopWorld() then
+      begin
+        Self.DoWorldHop();
+        Continue;
+      end;
+        
+      Self.DoAction();
+
+      if Self.InCombat or Self.IsAttacking then
+      begin
+        Self.DoAntiban(False, False); // No breaks or sleeps during combat
+      end
+      else
+      begin
+        Self.DoAntiban(True, True); // This way we only check out of combat
+      end;
+        
+      if (GetTimeRunning() mod 10000) < 1000 then
+        Self.Report();
       
     until Self.ShouldStop();
     
