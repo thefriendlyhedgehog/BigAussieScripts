@@ -1298,14 +1298,14 @@ begin
     Self.LastHealthCheck := GetTickCount();
     Self.InCombat := True;
     WL.Activity.Restart();
+  
+    // Check if we need to repot while in combat
+    Self.TryRepot();
 
     if ABLOSEFOCUS then
     begin
       Antiban.LoseFocus();
     end;
-    
-    // Check if we need to repot while in combat
-    Self.TryRepot();
   end
   else
   begin
