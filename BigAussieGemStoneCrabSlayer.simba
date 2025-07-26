@@ -2121,7 +2121,7 @@ begin
   
   BoostCategories := [
     // Combat potions (attack + strength + defence)
-    ['Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)', 'Zamorak brew(1..4)', 'Zamorak mix(1..4)'],
+    ['Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)', 'Zamorak brew(1..4)'],
     // Strength boosts
     ['Divine super strength potion(1..4)', 'Super strength(1..4)', 'Strength potion(1..4)'],
     // Attack boosts  
