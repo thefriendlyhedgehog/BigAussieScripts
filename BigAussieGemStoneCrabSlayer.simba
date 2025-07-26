@@ -133,6 +133,7 @@ function GemStoneCrabSlayer.GetRandomWorldHopTime(): UInt64;
 var
   BaseInterval: UInt64;
   RandomVariation: Integer;
+  MinimumInterval: UInt64;
 begin
   BaseInterval := WORLDHOPINTERVAL * 60000;
   
@@ -140,11 +141,14 @@ begin
   RandomVariation := Random(-25, 25);
   Result := BaseInterval + Round(BaseInterval * (RandomVariation / 100.0));
   
-  if Result < 900000 then
-    Result := 900000;
+  MinimumInterval := (12 * 60000) + Random(0, 6 * 60000);
+  
+  if Result < MinimumInterval then
+    Result := MinimumInterval;
     
   WriteLn('Next world hop scheduled in: ' + SRL.MsToTime(Result, Time_Short) + 
-          ' (Base: ' + IntToStr(WORLDHOPINTERVAL) + 'min, Variation: ' + IntToStr(RandomVariation) + '%)');
+          ' (Base: ' + IntToStr(WORLDHOPINTERVAL) + 'min, Variation: ' + IntToStr(RandomVariation) + 
+          '%, Min: ' + SRL.MsToTime(MinimumInterval, Time_Short) + ')');
 end;
 
 function GemStoneCrabSlayer.GetWorldHopTimeRange(): String;
@@ -1590,10 +1594,10 @@ begin
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
 
   if Length(Antiban.Breaks) > 0 then
-    WriteLn('   Next break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
+    WriteLn('   Next break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - GetTimeRunning())), Time_Short));
   if Length(Antiban.Sleeps) > 0 then
     if Antiban.Sleeps[0].NextAtTime > GetTimeRunning then
-      WriteLn('   Next sleep: ' + SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - Self.RunningTime.ElapsedTime)), Time_Short));
+      WriteLn('   Next sleep: ' + SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - GetTimeRunning())), Time_Short));
   
   if ENABLEWORLDHOPPING then
   begin
