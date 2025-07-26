@@ -61,7 +61,6 @@ type
 
     ConsumableHandler: TConsumableHandler;
     
-    // Fallback mode - use mining icon directly when cave is blocked
     UseFallbackMode: Boolean;
   end;
 
@@ -137,7 +136,7 @@ var
 begin
   BaseInterval := WORLDHOPINTERVAL * 60000;
   
-  // ±25% random variation to the interval eitherside
+  // 25% random variation to the interval eitherside
   RandomVariation := Random(-25, 25);
   Result := BaseInterval + Round(BaseInterval * (RandomVariation / 100.0));
   
