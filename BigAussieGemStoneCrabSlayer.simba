@@ -1883,7 +1883,6 @@ begin
   
   WriteLn('Found ', Length(CaveEntranceDots), ' cave entrance(s)');
   
-  // First, try to find a cave entrance that's already visible on mainscreen
   for i := 0 to High(CaveEntranceDots) do
   begin
     MinimapPoint := CaveEntranceDots[i];
@@ -1903,15 +1902,13 @@ begin
     end;
   end;
   
-  // If no visible cave found, make the first cave entrance visible
   if not FoundVisibleCave then
   begin
-    WriteLn('No cave entrance visible on mainscreen, making first cave entrance visible...');
+    WriteLn('No cave entrance visible on mainscreen');
     
     if Minimap.MakePointVisible(CaveEntranceDots[0]) then
     begin
       WriteLn('Successfully rotated camera towards cave entrance');
-      Wait(500, 800); // Brief wait for camera rotation to complete
       
       MainscreenPoint := Minimap.PointToMS(CaveEntranceDots[0]);
       
@@ -1942,21 +1939,18 @@ begin
     end;
   end;
   
-  // If we still haven't found a clickable cave, exit
   if not FoundVisibleCave then
   begin
     WriteLn('No valid cave entrance found after attempting camera rotation');
     Exit(False);
   end;
   
-  // Handle the cave click result
   if MainScreen.DidRedClick() then
   begin
     WriteLn('Successfully clicked cave.');
     StartTime := GetTickCount();
     
     repeat  
-      // Check if we get the blocked message
       if Chat.HasContinue() then
       begin
         WriteLn('Cave is blocked!');
