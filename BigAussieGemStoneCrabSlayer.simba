@@ -1091,9 +1091,9 @@ begin
       Distance := YellowDots[i].DistanceTo(MiningIcons[j]);
       //WriteLn('Yellow dot ', i, ' is ', FloatToStr(Distance), ' pixels away from mining icon ', j);
       
-      if Distance <= 8 then // 2 Spawns can use 4 but one spawn is 7.1 roughly so lets use 8
+      if Distance <= 10 then // 2 Spawns can use 4 but one spawn is 7.1 roughly so lets use 8
       begin
-        //WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 8) - adding to nearby dots');
+        WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 10) - adding to nearby dots');
         NearbyDots := NearbyDots + [YellowDots[i]];
         Break;
       end;
@@ -1102,6 +1102,7 @@ begin
   
   if Length(NearbyDots) = 0 then
   begin
+    WriteLn('No nearby dots found');
     Exit(False);
   end;
   
