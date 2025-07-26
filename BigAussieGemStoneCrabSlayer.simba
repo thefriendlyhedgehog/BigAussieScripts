@@ -1,10 +1,8 @@
-{$DEFINE SCRIPT_REVISION := '0.92'}
+{$DEFINE SCRIPT_REVISION := '0.93'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 {$I WaspLib/optional/handlers/discord.simba}
-
-// Fix gamechat antiban shit
 
 var
   WEBHOOKURL: String                     = '';
@@ -23,13 +21,10 @@ type
     IsAttacking: Boolean;
     LastHealthCheck: UInt64;
     
-    TotalKills: Int32;
     StartXP: Int32;
     CurrentXP: Integer;
     PrevXP: Integer;
     XPGained: Integer;
-    LastLevel: Int32;
-    CurrentLevel: Int32;
     LastHourlyReportTime: Int64;
     GainedXP: Integer;
     
@@ -414,6 +409,7 @@ begin
   RSMouseZoom.SetZoomLevel(newZoom);
 end;
 
+// Disablechat antiban becaUse of chatbot and like who does this
 procedure TAntiban.RandomChatTask(); override;
 begin
   Exit;
@@ -424,9 +420,6 @@ begin
   Self.Skills := [ERSSkill.TOTAL, ERSSkill.ATTACK, ERSSkill.STRENGTH, ERSSkill.DEFENCE, ERSSkill.HITPOINTS];
   Self.MinZoom := 0;
   Self.MaxZoom := 10;
-  
-  // Disable random tab switching for chatbot and like who does this
-  WLSettings.SetAntibanGametabs(False);
   
   Antiban.OnStartBreak := @OnBreakStart;
   Antiban.OnFinishBreak := @OnBreakFinish;
@@ -1338,6 +1331,9 @@ var
   TimeSinceLastXP: UInt64;
 begin
   Result := True;
+
+  // Check if we need to repot while in combat
+  Self.TryRepot();
   
   CurrentXP := Self.SafeReadXPBar();
   TimeSinceLastXP := GetTickCount() - Self.LastHealthCheck;
@@ -1348,9 +1344,6 @@ begin
     Self.LastHealthCheck := GetTickCount();
     Self.InCombat := True;
     WL.Activity.Restart();
-  
-    // Check if we need to repot while in combat
-    Self.TryRepot();
 
     if ABLOSEFOCUS then
     begin
@@ -1364,7 +1357,6 @@ begin
       WriteLn('Combat ended - no bars found');
       Self.InCombat := False;
       Self.IsAttacking := False;
-      Self.TotalKills := Self.TotalKills + 1;
       Result := False;
     end
     else if TimeSinceLastXP > 15000 then
@@ -1372,18 +1364,8 @@ begin
       WriteLn('Combat ended - no XP gained for 15 seconds');
       Self.InCombat := False;
       Self.IsAttacking := False;
-      Self.TotalKills := Self.TotalKills + 1;
       Result := False;
     end;
-  end;
-end;
-
-procedure GemStoneCrabSlayer.CheckForLevelUp();
-begin
-  Self.CurrentLevel := Stats.GetLevel(ERSSkill.ATTACK);
-  if Self.CurrentLevel > Self.LastLevel then
-  begin
-    Self.LastLevel := Self.CurrentLevel;
   end;
 end;
 
@@ -1639,8 +1621,6 @@ begin
   
   Self.StartXP := Self.SafeReadXPBar();
   Self.PrevXP := Self.StartXP;
-  Self.TotalKills := 0;
-  Self.LastLevel := Stats.GetLevel(ERSSkill.ATTACK);
   Self.LastHourlyReportTime := 0;
   
   Self.InCombat := False;
