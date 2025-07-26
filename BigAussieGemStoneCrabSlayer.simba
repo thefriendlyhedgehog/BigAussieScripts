@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.97'}
+{$DEFINE SCRIPT_REVISION := '0.99'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1856,7 +1856,7 @@ end;
 function GemStoneCrabSlayer.TryEnterCave(): Boolean;
 var
   CaveEntranceDots: TPointArray;
-  i, attemptCount: Int32;
+  i: Int32;
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
   StartTime: UInt64;
@@ -1866,211 +1866,198 @@ var
   YellowDots: TPointArray;
   BossNearSpawn: Boolean;
   Distance: Double;
+  FoundVisibleCave: Boolean;
 begin
   Result := False;
+  FoundVisibleCave := False;
   
-  for attemptCount := 1 to 2 do
+  WriteLn('Looking for cave entrance...');
+  
+  // Find cave entrance using DTM
+  if not FindDTMs(CAVE_DTM, CaveEntranceDots, Minimap.Bounds) then
   begin
-    WriteLn('Looking for cave entrance...');
+    WriteLn('No cave entrance found on minimap');
+    TakeScreenshot('NoCaveEntrance');
+    Exit(False);
+  end;
+  
+  WriteLn('Found ', Length(CaveEntranceDots), ' cave entrance(s)');
+  
+  // First, try to find a cave entrance that's already visible on mainscreen
+  for i := 0 to High(CaveEntranceDots) do
+  begin
+    MinimapPoint := CaveEntranceDots[i];
+    MainscreenPoint := Minimap.PointToMS(MinimapPoint);
     
-    // Find cave entrance using DTM
-    if not FindDTMs(CAVE_DTM, CaveEntranceDots, Minimap.Bounds) then
+    if MainScreen.Bounds.Contains(MainscreenPoint) then
     begin
-      if attemptCount = 1 then
-      begin
-        WriteLn('No cave entrance found on attempt ', attemptCount, ' - rotating camera towards mining icon...');
-        MiningIcons := FindMiningIcons();
-        if Length(MiningIcons) > 0 then
-        begin
-          if Minimap.MakePointVisible(MiningIcons[0]) then
-            WriteLn('Rotated camera towards mining icon')
-          else
-            WriteLn('Failed to rotate camera towards mining icon');
-        end;
-        Continue;
-      end
-      else
-      begin
-        WriteLn('No cave entrance found after camera rotation');
-        TakeScreenshot('NoCaveEntrance');
-        Exit(False);
-      end;
-    end;
-    
-    WriteLn('Found ', Length(CaveEntranceDots), ' cave entrance(s) on attempt ', attemptCount);
-    
-    for i := 0 to High(CaveEntranceDots) do
-    begin
-      MinimapPoint := CaveEntranceDots[i];
-      MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-      
-      if not MainScreen.Bounds.Contains(MainscreenPoint) then
-      begin
-        if Minimap.MakePointVisible(MinimapPoint) then
-        begin
-          WriteLn('Successfully rotated camera to find cave entrance.');
-          MainscreenPoint := Minimap.PointToMS(MinimapPoint);
-          
-          if MainScreen.Bounds.Contains(MainscreenPoint) then
-            Mouse.Move(MainscreenPoint)
-          else
-          begin
-            WriteLn('Cave entrance still not visible after camera rotation, skipping...');
-            Continue;
-          end;
-        end
-        else
-        begin
-          WriteLn('Failed to make cave entrance visible, skipping...');
-          Continue;
-        end;
-      end
-      else
-      begin
-        Mouse.Move(MainscreenPoint);
-      end;
+      Mouse.Move(MainscreenPoint);
       
       if MainScreen.IsUpText(['Cave']) then
       begin
-        WriteLn('Found cave entrance, clicking...');
+        WriteLn('Found visible cave entrance, clicking...');
         Mouse.Click(MOUSE_LEFT);
-        
-        if MainScreen.DidRedClick() then
-        begin
-          WriteLn('Successfully clicked cave.');
-          StartTime := GetTickCount();
-          
-          repeat  
-            if Chat.HasContinue() then
-            begin
-              WriteLn('Cave is blocked!');
-              Self.TakeScreenshot('CaveBlocked');
-              Chat.ClickContinue();
-              
-              WriteLn('Cave blocked - rotating camera towards mining icon to find boss...');
-              MiningIcons := FindMiningIcons();
-              if Length(MiningIcons) > 0 then
-              begin
-                if Minimap.MakePointVisible(MiningIcons[0]) then
-                  WriteLn('Rotated camera towards mining icon to find boss')
-                else
-                  WriteLn('Failed to rotate camera towards mining icon');
-              end;
-              
-              Exit(True);
-            end;
-            
-            // Check if we successfully entered (minimap black)
-            if Minimap.PercentBlack() > 80 then
-            begin
-              WriteLn('Entering cave...');
-              
-              if WaitUntil(Minimap.PercentBlack() < 20, 65, 10000) then
-              begin
-                WriteLn('Successfully exited cave');
-                Self.LastCaveExitTime := GetTickCount();
-                
-                WriteLn('Checking if boss is already available...');
-                YellowDots := FindYellowNPCDots();
-                MiningIcons := FindMiningIcons();
-                
-                BossNearSpawn := False;
-                if (Length(YellowDots) > 0) and (Length(MiningIcons) > 0) then
-                begin
-                  for i := 0 to High(YellowDots) do
-                  begin
-                    for j := 0 to High(MiningIcons) do
-                    begin
-                      Distance := YellowDots[i].DistanceTo(MiningIcons[j]);
-                      if Distance <= 10 then
-                      begin
-                        BossNearSpawn := True;
-                        Break;
-                      end;
-                    end;
-                    if BossNearSpawn then Break;
-                  end;
-                end;
-                
-                if BossNearSpawn then
-                begin
-                  WriteLn('Boss already available near spawn - no need to move closer');
-                end
-                else
-                begin
-                  WriteLn('No boss found near spawn - moving closer to spawn point...');
-                  
-                  if Length(MiningIcons) > 0 then
-                  begin
-                    MinimapPoint := MiningIcons[0]; // Adjust the 15s if randoness is to much
-                    MinimapPoint.X := MinimapPoint.X + Random(-15, 15);
-                    MinimapPoint.Y := MinimapPoint.Y + Random(-15, 15);
-                    
-                    MiningPoint := Minimap.PointToMS(MinimapPoint);
-                    
-                    if MainScreen.Bounds.Contains(MiningPoint) then
-                    begin
-                      WriteLn('Clicking near mining icon to move closer to boss spawn area...');
-                      Mouse.Move(MiningPoint);
-                      
-                      if MainScreen.IsUpText(['Walk here']) then
-                      begin
-                        Mouse.Click(MOUSE_LEFT);
-                        WriteLn('Successfully clicked to move closer to boss spawn area');
-                      end
-                      else
-                      begin
-                        WriteLn('Unexpected uptext when trying to move closer: "', MainScreen.GetUpText(), '"');
-                      end;
-                    end
-                    else
-                    begin
-                      WriteLn('Random point near mining icon not visible on mainscreen');
-                    end;
-                  end
-                  else
-                  begin
-                    WriteLn('No mining icons found to move closer to boss spawn');
-                  end;
-                end;
-                
-                Exit(False);
-              end
-              else
-              begin
-                WriteLn('Cave loading timed out how we get here?');
-                Exit(False);
-              end;
-            end;
-            
-          until (GetTickCount() - StartTime) > 15000; // 15 second timeout
-          
-          WriteLn('Cave timed out');
-          Exit(False);
-        end
-        else
-        begin
-          WriteLn('Failed to red click cave entrance');
-        end;
-      end;
-    end;
-    
-    if attemptCount = 1 then
-    begin
-      WriteLn('No valid cave entrances found on attempt ', attemptCount, ' - rotating camera towards mining icon for retry...');
-      MiningIcons := FindMiningIcons();
-      if Length(MiningIcons) > 0 then
-      begin
-        if Minimap.MakePointVisible(MiningIcons[0]) then
-          WriteLn('Rotated camera towards mining icon for retry')
-        else
-          WriteLn('Failed to rotate camera towards mining icon for retry');
+        FoundVisibleCave := True;
+        Break;
       end;
     end;
   end;
   
-  WriteLn('No valid cave entrance found after all attempts');
-  Exit(False);
+  // If no visible cave found, make the first cave entrance visible
+  if not FoundVisibleCave then
+  begin
+    WriteLn('No cave entrance visible on mainscreen, making first cave entrance visible...');
+    
+    if Minimap.MakePointVisible(CaveEntranceDots[0]) then
+    begin
+      WriteLn('Successfully rotated camera towards cave entrance');
+      Wait(500, 800); // Brief wait for camera rotation to complete
+      
+      MainscreenPoint := Minimap.PointToMS(CaveEntranceDots[0]);
+      
+      if MainScreen.Bounds.Contains(MainscreenPoint) then
+      begin
+        Mouse.Move(MainscreenPoint);
+        
+        if MainScreen.IsUpText(['Cave']) then
+        begin
+          WriteLn('Found cave entrance after camera rotation, clicking...');
+          Mouse.Click(MOUSE_LEFT);
+          FoundVisibleCave := True;
+        end
+        else
+        begin
+          WriteLn('Cave entrance not recognized after camera rotation. Uptext: "', MainScreen.GetUpText(), '"');
+        end;
+      end
+      else
+      begin
+        WriteLn('Cave entrance still not visible on mainscreen after camera rotation');
+      end;
+    end
+    else
+    begin
+      WriteLn('Failed to rotate camera towards cave entrance');
+      Exit(False);
+    end;
+  end;
+  
+  // If we still haven't found a clickable cave, exit
+  if not FoundVisibleCave then
+  begin
+    WriteLn('No valid cave entrance found after attempting camera rotation');
+    Exit(False);
+  end;
+  
+  // Handle the cave click result
+  if MainScreen.DidRedClick() then
+  begin
+    WriteLn('Successfully clicked cave.');
+    StartTime := GetTickCount();
+    
+    repeat  
+      // Check if we get the blocked message
+      if Chat.HasContinue() then
+      begin
+        WriteLn('Cave is blocked!');
+        Self.TakeScreenshot('CaveBlocked');
+        Chat.ClickContinue();
+        Exit(True);
+      end;
+      
+      // Check if we successfully entered (minimap black)
+      if Minimap.PercentBlack() > 80 then
+      begin
+        WriteLn('Entering cave...');
+        
+        if WaitUntil(Minimap.PercentBlack() < 20, 65, 10000) then
+        begin
+          WriteLn('Successfully exited cave');
+          Self.LastCaveExitTime := GetTickCount();
+          
+          WriteLn('Checking if boss is already available...');
+          YellowDots := FindYellowNPCDots();
+          MiningIcons := FindMiningIcons();
+          
+          BossNearSpawn := False;
+          if (Length(YellowDots) > 0) and (Length(MiningIcons) > 0) then
+          begin
+            for i := 0 to High(YellowDots) do
+            begin
+              for j := 0 to High(MiningIcons) do
+              begin
+                Distance := YellowDots[i].DistanceTo(MiningIcons[j]);
+                if Distance <= 10 then
+                begin
+                  BossNearSpawn := True;
+                  Break;
+                end;
+              end;
+              if BossNearSpawn then Break;
+            end;
+          end;
+          
+          if BossNearSpawn then
+          begin
+            WriteLn('Boss already available near spawn - no need to move closer');
+          end
+          else
+          begin
+            WriteLn('No boss found near spawn - moving closer to spawn point...');
+            
+            if Length(MiningIcons) > 0 then
+            begin
+              MinimapPoint := MiningIcons[0]; // Adjust the 15s if randomness is too much
+              MinimapPoint.X := MinimapPoint.X + Random(-15, 15);
+              MinimapPoint.Y := MinimapPoint.Y + Random(-15, 15);
+              
+              MiningPoint := Minimap.PointToMS(MinimapPoint);
+              
+              if MainScreen.Bounds.Contains(MiningPoint) then
+              begin
+                WriteLn('Clicking near mining icon to move closer to boss spawn area...');
+                Mouse.Move(MiningPoint);
+                
+                if MainScreen.IsUpText(['Walk here']) then
+                begin
+                  Mouse.Click(MOUSE_LEFT);
+                  WriteLn('Successfully clicked to move closer to boss spawn area');
+                end
+                else
+                begin
+                  WriteLn('Unexpected uptext when trying to move closer: "', MainScreen.GetUpText(), '"');
+                end;
+              end
+              else
+              begin
+                WriteLn('Random point near mining icon not visible on mainscreen');
+              end;
+            end
+            else
+            begin
+              WriteLn('No mining icons found to move closer to boss spawn');
+            end;
+          end;
+          
+          Exit(False);
+        end
+        else
+        begin
+          WriteLn('Cave loading timed out how we get here?');
+          Exit(False);
+        end;
+      end;
+      
+    until (GetTickCount() - StartTime) > 15000; // 15 second timeout
+    
+    WriteLn('Cave timed out');
+    Exit(False);
+  end
+  else
+  begin
+    WriteLn('Failed to red click cave entrance');
+    Exit(False);
+  end;
 end;
 
 function GemStoneCrabSlayer.GetRandomRepotTime(): UInt64;
@@ -2140,7 +2127,7 @@ begin
   
   BoostCategories := [
     // Combat potions (attack + strength + defence)
-    ['Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)'],
+    ['Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)', 'Zamorak brew(1..4)', 'Zamorak mix(1..4)'],
     // Strength boosts
     ['Divine super strength potion(1..4)', 'Super strength(1..4)', 'Strength potion(1..4)'],
     // Attack boosts  
