@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.4'}
+{$DEFINE SCRIPT_REVISION := '0.6'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -12,7 +12,6 @@ var
   ENABLEWEBHOOKS: Boolean                = True; 
   ENABLEWORLDHOPPING: Boolean            = True;
   WORLDHOPINTERVAL: Integer              = 45;
-  SENDLEVELUPNOTIFICATIONMSG: Boolean    = True;
   SENDSESSIONSUMMARYMSG: Boolean         = True;
   SENDHOURLYREPORTMSG: Boolean           = True;
   ABLOSEFOCUS: Boolean                   = True;
@@ -239,7 +238,7 @@ begin
 
   if not Logout.IsWorldSwitcherOpen() then
     Logout.GetButton(ERSLogoutButton.WORLD_SWITCHER).Click(MOUSE_LEFT);
-  WaitUntil((currentWorld := WorldHopper.GetCurrentWorld()) <> 0, 200, 12000);
+  WaitUntil((currentWorld := WorldHopper.GetCurrentWorld()) <> 0, 65, 20000);
   
   WriteLn('Current world: ' + ToStr(currentWorld));
   WriteLn('Available worlds: ' + ToStr(playerWorlds));
@@ -416,7 +415,7 @@ type
     WorldHopIntervalInput: TLabeledEdit;
     RepotIntervalInput: TLabeledEdit;
     EnableWebhooksCheckBox,
-    HourlyReportsCheckBox, ScreenshotOnLevelCheckBox, SessionSummaryCheckBox, 
+    HourlyReportsCheckBox, SessionSummaryCheckBox, 
     LoseFocusCheckBox, EnableWorldHoppingCheckBox, UseBoostsCheckBox: TLabeledCheckBox;
     WebhookInfo: TLabel;
     TestButton: TButton;
@@ -476,7 +475,7 @@ procedure TConfig.LoadUserSettings();
 var
   SavedWebhookURL: String;
   SavedEnableWebhooks: Boolean;
-  SavedHourlyReports, SavedLevelUpNotifications, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping, SavedUseBoosts: Boolean;
+  SavedHourlyReports, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping, SavedUseBoosts: Boolean;
   SavedWorldHopInterval, SavedRepotInterval: Integer;
   Username: String;
 begin
@@ -488,7 +487,6 @@ begin
   if Username = '' then Exit;
 
   SavedHourlyReports := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'HourlyReports', 'Configs/BASettings.ini'), True);
-  SavedLevelUpNotifications := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', 'Configs/BASettings.ini'), True);
   SavedSessionSummary := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'SessionSummary', 'Configs/BASettings.ini'), True);
   SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
   SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
@@ -500,9 +498,6 @@ begin
 
   if Assigned(Self.HourlyReportsCheckBox) then
     Self.HourlyReportsCheckBox.SetChecked(SavedHourlyReports);
-
-  if Assigned(Self.ScreenshotOnLevelCheckBox) then
-    Self.ScreenshotOnLevelCheckBox.SetChecked(SavedLevelUpNotifications);
 
   if Assigned(Self.SessionSummaryCheckBox) then
     Self.SessionSummaryCheckBox.SetChecked(SavedSessionSummary);
@@ -546,9 +541,6 @@ begin
   if Assigned(Self.HourlyReportsCheckBox) then
     SENDHOURLYREPORTMSG := Self.HourlyReportsCheckBox.IsChecked();
 
-  if Assigned(Self.ScreenshotOnLevelCheckBox) then
-    SENDLEVELUPNOTIFICATIONMSG := Self.ScreenshotOnLevelCheckBox.IsChecked();
-
   if Assigned(Self.SessionSummaryCheckBox) then
     SENDSESSIONSUMMARYMSG := Self.SessionSummaryCheckBox.IsChecked();
 
@@ -576,7 +568,6 @@ begin
   WriteINI(Username + ' Webhook Settings', 'WebhookURL', WEBHOOKURL, 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'EnableWebhooks', BoolToStr(ENABLEWEBHOOKS, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'HourlyReports', BoolToStr(SENDHOURLYREPORTMSG, 'true', 'false'), 'Configs/BASettings.ini');
-  WriteINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', BoolToStr(SENDLEVELUPNOTIFICATIONMSG, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Webhook Settings', 'SessionSummary', BoolToStr(SENDSESSIONSUMMARYMSG, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Antiban Manager', 'LoseFocus', BoolToStr(ABLOSEFOCUS, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', BoolToStr(ENABLEWORLDHOPPING, 'true', 'false'), 'Configs/BASettings.ini');
@@ -609,8 +600,6 @@ begin
     Self.WebHookInput.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.TestButton) then
     Self.TestButton.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
-  if Assigned(Self.ScreenshotOnLevelCheckBox) then
-    Self.ScreenshotOnLevelCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.HourlyReportsCheckBox) then
     Self.HourlyReportsCheckBox.SetVisible(Self.EnableWebhooksCheckBox.IsChecked());
   if Assigned(Self.SessionSummaryCheckBox) then
@@ -672,7 +661,7 @@ var
   tab: TTabSheet;
   SavedWebhookURL: String;
   SavedEnableWebhooks: Boolean;
-  SavedScreenshotOnLevel, SavedHourlyReports, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping, SavedUseBoosts: Boolean;
+  SavedHourlyReports, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping, SavedUseBoosts: Boolean;
   SavedWorldHopInterval, SavedRepotInterval: Integer;
   panelTop: Int32;
 begin
@@ -697,7 +686,6 @@ begin
 
   SavedWebhookURL := ReadINI(Username + ' Webhook Settings', 'WebhookURL', 'Configs/BASettings.ini');
   SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
-  SavedScreenshotOnLevel := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'ScreenshotOnLevel', 'Configs/BASettings.ini'), True);
   SavedHourlyReports := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'HourlyReports', 'Configs/BASettings.ini'), True);
   SavedSessionSummary := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'SessionSummary', 'Configs/BASettings.ini'), True);
   SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
@@ -803,22 +791,12 @@ begin
     SetHint('Send a test message to your webhook.');
   end;
 
-  with Self.ScreenshotOnLevelCheckBox do
-  begin
-    Create(Self.DiscordPanel.Panel);
-    SetCaption('Screenshot on Level Up');
-    SetLeft(TControl.AdjustToDPI(20));
-    SetTop(Self.WebHookInput.GetTop + TControl.AdjustToDPI(50));
-    SetHint('Takes a screenshot and sends to Discord when you level up');
-    SetChecked(SavedScreenshotOnLevel);
-  end;
-
   with Self.HourlyReportsCheckBox do
   begin
     Create(Self.DiscordPanel.Panel);
     SetCaption('Hourly Progress Reports');
-    SetLeft(Self.ScreenshotOnLevelCheckBox.GetRight + TControl.AdjustToDPI(20));
-    SetTop(Self.ScreenshotOnLevelCheckBox.GetTop);
+    SetLeft(TControl.AdjustToDPI(20));
+    SetTop(Self.WebHookInput.GetTop + TControl.AdjustToDPI(50));
     SetHint('Sends detailed progress embeds every hour');
     SetChecked(SavedHourlyReports);
   end;
@@ -960,35 +938,6 @@ begin
     Result := FormatFloat('0K', Number / 1000)
   else
     Result := SRL.FormatNumber(Number);
-end;
-
-procedure GemStoneCrabSlayer.SendLevelUpNotification(NewLevel: Int32);
-var
-  EmbedIdx: Int32;
-  CurrentXP, TotalXPGained: Int32;
-begin
-  if not SENDLEVELUPNOTIFICATIONMSG or not ENABLEWEBHOOKS then Exit;
-  try
-    CurrentXP := Self.SafeReadXPBar();
-    WriteLn('XPBar Read returns: ' + IntToStr(CurrentXP));
-    TotalXPGained := CurrentXP - Self.StartXP;
-    
-    Discord.Webhook.Content := '**LEVEL UP!** :tada:';
-    
-    EmbedIdx := Discord.Webhook.AddEmbed();
-    Discord.Webhook.Embeds[EmbedIdx].Title := 'Combat Level Up!';
-    Discord.Webhook.Embeds[EmbedIdx].Color := $00FF00;
-    Discord.Webhook.Embeds[EmbedIdx].Description := 'New Level: ' + IntToStr(NewLevel) + LineEnding +
-                                                    'XP Gained: ' + FormatRoundedNumber(TotalXPGained) + LineEnding +
-                                                    'Runtime: ' + SRL.MsToTime(GetTimeRunning, Time_Short);
-    
-    if Discord.SendScreenshot(False) then
-      WriteLn('[Discord] Level up notification sent!')
-    else
-      WriteLn('[Discord] Failed to send level up notification: ' + Discord.LastError);
-  except
-    WriteLn('[Discord] Error sending level up notification: ' + GetExceptionMessage);
-  end;
 end;
 
 procedure GemStoneCrabSlayer.SendHourlyReport();
@@ -1181,9 +1130,7 @@ begin
         WriteLn('Red click successful, waiting for XP...');
         TimeoutStart := GetTickCount();
         
-        repeat
-          Wait(500, 1000);
-          
+        repeat   
           if Self.SafeReadXPBar() > StartXP then
           begin
             Self.IsAttacking := True;
@@ -1238,8 +1185,8 @@ begin
             end;
           end;
           
-          Logout.ClickLogout();
           TerminateScript('No XP gained from 3 consecutive attacks');
+          Logout.ClickLogout();
         end;
         
         Result := True;
@@ -1334,7 +1281,6 @@ begin
   if Self.CurrentLevel > Self.LastLevel then
   begin
     Self.LastLevel := Self.CurrentLevel;
-    Self.SendLevelUpNotification(Self.CurrentLevel);
   end;
 end;
 
@@ -1639,7 +1585,6 @@ begin
       begin
         WriteLn('Rotating camera for xp bar.');
         Antiban.RandomRotate();
-        Wait(1000, 1500);
       end;
     end;
   end;
@@ -1776,7 +1721,7 @@ begin
           begin
             WriteLn('Entering cave...');
             
-            if WaitUntil(Minimap.PercentBlack() < 20, 100, 10000) then
+            if WaitUntil(Minimap.PercentBlack() < 20, 65, 10000) then
             begin
               WriteLn('Successfully exited cave');
               Self.LastCaveExitTime := GetTickCount();
