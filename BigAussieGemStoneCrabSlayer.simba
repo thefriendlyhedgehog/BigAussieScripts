@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.9999.9.9 FOR REAL'}
+{$DEFINE SCRIPT_REVISION := '1.999999999999'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -15,6 +15,8 @@ var
   SENDSESSIONSUMMARYMSG: Boolean         = True;
   SENDHOURLYREPORTMSG: Boolean           = True;
   ABLOSEFOCUS: Boolean                   = True;
+  USEBOOSTS: Boolean                     = False;
+  REPOTINTERVAL: Integer                 = 5;
 
 type
   GemStoneCrabSlayer = record(TBaseBankScript)
@@ -37,6 +39,10 @@ type
     LastSuccessfulClick: Boolean;
     
     LastCaveExitTime: UInt64;
+    
+    NextRepotTime: UInt64;
+    LastRepotTime: UInt64;
+    PotionsConsumed: Int32;
     
     RunningTime: TStopWatch;
     ActiveTimer: TStopWatch;
@@ -372,9 +378,10 @@ type
     WebhookLabel: TLabel;
     WebHookInput: TLabeledEdit;
     WorldHopIntervalInput: TLabeledEdit;
+    RepotIntervalInput: TLabeledEdit;
     EnableWebhooksCheckBox,
     HourlyReportsCheckBox, ScreenshotOnLevelCheckBox, SessionSummaryCheckBox, 
-    LoseFocusCheckBox, EnableWorldHoppingCheckBox: TLabeledCheckBox;
+    LoseFocusCheckBox, EnableWorldHoppingCheckBox, UseBoostsCheckBox: TLabeledCheckBox;
     WebhookInfo: TLabel;
     TestButton: TButton;
     SavedWebhookURL: String;
@@ -433,8 +440,8 @@ procedure TConfig.LoadUserSettings();
 var
   SavedWebhookURL: String;
   SavedEnableWebhooks: Boolean;
-  SavedHourlyReports, SavedLevelUpNotifications, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping: Boolean;
-  SavedWorldHopInterval: Integer;
+  SavedHourlyReports, SavedLevelUpNotifications, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping, SavedUseBoosts: Boolean;
+  SavedWorldHopInterval, SavedRepotInterval: Integer;
   Username: String;
 begin
  if (Login.PlayerIndex < 0) or (Login.PlayerIndex > High(Login.Players)) then
@@ -452,6 +459,8 @@ begin
   SavedEnableWebhooks := StrToBoolDef(ReadINI(Username + ' Webhook Settings', 'EnableWebhooks', 'Configs/BASettings.ini'), False);
   SavedEnableWorldHopping := StrToBoolDef(ReadINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', 'Configs/BASettings.ini'), False);
   SavedWorldHopInterval := StrToIntDef(ReadINI(Username + ' Gemstone Crab Settings', 'WorldHopInterval', 'Configs/BASettings.ini'), 45);
+  SavedUseBoosts := StrToBoolDef(ReadINI(Username + ' Gemstone Crab Settings', 'UseBoosts', 'Configs/BASettings.ini'), False);
+  SavedRepotInterval := StrToIntDef(ReadINI(Username + ' Gemstone Crab Settings', 'RepotInterval', 'Configs/BASettings.ini'), 5);
 
   if Assigned(Self.HourlyReportsCheckBox) then
     Self.HourlyReportsCheckBox.SetChecked(SavedHourlyReports);
@@ -474,8 +483,14 @@ begin
   if Assigned(Self.EnableWorldHoppingCheckBox) then
     Self.EnableWorldHoppingCheckBox.SetChecked(SavedEnableWorldHopping);
 
+  if Assigned(Self.UseBoostsCheckBox) then
+    Self.UseBoostsCheckBox.SetChecked(SavedUseBoosts);
+
   if Assigned(Self.WorldHopIntervalInput) then
     Self.WorldHopIntervalInput.SetText(IntToStr(SavedWorldHopInterval));
+
+  if Assigned(Self.RepotIntervalInput) then
+    Self.RepotIntervalInput.SetText(IntToStr(SavedRepotInterval));
 
   if Assigned(Self.WebHookInput) then
     Self.WebHookInput.SetText(SavedWebhookURL);
@@ -510,8 +525,14 @@ begin
   if Assigned(Self.EnableWorldHoppingCheckBox) then
     ENABLEWORLDHOPPING := Self.EnableWorldHoppingCheckBox.IsChecked();
 
+  if Assigned(Self.UseBoostsCheckBox) then
+    USEBOOSTS := Self.UseBoostsCheckBox.IsChecked();
+
   if Assigned(Self.WorldHopIntervalInput) then
     WORLDHOPINTERVAL := StrToIntDef(Self.WorldHopIntervalInput.GetText(), 45);
+
+  if Assigned(Self.RepotIntervalInput) then
+    REPOTINTERVAL := StrToIntDef(Self.RepotIntervalInput.GetText(), 5);
 
   if Assigned(Self.WebHookInput) then
     WEBHOOKURL := Self.WebHookInput.GetText();
@@ -524,6 +545,8 @@ begin
   WriteINI(Username + ' Antiban Manager', 'LoseFocus', BoolToStr(ABLOSEFOCUS, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', BoolToStr(ENABLEWORLDHOPPING, 'true', 'false'), 'Configs/BASettings.ini');
   WriteINI(Username + ' Gemstone Crab Settings', 'WorldHopInterval', IntToStr(WORLDHOPINTERVAL), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Gemstone Crab Settings', 'UseBoosts', BoolToStr(USEBOOSTS, 'true', 'false'), 'Configs/BASettings.ini');
+  WriteINI(Username + ' Gemstone Crab Settings', 'RepotInterval', IntToStr(REPOTINTERVAL), 'Configs/BASettings.ini');
 end;
 
 procedure TConfig.StartScript(sender: TObject); override; 
@@ -562,6 +585,12 @@ procedure TConfig.WorldHoppingCheckboxChanged({$H-}sender: TObject){$H+};
 begin
   if Assigned(Self.WorldHopIntervalInput) then
     Self.WorldHopIntervalInput.SetVisible(Self.EnableWorldHoppingCheckBox.IsChecked());
+end;
+
+procedure TConfig.BoostCheckboxChanged({$H-}sender: TObject){$H+};
+begin
+  if Assigned(Self.RepotIntervalInput) then
+    Self.RepotIntervalInput.SetVisible(Self.UseBoostsCheckBox.IsChecked());
 end;
 
 function TConfig.CreateLabeledPanel(owner: TControl; title: String; top, height: Int32; FontSize: Int32 = 10; Color: TColor = clBlack; FontStyles: TFontStyles = [fsBold]): TLabeledPanel;
@@ -607,8 +636,8 @@ var
   tab: TTabSheet;
   SavedWebhookURL: String;
   SavedEnableWebhooks: Boolean;
-  SavedScreenshotOnLevel, SavedHourlyReports, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping: Boolean;
-  SavedWorldHopInterval: Integer;
+  SavedScreenshotOnLevel, SavedHourlyReports, SavedSessionSummary, SavedLoseFocus, SavedEnableWorldHopping, SavedUseBoosts: Boolean;
+  SavedWorldHopInterval, SavedRepotInterval: Integer;
   panelTop: Int32;
 begin
   //ClearDebug();
@@ -638,13 +667,38 @@ begin
   SavedLoseFocus := StrToBoolDef(ReadINI(Username + ' Antiban Manager', 'LoseFocus', 'Configs/BASettings.ini'), True);
   SavedEnableWorldHopping := StrToBoolDef(ReadINI(Username + ' Gemstone Crab Settings', 'EnableWorldHopping', 'Configs/BASettings.ini'), False);
   SavedWorldHopInterval := StrToIntDef(ReadINI(Username + ' Gemstone Crab Settings', 'WorldHopInterval', 'Configs/BASettings.ini'), 45);
+  SavedUseBoosts := StrToBoolDef(ReadINI(Username + ' Gemstone Crab Settings', 'UseBoosts', 'Configs/BASettings.ini'), False);
+  SavedRepotInterval := StrToIntDef(ReadINI(Username + ' Gemstone Crab Settings', 'RepotInterval', 'Configs/BASettings.ini'), 5);
+
+  with Self.UseBoostsCheckBox do
+  begin
+    Create(tab);
+    SetCaption('Use Boosts');
+    SetLeft(TControl.AdjustToDPI(35));
+    SetTop(TControl.AdjustToDPI(140));
+    SetHint('Drink boost potions at regular intervals during combat.');
+    SetChecked(SavedUseBoosts);
+    CheckBox.SetOnChange(@BoostCheckboxChanged);
+  end;
+
+  with Self.RepotIntervalInput do
+  begin
+    Create(tab);
+    SetCaption('Interval (minutes)');
+    SetLeft(Self.UseBoostsCheckBox.GetRight() + TControl.AdjustToDPI(80));
+    SetTop(Self.UseBoostsCheckBox.GetTop() - TControl.AdjustToDPI(5));
+    SetWidth(TControl.AdjustToDPI(160));
+    SetText(IntToStr(SavedRepotInterval));
+    SetHint('How often to drink potions (15% random variation)');
+    Edit.SetOnKeyPress(@Edit.NumberField);
+  end;
 
   with Self.EnableWorldHoppingCheckBox do
   begin
     Create(tab);
     SetCaption('Enable World Hopping');
-    SetLeft(TControl.AdjustToDPI(37));
-    SetTop(TControl.AdjustToDPI(140));
+    SetLeft(Self.UseBoostsCheckBox.GetLeft());
+    SetTop(Self.UseBoostsCheckBox.GetTop() + TControl.AdjustToDPI(40));
     SetHint('Hop worlds at random intervals. Requires at least 2 worlds in player setup.');
     SetChecked(SavedEnableWorldHopping);
     CheckBox.SetOnChange(@WorldHoppingCheckboxChanged);
@@ -654,11 +708,11 @@ begin
   begin
     Create(tab);
     SetCaption('World Hop Interval (minutes)');
-    SetLeft(Self.EnableWorldHoppingCheckBox.GetRight() + TControl.AdjustToDPI(20));
+    SetLeft(Self.RepotIntervalInput.GetLeft());
     SetTop(Self.EnableWorldHoppingCheckBox.GetTop() - TControl.AdjustToDPI(5));
     SetWidth(TControl.AdjustToDPI(160));
     SetText(IntToStr(SavedWorldHopInterval));
-    SetHint('Base interval in minutes between world hops (±25% random variation)');
+    SetHint('Interval in minutes between world hops (25% random variation)');
     Edit.SetOnKeyPress(@Edit.NumberField);
   end;
 
@@ -666,9 +720,9 @@ begin
   begin
     Create(tab);
     SetCaption("Discord Notifications");
-    SetLeft(TControl.AdjustToDPI(37));
-    SetTop(Self.EnableWorldHoppingCheckBox.GetTop() + TControl.AdjustToDPI(25));
-    SetHint('Enable Discord notifications for crashes and updates.');
+    SetLeft(Self.EnableWorldHoppingCheckBox.GetLeft());
+    SetTop(Self.WorldHopIntervalInput.GetTop() + TControl.AdjustToDPI(40));
+    SetHint('Enable Discord notifications.');
     SetChecked(SavedEnableWebhooks);
     CheckBox.SetOnChange(@WebhooksCheckboxChanged);
   end;
@@ -745,6 +799,7 @@ begin
 
   Self.WebhooksCheckboxChanged(nil);
   Self.WorldHoppingCheckboxChanged(nil);
+  Self.BoostCheckboxChanged(nil);
 
   Self.CreateAntibanManager();
   
@@ -1021,7 +1076,7 @@ begin
   StartXP := Self.SafeReadXPBar();
   
   // Find mining icon DTM
-  MiningIconDTM := DTMFromString('mQwAAAHicY2ZgYJjGBMEzgdgRyHcCYmcgLisrY2iM1mEI9PNjQAaMSBgIAAL/Be8=');
+  MiningIconDTM := DTMFromString('mQwAAAHicY2ZgYOhgguB2IK4A8suBuAqIy8rKGPbv38/QGK3DgAwYkTAQAABCkwe0');
   try
     FindDTMs(MiningIconDTM, MiningIcons, Minimap.Bounds);
   finally
@@ -1204,6 +1259,9 @@ begin
     begin
       Antiban.LoseFocus();
     end;
+    
+    // Check if we need to repot while in combat
+    Self.TryRepot();
   end
   else
   begin
@@ -1364,6 +1422,14 @@ begin
   end
   else
     WriteLn('   World Hopping: DISABLED');
+  
+  if USEBOOSTS then
+  begin
+    if Self.NextRepotTime > GetTickCount() then
+      WriteLn('   Next Repot: ' + SRL.MsToTime(Self.NextRepotTime - GetTickCount(), Time_Short))
+    else
+      WriteLn('   Next Repot: READY!');
+  end
     
   if Self.SystemUpdateWarningShown then
     WriteLn('   WARNING: System update detected! Will logout when combat ends.');
@@ -1402,6 +1468,15 @@ begin
   Self.LastSuccessfulClick := False;
   
   Self.LastCaveExitTime := 0;
+  
+  Self.NextRepotTime := 0;
+  Self.LastRepotTime := 0;
+  Self.PotionsConsumed := 0;
+  
+  if USEBOOSTS then
+  begin
+    Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
+  end;
   
   Self.LastAPIUpdate := GetTickCount();
   Self.ApiUpdateInterval := 5 * 60000;
@@ -1686,6 +1761,56 @@ begin
   
   WriteLn('No valid cave entrance found');
   Exit(False);
+end;
+
+function GemStoneCrabSlayer.GetRandomRepotTime(): UInt64;
+var
+  BaseInterval: UInt64;
+  RandomVariation: Integer;
+begin
+  BaseInterval := REPOTINTERVAL * 60000;
+  
+  RandomVariation := Random(-15, 15);
+  Result := BaseInterval + Round(BaseInterval * (RandomVariation / 100.0));
+  
+  if Result < 60000 then
+    Result := 60000;
+
+end;
+
+function GemStoneCrabSlayer.ShouldRepot(): Boolean;
+begin
+  if not USEBOOSTS then
+    Exit(False);
+    
+  Result := GetTickCount() >= Self.NextRepotTime;
+end;
+
+function GemStoneCrabSlayer.TryRepot(): Boolean;
+begin
+  Result := False;
+  
+  if not USEBOOSTS then
+    Exit;
+    
+  if not Self.ShouldRepot() then
+    Exit;
+    
+  WriteLn('Time to boost!');
+  
+  if Inventory.Consume(ERSConsumable.BOOST) then
+  begin
+    WriteLn('Successfully consumed boost');
+    Self.LastRepotTime := GetTickCount();
+    Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
+    Inc(Self.PotionsConsumed);
+    Result := True;
+  end
+  else
+  begin
+    USEBOOSTS := False;
+    WriteLn('Failed to consume boost - Disabling boosts');
+  end;
 end;
 
 begin
