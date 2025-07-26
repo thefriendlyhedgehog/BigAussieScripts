@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '1.999999999999'}
+{$DEFINE SCRIPT_REVISION := '0.1'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -40,6 +40,8 @@ type
     
     LastCaveExitTime: UInt64;
     
+    ConsecutiveBlockedCaveAttempts: Int32;
+    
     NextRepotTime: UInt64;
     LastRepotTime: UInt64;
     PotionsConsumed: Int32;
@@ -66,6 +68,7 @@ var
   ActiveTimer: TStopWatch;
   
   NPC_DTM1, NPC_DTM2, NPC_DTM3, NPC_DTM4, NPC_DTM5, NPC_DTM6, NPC_DTM7, CAVE_DTM: Int64;
+  MINING_ICON_DTM1, MINING_ICON_DTM2: Int64;
 
 procedure SetupNPCDTMs();
 begin
@@ -77,6 +80,8 @@ begin
   NPC_DTM6 := DTMFromString('mQwAAAHicY2ZgYGhhguBWIA4B8sOg+M8foAADIxQjACOqKADZUASW');
   NPC_DTM7 := DTMFromString('mQwAAAHicY2ZgYGhhguBmIA4G8kOBOAiI794FEgyMDP/+8TEgA0YkDAQADEUGVw==');
   CAVE_DTM := DTMFromString('mQwAAAHicY2ZgYGhiYmCoB+JmII5mgOBYIJ7Pzc3wQUuTYf/+/QzIgBEJAwEAGLoG2Q==');
+  MINING_ICON_DTM1 := DTMFromString('mWAAAAHicY2FgYChmYmAoBOJSIC4DYjugmDUQWwGxDRA3RuswLFgwH8hiZNi/fz8DOmBEwyAAAK+jB/Q=');
+  MINING_ICON_DTM2 := DTMFromString('mWAAAAHicY2FgYEhjYmBIZ0LQhQwQXATFVYFKDNHmggz79+9nWLBgPgM6YETDIAAA5joJHQ==');
 end;
 
 procedure FreeNPCDTMs();
@@ -89,6 +94,8 @@ begin
   FreeDTM(NPC_DTM6);
   FreeDTM(NPC_DTM7);
   FreeDTM(CAVE_DTM);
+  FreeDTM(MINING_ICON_DTM1);
+  FreeDTM(MINING_ICON_DTM2);
 end;
 
 function FilterDuplicateDots(Dots: TPointArray): TPointArray;
@@ -296,6 +303,32 @@ begin
     Result := Result + TempPoints;
   
   Result := FilterDuplicateDots(Result);
+end;
+
+function FindMiningIcons(): TPointArray;
+var
+  TempPoints: TPointArray;
+  DTMsUsed: TStringArray;
+begin
+  Result := [];
+  DTMsUsed := [];
+  
+  // Try DTM 1
+  if FindDTMs(MINING_ICON_DTM1, TempPoints, Minimap.Bounds) then
+  begin
+    Result := Result + TempPoints;
+    DTMsUsed := DTMsUsed + ['DTM1'];
+  end;
+  
+  // Try DTM 2
+  if Length(Result) < 2 then
+  begin
+    if FindDTMs(MINING_ICON_DTM2, TempPoints, Minimap.Bounds) then
+    begin
+      Result := Result + TempPoints;
+      DTMsUsed := DTMsUsed + ['DTM2'];
+    end;
+  end;
 end;
 
 // Thanks Bootie
@@ -1068,20 +1101,14 @@ var
   StartXP: Integer;
   TimeoutStart: UInt64;
   Distance: Double;
-  MiningIconDTM: Int32;
 begin
   Result := False;
   WriteLn('Looking for Mr Crabs...');
   
   StartXP := Self.SafeReadXPBar();
   
-  // Find mining icon DTM
-  MiningIconDTM := DTMFromString('mQwAAAHicY2ZgYOhgguB2IK4A8suBuAqIy8rKGPbv38/QGK3DgAwYkTAQAABCkwe0');
-  try
-    FindDTMs(MiningIconDTM, MiningIcons, Minimap.Bounds);
-  finally
-    FreeDTM(MiningIconDTM);
-  end;
+  // Find mining icon
+  MiningIcons := FindMiningIcons();
   
   if Length(MiningIcons) = 0 then 
   begin
@@ -1114,7 +1141,7 @@ begin
       
       if Distance <= 8 then // 2 Spawns can use 4 but one spawn is 7.1 roughly so lets use 8
       begin
-        //WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 8) - adding to nearby dots');
+        WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 8) - adding to nearby dots');
         NearbyDots := NearbyDots + [YellowDots[i]];
         Break;
       end;
@@ -1349,9 +1376,17 @@ begin
     if Self.FindGemStoneCrab() then
     begin
       WriteLn('Found and attacked Gemstone Crab!');
+      Self.ConsecutiveBlockedCaveAttempts := 0; // Reset counter on successful boss attack
     end
     else
     begin
+      if Length(FindMiningIcons()) = 0 then
+      begin
+        WriteLn('No mining icons found!');
+        TakeScreenshot('_NoMiningIcon');
+        Exit;
+      end;
+
       if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
       begin
         WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
@@ -1363,11 +1398,31 @@ begin
         
         if CaveBlocked then
         begin
-          WriteLn('Cave is blocked - Searching for boss again...');
+          Inc(Self.ConsecutiveBlockedCaveAttempts);
+          WriteLn('Cave is blocked - Searching for boss again... (Attempt ', Self.ConsecutiveBlockedCaveAttempts, '/3)');
+          
+          if Self.ConsecutiveBlockedCaveAttempts >= 3 then
+          begin
+            WriteLn('Cave has been blocked 3 times - terminating script');
+            Self.TakeScreenshot('_CaveBlockedTermination');
+            
+            if ENABLEWEBHOOKS then
+            begin
+              try
+                Discord.Webhook.Content := '**SCRIPT TERMINATED** :warning: Cave blocked 3 consecutive times. Boss may be permanently unavailable.';
+                Discord.SendScreenshot(False);
+              except
+                WriteLn('[Discord] Failed to send termination notification');
+              end;
+            end;
+            
+            TerminateScript('Cave blocked 3 consecutive times');
+          end;
         end
         else
         begin
           WriteLn('Successfully entered cave - waiting for boss to spawn...');
+          Self.ConsecutiveBlockedCaveAttempts := 0;
         end;
       end;
     end;
@@ -1468,6 +1523,8 @@ begin
   Self.LastSuccessfulClick := False;
   
   Self.LastCaveExitTime := 0;
+  
+  Self.ConsecutiveBlockedCaveAttempts := 0;
   
   Self.NextRepotTime := 0;
   Self.LastRepotTime := 0;
