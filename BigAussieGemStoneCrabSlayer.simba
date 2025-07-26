@@ -381,6 +381,40 @@ begin
   ActiveTimer.Resume();
 end;
 
+procedure TAntiban.AdjustZoom(); override;
+var
+  zoom, newZoom: Int32;
+  attempts: Int32;
+begin
+
+  if (Self.MaxZoom = 0) then
+  begin
+    Self.DebugLn('No maximum zoom set, using default value of 100');
+    Self.MaxZoom := 100;
+  end;
+
+  if RSInterface.IsOpen() then
+    Exit;
+
+  zoom := EnsureRange(MM2MS.GetZoomLevel(), Self.MinZoom, Self.MaxZoom);
+
+  repeat
+    Inc(attempts);
+    if attempts > 100 then
+      Exit;
+
+    newZoom := EnsureRange(SRL.SkewedRand(zoom, Self.MinZoom, Self.MaxZoom), Self.MinZoom, Self.MaxZoom);
+  until Abs(zoom - newZoom) > Min(15, (Self.MinZoom - Self.MaxZoom) div 2);
+
+  Self.DebugLn('Adjust zoom: ' + ToString(newZoom));
+  RSMouseZoom.SetZoomLevel(newZoom);
+end;
+
+procedure TAntiban.RandomChatTask(); override;
+begin
+  Exit;
+end;
+
 procedure TAntiban.Setup(); override;
 begin
   Self.Skills := [ERSSkill.TOTAL, ERSSkill.ATTACK, ERSSkill.STRENGTH, ERSSkill.DEFENCE, ERSSkill.HITPOINTS];
