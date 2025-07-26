@@ -1748,7 +1748,6 @@ begin
         Self.LastImageClear := GetTickCount();
       end;
         
-      Self.CheckForLevelUp();
       Self.CheckHourlyReport();
       Self.CheckSystemUpdate();
         
