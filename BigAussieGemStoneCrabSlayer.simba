@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.8'}
+{$DEFINE SCRIPT_REVISION := '0.9'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -43,7 +43,6 @@ type
     
     NextRepotTime: UInt64;
     LastRepotTime: UInt64;
-    PotionsConsumed: Int32;
     
     RunningTime: TStopWatch;
     ActiveTimer: TStopWatch;
@@ -1227,7 +1226,6 @@ begin
         begin
           Self.LastRepotTime := GetTickCount();
           Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
-          Inc(Self.PotionsConsumed);
         end
         else
         begin
@@ -1623,7 +1621,6 @@ begin
   
   Self.NextRepotTime := 0;
   Self.LastRepotTime := 0;
-  Self.PotionsConsumed := 0;
   
   Self.UseFallbackMode := False;
   
@@ -1990,7 +1987,6 @@ begin
   begin
     Self.LastRepotTime := GetTickCount();
     Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
-    Inc(Self.PotionsConsumed);
     Result := True;
   end
   else
@@ -2002,8 +1998,9 @@ end;
 
 function GemStoneCrabSlayer.TryConsumeAnyBoost(): Boolean;
 var
-  BoostTypes: array of ERSConsumable;
-  BoostType: ERSConsumable;
+  BoostItems: TRSItemArray;
+  Item: TRSItem;
+  Slot: Int32;
 begin
   Result := False;
   
@@ -2013,16 +2010,31 @@ begin
   if not Inventory.IsOpen() then
     Inventory.Open();
   
-  BoostTypes := [ERSConsumable.BOOST, ERSConsumable.STRENGTH_BOOST, ERSConsumable.ATTACK_BOOST, 
-                 ERSConsumable.DEFENCE_BOOST, ERSConsumable.RANGING_BOOST, ERSConsumable.MAGIC_BOOST];
+  BoostItems := [
+    // Super combat potions
+    'Divine super combat potion(1..4)', 'Super combat potion(1..4)',
+    // Strength boosts
+    'Divine super strength potion(1..4)', 'Super strength(1..4)', 'Strength potion(1..4)',
+    // Attack boosts  
+    'Divine super attack potion(1..4)', 'Super attack(1..4)', 'Attack potion(1..4)',
+    // Defence boosts
+    'Divine super defence potion(1..4)', 'Super defence(1..4)', 'Defence potion(1..4)',
+    // Ranging boosts
+    'Divine ranging potion(1..4)', 'Ranging potion(1..4)',
+    // Magic boosts
+    'Divine magic potion(1..4)', 'Magic potion(1..4)',
+    // Combo potions
+    'Divine bastion potion(1..4)', 'Bastion potion(1..4)',
+    'Divine battlemage potion(1..4)', 'Battlemage potion(1..4)'
+  ];
   
-  for BoostType in BoostTypes do
+  for Item in BoostItems do
   begin
-    if Inventory.ContainsConsumable(BoostType) then
+    if Inventory.FindItem(Item, Slot) then
     begin
-      if Inventory.Consume(BoostType) then
+      if Inventory.ClickSlot(Slot, 'Drink') then
       begin
-        WriteLn('Consumed ', ToStr(BoostType).Replace('ERSConsumable.', '').Replace('_', ' ').ToLower());
+        WriteLn('Consumed boost: ', Item.GetSingle());
         Result := True;
         Exit;
       end;
