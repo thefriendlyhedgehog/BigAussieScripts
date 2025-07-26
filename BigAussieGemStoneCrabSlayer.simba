@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.91'}
+{$DEFINE SCRIPT_REVISION := '0.92'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1259,15 +1259,14 @@ begin
       
       if USEBOOSTS then
       begin
-        if Self.TryConsumeAnyBoost() then
+        if Self.ShouldRepot() then
         begin
-          Self.LastRepotTime := GetTickCount();
-          Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
+          if Self.TryConsumeAnyBoost() then
+          begin
+            Self.LastRepotTime := GetTickCount();
+            Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
+          end
         end
-        else
-        begin
-          WriteLn(ModePrefix + 'Failed to consume initial boost');
-        end;
       end;
       
       Result := True;
@@ -1661,11 +1660,6 @@ begin
   
   Self.UseFallbackMode := False;
   
-  if USEBOOSTS then
-  begin
-    Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
-  end;
-  
   Self.LastAPIUpdate := GetTickCount();
   Self.ApiUpdateInterval := 5 * 60000;
   
@@ -2048,7 +2042,7 @@ begin
     Inventory.Open();
   
   BoostItems := [
-    // Super combat potions
+    // Combat potions
     'Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)',
     // Strength boosts
     'Divine super strength potion(1..4)', 'Super strength(1..4)', 'Strength potion(1..4)',
