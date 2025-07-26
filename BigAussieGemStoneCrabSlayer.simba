@@ -5,6 +5,7 @@
 {$I WaspLib/optional/handlers/discord.simba}
 
 // Add failsafe for attack options hidden
+// Fix gamechat antiban shit
 
 var
   WEBHOOKURL: String                     = '';
