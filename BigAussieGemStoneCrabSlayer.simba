@@ -1,10 +1,9 @@
-{$DEFINE SCRIPT_REVISION := '0.6'}
+{$DEFINE SCRIPT_REVISION := '0.7'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
 {$I WaspLib/optional/handlers/discord.simba}
 
-// Add failsafe for attack options hidden
 // Fix gamechat antiban shit
 
 var
@@ -62,6 +61,9 @@ type
     SystemUpdateWarningShown: Boolean;
 
     ConsumableHandler: TConsumableHandler;
+    
+    // Fallback mode - use mining icon directly when cave is blocked
+    UseFallbackMode: Boolean;
   end;
 
 var
@@ -83,7 +85,7 @@ begin
   NPC_DTM7 := DTMFromString('mQwAAAHicY2ZgYGhhguBmIA4G8kOBOAiI794FEgyMDP/+8TEgA0YkDAQADEUGVw==');
   CAVE_DTM := DTMFromString('mQwAAAHicY2ZgYGhiYmCoB+JmII5mgOBYIJ7Pzc3wQUuTYf/+/QzIgBEJAwEAGLoG2Q==');
   MINING_ICON_DTM1 := DTMFromString('mQwAAAHicY2ZgYJjPxMAwD4iXArEdkG8DxZ6aPAz79+9nCPTzY0AGjEgYCAAN3AZN');
-  MINING_ICON_DTM2 := DTMFromString('mWAAAAHicY2FgYEhjYmBIZ0LQhQwQXATFVYFKDNHmggz79+9nWLBgPgM6YETDIAAA5joJHQ==');
+  MINING_ICON_DTM2 := DTMFromString('mQwAAAHicY2ZgYJjPxMCwAIqdGSDYEYj379/PMCXFnqGsrIwBGTAiYSAAAD23B4k=');
 end;
 
 procedure FreeNPCDTMs();
@@ -1045,7 +1047,7 @@ end;
 
 function GemStoneCrabSlayer.FindGemStoneCrab(): Boolean;
 var
-  YellowDots, MiningIcons, NearbyDots: TPointArray;
+  YellowDots, MiningIcons, TargetPoints: TPointArray;
   i, j: Int32;
   MinimapPoint: TPoint;
   MainscreenPoint: TPoint;
@@ -1053,154 +1055,220 @@ var
   StartXP: Integer;
   TimeoutStart: UInt64;
   Distance: Double;
+  ModePrefix: String;
 begin
   Result := False;
-  WriteLn('Looking for Mr Crabs...');
+  
+  if Self.UseFallbackMode then
+  begin
+    ModePrefix := 'FALLBACK: ';
+    WriteLn('FALLBACK MODE: Looking for boss using mining icon only...');
+  end
+  else
+  begin
+    ModePrefix := '';
+    WriteLn('Looking for Mr Crabs...');
+  end;
   
   StartXP := Self.SafeReadXPBar();
   
-  // Find mining icon
+  // Find mining icons
   MiningIcons := FindMiningIcons();
   
   if Length(MiningIcons) = 0 then 
   begin
-    WriteLn('No mining icon found');
+    WriteLn(ModePrefix + 'No mining icon found');
     TakeScreenshot('_NoMiningIcon');
     Exit(False);
   end;
   
-  WriteLn('Found ', Length(MiningIcons), ' mining icon(s)');
+  WriteLn(ModePrefix + 'Found ', Length(MiningIcons), ' mining icon(s)');
   
-  // Find all yellow NPC dots
-  YellowDots := FindYellowNPCDots();
-  
-  if Length(YellowDots) = 0 then
+  if Self.UseFallbackMode then
   begin
-    WriteLn('No NPCs detected');
-    Exit(False);
-  end;
-  
-  //WriteLn('Found ', Length(YellowDots), ' NPC dot(s)');
-  
-  // Filter to only dots near mining icons
-  NearbyDots := [];
-  for i := 0 to High(YellowDots) do
+    TargetPoints := MiningIcons;
+    WriteLn(ModePrefix + 'Using mining icon directly');
+  end
+  else
   begin
-    for j := 0 to High(MiningIcons) do
+    YellowDots := FindYellowNPCDots();
+    
+    if Length(YellowDots) = 0 then
     begin
-      Distance := YellowDots[i].DistanceTo(MiningIcons[j]);
-      //WriteLn('Yellow dot ', i, ' is ', FloatToStr(Distance), ' pixels away from mining icon ', j);
-      
-      if Distance <= 10 then // 2 Spawns can use 4 but one spawn is 7.1 roughly so lets use 8
+      WriteLn(ModePrefix + 'No NPCs detected');
+      Exit(False);
+    end;
+    
+    TargetPoints := [];
+    for i := 0 to High(YellowDots) do
+    begin
+      for j := 0 to High(MiningIcons) do
       begin
-        WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 10) - adding to nearby dots');
-        NearbyDots := NearbyDots + [YellowDots[i]];
-        Break;
+        Distance := YellowDots[i].DistanceTo(MiningIcons[j]);
+        
+        if Distance <= 10 then
+        begin
+          WriteLn(ModePrefix + 'Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 10) - adding to target points');
+          TargetPoints := TargetPoints + [YellowDots[i]];
+          Break;
+        end;
       end;
+    end;
+    
+    if Length(TargetPoints) = 0 then
+    begin
+      WriteLn(ModePrefix + 'No nearby dots found');
+      Exit(False);
     end;
   end;
   
-  if Length(NearbyDots) = 0 then
+  for i := 0 to High(TargetPoints) do
   begin
-    WriteLn('No nearby dots found');
-    Exit(False);
-  end;
-  
-  for i := 0 to High(NearbyDots) do
-  begin
-    MinimapPoint := NearbyDots[i];
+    MinimapPoint := TargetPoints[i];
     MainscreenPoint := Minimap.PointToMS(MinimapPoint);
     
     if not MainScreen.Bounds.Contains(MainscreenPoint) then
-    begin
       Continue;
-    end;
 
     Mouse.Move(MainscreenPoint);
     
     CurrentUpText := MainScreen.GetUpText();
-    WriteLn('Current uptext: "', CurrentUpText, '"');
+    WriteLn(ModePrefix + 'Current uptext: "', CurrentUpText, '"');
     
     if MainScreen.IsUpText(['(level-160)']) then
     begin
-      WriteLn('Found Gemstone Crab! Clicking to attack...');
+      WriteLn(ModePrefix + 'Found Gemstone Crab with level-160 uptext! Clicking to attack...');
       Mouse.Click(MOUSE_LEFT);
       
       if MainScreen.DidRedClick() then
       begin
-        WriteLn('Red click successful, waiting for XP...');
-        TimeoutStart := GetTickCount();
+        WriteLn(ModePrefix + 'Red click successful, waiting for XP...');
         
-        repeat   
-          if Self.SafeReadXPBar() > StartXP then
-          begin
-            Self.IsAttacking := True;
-            Self.InCombat := True;
-            Self.PrevXP := Self.SafeReadXPBar();
-            Self.LastHealthCheck := GetTickCount();
-            WL.Activity.Restart();
-            
-            Self.ConsecutiveFailedAttacks := 0;
-            WriteLn('Successfully attacked boss and gained XP!');
-            
-            if USEBOOSTS then
-            begin
-              if Self.TryConsumeAnyBoost() then
-              begin
-                Self.LastRepotTime := GetTickCount();
-                Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
-                Inc(Self.PotionsConsumed);
-              end
-              else
-              begin
-                WriteLn('Failed to consume initial boost');
-              end;
-            end;
-            
-            Result := True;
-            Exit;
-          end;
-          
-        until (GetTickCount() - TimeoutStart) > 5000;
-        
-        WriteLn('No XP gained within 5 seconds after clicking');
-        
-        Inc(Self.ConsecutiveFailedAttacks);
-        Self.LastFailedAttackTime := GetTickCount();
-        WriteLn('Boss clicked but no XP gained. Consecutive failed attacks: ', Self.ConsecutiveFailedAttacks, '/3');
-        
-        if Self.ConsecutiveFailedAttacks >= 3 then
+        if Self.WaitForXPGain(StartXP, ModePrefix) then
         begin
-          WriteLn('3 consecutive boss clicks failed to gain XP!');
-          WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
-          
-          Self.TakeScreenshot('_NoAmmoFailsafe');
-          
-          if ENABLEWEBHOOKS then
-          begin
-            try
-              Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
-              Discord.SendScreenshot(False);
-            except
-              WriteLn('[Discord] Failed to send no ammo notification');
-            end;
-          end;
-          
-          TerminateScript('No XP gained from 3 consecutive attacks');
-          Logout.ClickLogout();
+          Result := True;
+          Exit;
         end;
-        
-        Result := True;
-        Exit;
       end
       else
       begin
-        WriteLn('Red click failed - click was not successful');
+        WriteLn(ModePrefix + 'Red click failed - click was not successful');
       end;
+    end
+    else if MainScreen.IsUpText(['Walk here']) then
+    begin
+      WriteLn(ModePrefix + 'Got "Walk here" uptext - opening ChooseOption menu to look for Attack Gemstone Crab');
+      
+      if ChooseOption.Open() then
+      begin
+        WriteLn(ModePrefix + 'ChooseOption menu opened successfully');
+        
+        if ChooseOption.HasOption(['Attack Gemstone Crab'], True, True) then
+        begin
+          WriteLn(ModePrefix + 'Found "Attack Gemstone Crab" option! Selecting it...');
+          
+          if ChooseOption.Select(['Attack Gemstone Crab'], MOUSE_LEFT, True, True) then
+          begin
+            WriteLn(ModePrefix + 'Successfully selected Attack Gemstone Crab, waiting for XP...');
+            
+            if Self.WaitForXPGain(StartXP, ModePrefix) then
+            begin
+              Result := True;
+              Exit;
+            end;
+          end
+          else
+          begin
+            WriteLn(ModePrefix + 'Failed to select Attack Gemstone Crab option');
+          end;
+        end
+        else
+        begin
+          WriteLn(ModePrefix + 'Attack Gemstone Crab option not found in ChooseOption menu');
+          ChooseOption.Close();
+        end;
+      end
+      else
+      begin
+        WriteLn(ModePrefix + 'Failed to open ChooseOption menu');
+      end;
+    end
+    else
+    begin
+      WriteLn(ModePrefix + 'Uptext does not match expected patterns (level-160 or Walk here)');
     end;
   end;
   
-  WriteLn('No valid Gemstone Crab found with correct uptext');
+  WriteLn(ModePrefix + 'No valid Gemstone Crab found');
+end;
+
+function GemStoneCrabSlayer.WaitForXPGain(StartXP: Integer; ModePrefix: String): Boolean;
+var
+  TimeoutStart: UInt64;
+begin
+  Result := False;
+  TimeoutStart := GetTickCount();
+  
+  repeat   
+    if Self.SafeReadXPBar() > StartXP then
+    begin
+      Self.IsAttacking := True;
+      Self.InCombat := True;
+      Self.PrevXP := Self.SafeReadXPBar();
+      Self.LastHealthCheck := GetTickCount();
+      WL.Activity.Restart();
+      
+      Self.ConsecutiveFailedAttacks := 0;
+      WriteLn(ModePrefix + 'Successfully attacked boss and gained XP!');
+      
+      if USEBOOSTS then
+      begin
+        if Self.TryConsumeAnyBoost() then
+        begin
+          Self.LastRepotTime := GetTickCount();
+          Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
+          Inc(Self.PotionsConsumed);
+        end
+        else
+        begin
+          WriteLn(ModePrefix + 'Failed to consume initial boost');
+        end;
+      end;
+      
+      Result := True;
+      Exit;
+    end;
+    
+  until (GetTickCount() - TimeoutStart) > 5000;
+  
+  WriteLn(ModePrefix + 'No XP gained within 5 seconds after attack');
+  
+  Inc(Self.ConsecutiveFailedAttacks);
+  Self.LastFailedAttackTime := GetTickCount();
+  WriteLn(ModePrefix + 'Attack failed to gain XP. Consecutive failed attacks: ', Self.ConsecutiveFailedAttacks, '/3');
+  
+  if Self.ConsecutiveFailedAttacks >= 3 then
+  begin
+    WriteLn('3 consecutive boss attacks failed to gain XP!');
+    WriteLn('This likely means we are out of ammo/runes. Logging out and terminating script.');
+    
+    Self.TakeScreenshot('_NoAmmoFailsafe');
+    
+    if ENABLEWEBHOOKS then
+    begin
+      try
+        Discord.Webhook.Content := 'Failed to gain XP! Script will logout and terminate. Please check your ammo/runes!';
+        Discord.SendScreenshot(False);
+      except
+        WriteLn('[Discord] Failed to send no ammo notification');
+      end;
+    end;
+    
+    TerminateScript('No XP gained from 3 consecutive attacks');
+    Logout.ClickLogout();
+  end;
+  
+  Result := True; // Continue trying even if this attempt failed
 end;
 
 function GemStoneCrabSlayer.IsInCombat(): Boolean;
@@ -1337,56 +1405,115 @@ begin
   begin
     WriteLn('Not in combat - looking for boss...');
     
-    if Self.FindGemStoneCrab() then
+    if Self.UseFallbackMode then
     begin
-      WriteLn('Found and attacked Gemstone Crab!');
-      Self.ConsecutiveBlockedCaveAttempts := 0; // Reset counter on successful boss attack
-    end
-    else
-    begin
-      if Length(FindMiningIcons()) = 0 then
+      if Self.FindGemStoneCrab() then
       begin
-        WriteLn('No mining icons found!');
-        TakeScreenshot('_NoMiningIcon');
-        Exit;
-      end;
-
-      if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
-      begin
-        WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
+        WriteLn('Found and attacked Gemstone Crab using fallback mode!');
+        Self.ConsecutiveBlockedCaveAttempts := 0;
       end
       else
       begin
-        WriteLn('No boss found - attempting to enter cave');
-        CaveBlocked := Self.TryEnterCave();
+        WriteLn('No boss found in fallback mode - trying cave again');
         
-        if CaveBlocked then
+        if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
         begin
-          Inc(Self.ConsecutiveBlockedCaveAttempts);
-          WriteLn('Cave is blocked - Searching for boss again... (Attempt ', Self.ConsecutiveBlockedCaveAttempts, '/3)');
-          
-          if Self.ConsecutiveBlockedCaveAttempts >= 3 then
-          begin
-            WriteLn('Cave has been blocked 3 times - terminating script');
-            Self.TakeScreenshot('_CaveBlockedTermination');
-            
-            if ENABLEWEBHOOKS then
-            begin
-              try
-                Discord.Webhook.Content := '**SCRIPT TERMINATED** :warning: Cave blocked 3 consecutive times. Boss may be permanently unavailable.';
-                Discord.SendScreenshot(False);
-              except
-                WriteLn('[Discord] Failed to send termination notification');
-              end;
-            end;
-            
-            TerminateScript('Cave blocked 3 consecutive times');
-          end;
+          WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
         end
         else
         begin
-          WriteLn('Successfully entered cave - waiting for boss to spawn...');
-          Self.ConsecutiveBlockedCaveAttempts := 0;
+          WriteLn('Attempting to enter cave in fallback mode');
+          CaveBlocked := Self.TryEnterCave();
+          
+          if CaveBlocked then
+          begin
+            Inc(Self.ConsecutiveBlockedCaveAttempts);
+            WriteLn('Cave is still blocked in fallback mode... (Attempt ', Self.ConsecutiveBlockedCaveAttempts, '/5)');
+            
+            if Self.ConsecutiveBlockedCaveAttempts >= 5 then
+            begin
+              WriteLn('Cave has been blocked 5 times even in fallback mode - terminating script');
+              Self.TakeScreenshot('_CaveBlockedTermination');
+              
+              if ENABLEWEBHOOKS then
+              begin
+                try
+                  Discord.Webhook.Content := '**SCRIPT TERMINATED** :warning: Cave blocked 5 consecutive times even in fallback mode. Boss may be permanently unavailable.';
+                  Discord.SendScreenshot(False);
+                except
+                  WriteLn('[Discord] Failed to send termination notification');
+                end;
+              end;
+              
+              TerminateScript('Cave blocked 5 consecutive times in fallback mode');
+            end;
+          end
+          else
+          begin
+            WriteLn('Successfully entered cave in fallback mode - waiting for boss to spawn...');
+            Self.ConsecutiveBlockedCaveAttempts := 0;
+          end;
+        end;
+      end;
+      
+      Self.UseFallbackMode := False;
+      WriteLn('Fallback mode disabled');
+    end
+    else
+    begin
+      if Self.FindGemStoneCrab() then
+      begin
+        WriteLn('Found and attacked Gemstone Crab!');
+        Self.ConsecutiveBlockedCaveAttempts := 0;
+      end
+      else
+      begin
+        if Length(FindMiningIcons()) = 0 then
+        begin
+          WriteLn('No mining icons found!');
+          TakeScreenshot('_NoMiningIcon');
+          Exit;
+        end;
+
+        if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
+        begin
+          WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
+        end
+        else
+        begin
+          WriteLn('No boss found - attempting to enter cave');
+          CaveBlocked := Self.TryEnterCave();
+          
+          if CaveBlocked then
+          begin
+            Inc(Self.ConsecutiveBlockedCaveAttempts);
+            WriteLn('Cave is blocked - Switching to fallback mode... (Attempt ', Self.ConsecutiveBlockedCaveAttempts, '/3)');
+            
+            Self.UseFallbackMode := True;
+            
+            if Self.ConsecutiveBlockedCaveAttempts >= 3 then
+            begin
+              WriteLn('Cave has been blocked 3 times - terminating script');
+              Self.TakeScreenshot('_CaveBlockedTermination');
+              
+              if ENABLEWEBHOOKS then
+              begin
+                try
+                  Discord.Webhook.Content := '**SCRIPT TERMINATED** :warning: Cave blocked 3 consecutive times. Boss may be permanently unavailable.';
+                  Discord.SendScreenshot(False);
+                except
+                  WriteLn('[Discord] Failed to send termination notification');
+                end;
+              end;
+              
+              TerminateScript('Cave blocked 3 consecutive times');
+            end;
+          end
+          else
+          begin
+            WriteLn('Successfully entered cave - waiting for boss to spawn...');
+            Self.ConsecutiveBlockedCaveAttempts := 0;
+          end;
         end;
       end;
     end;
@@ -1497,6 +1624,8 @@ begin
   Self.NextRepotTime := 0;
   Self.LastRepotTime := 0;
   Self.PotionsConsumed := 0;
+  
+  Self.UseFallbackMode := False;
   
   if USEBOOSTS then
   begin
