@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.1'}
+{$DEFINE SCRIPT_REVISION := '0.2'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1128,7 +1128,7 @@ begin
     Exit(False);
   end;
   
-  WriteLn('Found ', Length(YellowDots), ' NPC dot(s)');
+  //WriteLn('Found ', Length(YellowDots), ' NPC dot(s)');
   
   // Filter to only dots near mining icons
   NearbyDots := [];
@@ -1141,7 +1141,7 @@ begin
       
       if Distance <= 8 then // 2 Spawns can use 4 but one spawn is 7.1 roughly so lets use 8
       begin
-        WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 8) - adding to nearby dots');
+        //WriteLn('Yellow dot ', i, ' is close enough (', FloatToStr(Distance), ' <= 8) - adding to nearby dots');
         NearbyDots := NearbyDots + [YellowDots[i]];
         Break;
       end;
@@ -1191,6 +1191,20 @@ begin
             
             Self.ConsecutiveFailedAttacks := 0;
             WriteLn('Successfully attacked boss and gained XP!');
+            
+            if USEBOOSTS then
+            begin
+              if Self.TryConsumeAnyBoost() then
+              begin
+                Self.LastRepotTime := GetTickCount();
+                Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
+                Inc(Self.PotionsConsumed);
+              end
+              else
+              begin
+                WriteLn('Failed to consume initial boost');
+              end;
+            end;
             
             Result := True;
             Exit;
@@ -1855,9 +1869,8 @@ begin
     
   WriteLn('Time to boost!');
   
-  if Inventory.Consume(ERSConsumable.BOOST) then
+  if Self.TryConsumeAnyBoost() then
   begin
-    WriteLn('Successfully consumed boost');
     Self.LastRepotTime := GetTickCount();
     Self.NextRepotTime := GetTickCount() + Self.GetRandomRepotTime();
     Inc(Self.PotionsConsumed);
@@ -1867,6 +1880,49 @@ begin
   begin
     USEBOOSTS := False;
     WriteLn('Failed to consume boost - Disabling boosts');
+  end;
+end;
+
+function GemStoneCrabSlayer.TryConsumeAnyBoost(): Boolean;
+begin
+  Result := False;
+  
+  if not USEBOOSTS then
+    Exit;
+  
+  if not Inventory.IsOpen() then
+    Inventory.Open();
+  
+  // Try different boost could this be done easier? probably.
+  if Inventory.Consume(ERSConsumable.BOOST) then
+  begin
+    WriteLn('Consumed combat boost');
+    Result := True;
+  end
+  else if Inventory.Consume(ERSConsumable.ATTACK_BOOST) then
+  begin
+    WriteLn('Consumed attack boost');
+    Result := True;
+  end
+  else if Inventory.Consume(ERSConsumable.STRENGTH_BOOST) then
+  begin
+    WriteLn('Consumed strength boost');
+    Result := True;
+  end
+  else if Inventory.Consume(ERSConsumable.RANGING_BOOST) then
+  begin
+    WriteLn('Consumed ranging boost');
+    Result := True;
+  end
+  else if Inventory.Consume(ERSConsumable.MAGIC_BOOST) then
+  begin
+    WriteLn('Consumed magic boost');
+    Result := True;
+  end
+  else
+  begin
+    WriteLn('No boost potions found in inventory');
+    Result := False;
   end;
 end;
 
