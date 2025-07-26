@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.99'}
+{$DEFINE SCRIPT_REVISION := '0.999'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -1209,9 +1209,9 @@ begin
       CurrentUpText := MainScreen.GetUpText();
       WriteLn(ModePrefix + 'Current uptext: "', CurrentUpText, '"');
       
-      if MainScreen.IsUpText(['(level-160)']) then
+      if MainScreen.IsUpText(['Attack']) then
       begin
-        WriteLn(ModePrefix + 'Found Gemstone Crab with level-160 uptext! Clicking to attack...');
+        WriteLn(ModePrefix + 'Found Gemstone Crab with Attack uptext! Clicking to attack...');
         Mouse.Click(MOUSE_LEFT);
         
         if MainScreen.DidRedClick() then
