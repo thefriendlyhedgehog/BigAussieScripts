@@ -1,4 +1,4 @@
-{$DEFINE SCRIPT_REVISION := '0.93'}
+{$DEFINE SCRIPT_REVISION := '0.95'}
 {$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
 {$I SRL-T/osr.simba}
 {$I WaspLib/osr.simba}
@@ -389,7 +389,7 @@ begin
   if (Self.MaxZoom = 0) then
   begin
     Self.DebugLn('No maximum zoom set, using default value of 100');
-    Self.MaxZoom := 100;
+    Self.MaxZoom := 15;
   end;
 
   if RSInterface.IsOpen() then
@@ -419,7 +419,7 @@ procedure TAntiban.Setup(); override;
 begin
   Self.Skills := [ERSSkill.TOTAL, ERSSkill.ATTACK, ERSSkill.STRENGTH, ERSSkill.DEFENCE, ERSSkill.HITPOINTS];
   Self.MinZoom := 0;
-  Self.MaxZoom := 10;
+  Self.MaxZoom := 15;
   
   Antiban.OnStartBreak := @OnBreakStart;
   Antiban.OnFinishBreak := @OnBreakFinish;
@@ -1434,7 +1434,7 @@ begin
         
         if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
         begin
-          WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
+          //WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
         end
         else
         begin
@@ -1493,7 +1493,7 @@ begin
 
         if (Self.LastCaveExitTime > 0) and ((GetTickCount() - Self.LastCaveExitTime) < 15000) then
         begin
-          WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
+          //WriteLn('Recently exited cave (' + IntToStr(Round((GetTickCount() - Self.LastCaveExitTime) / 1000)) + 's ago) - waiting for boss to spawn...');
         end
         else
         begin
@@ -1573,12 +1573,6 @@ begin
   WriteLn('   Runtime: ' + SRL.MsToTime(Runtime, Time_Short));
   WriteLn('   XP Gained: ' + FormatRoundedNumber(Self.GainedXP));
   WriteLn('   XP/Hour: ' + FormatRoundedNumber(XPPerHourExcludingBreaks));
-
-  if Length(Antiban.Breaks) > 0 then
-    WriteLn('   Next break: ' + SRL.MsToTime(Max(0, Round(Antiban.Breaks[0].NextAtTime - GetTimeRunning())), Time_Short));
-  if Length(Antiban.Sleeps) > 0 then
-    if Antiban.Sleeps[0].NextAtTime > GetTimeRunning then
-      WriteLn('   Next sleep: ' + SRL.MsToTime(Max(0, Round(Antiban.Sleeps[0].NextAtTime - GetTimeRunning())), Time_Short));
   
   if ENABLEWORLDHOPPING then
   begin
@@ -1611,10 +1605,9 @@ begin
   inherited;
   
   SetupNPCDTMs();
-  Options.SetZoomLevel(RandomRange(5, 15));
   
-   if ENABLEWEBHOOKS then
-     Discord.Setup(WEBHOOKURL); 
+  if ENABLEWEBHOOKS then
+   Discord.Setup(WEBHOOKURL); 
   
   if SENDSESSIONSUMMARYMSG and ENABLEWEBHOOKS then
     AddOnTerminate(@Self.SendTerminationNotification);
@@ -1655,6 +1648,8 @@ begin
   Self.LastImageClear := 0;
   Self.LastSystemUpdateCheck := 0;
   Self.SystemUpdateWarningShown := False;
+  
+  Options.SetZoomLevel(RandomRange(5, 15));
 end;
 
 function GemStoneCrabSlayer.SafeReadXPBar(): Integer;
@@ -2008,11 +2003,14 @@ end;
 
 function GemStoneCrabSlayer.TryConsumeAnyBoost(): Boolean;
 var
-  BoostItems: TRSItemArray;
+  BoostCategories: array of TRSItemArray;
+  Category: TRSItemArray;
   Item: TRSItem;
   Slot: Int32;
+  ConsumedAny: Boolean;
 begin
   Result := False;
+  ConsumedAny := False;
   
   if not USEBOOSTS then
     Exit;
@@ -2020,38 +2018,44 @@ begin
   if not Inventory.IsOpen() then
     Inventory.Open();
   
-  BoostItems := [
-    // Combat potions
-    'Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)',
+  BoostCategories := [
+    // Combat potions (attack + strength + defence)
+    ['Divine super combat potion(1..4)', 'Super combat potion(1..4)', 'Combat potion(1..4)'],
     // Strength boosts
-    'Divine super strength potion(1..4)', 'Super strength(1..4)', 'Strength potion(1..4)',
+    ['Divine super strength potion(1..4)', 'Super strength(1..4)', 'Strength potion(1..4)'],
     // Attack boosts  
-    'Divine super attack potion(1..4)', 'Super attack(1..4)', 'Attack potion(1..4)',
+    ['Divine super attack potion(1..4)', 'Super attack(1..4)', 'Attack potion(1..4)'],
     // Defence boosts
-    'Divine super defence potion(1..4)', 'Super defence(1..4)', 'Defence potion(1..4)',
+    ['Divine super defence potion(1..4)', 'Super defence(1..4)', 'Defence potion(1..4)'],
     // Ranging boosts
-    'Divine ranging potion(1..4)', 'Ranging potion(1..4)',
+    ['Divine ranging potion(1..4)', 'Ranging potion(1..4)'],
     // Magic boosts
-    'Divine magic potion(1..4)', 'Magic potion(1..4)',
+    ['Divine magic potion(1..4)', 'Magic potion(1..4)'],
     // Combo potions
-    'Divine bastion potion(1..4)', 'Bastion potion(1..4)',
-    'Divine battlemage potion(1..4)', 'Battlemage potion(1..4)'
+    ['Divine bastion potion(1..4)', 'Bastion potion(1..4)'],
+    ['Divine battlemage potion(1..4)', 'Battlemage potion(1..4)']
   ];
   
-  for Item in BoostItems do
+  for Category in BoostCategories do
   begin
-    if Inventory.FindItem(Item, Slot) then
+    for Item in Category do
     begin
-      if Inventory.ClickSlot(Slot, 'Drink') then
+      if Inventory.FindItem(Item, Slot) then
       begin
-        WriteLn('Consumed boost: ', Item.GetSingle());
-        Result := True;
-        Exit;
+        if Inventory.ClickSlot(Slot, 'Drink') then
+        begin
+          WriteLn('Consumed boost: ', Item.GetSingle());
+          ConsumedAny := True;
+          Wait(800, 1100);
+          Break;
+        end;
       end;
     end;
   end;
   
-  if not Result then
+  if ConsumedAny then
+    Result := True
+  else
     WriteLn('No boost potions found in inventory');
 end;
 
