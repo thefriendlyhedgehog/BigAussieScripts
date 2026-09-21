@@ -356,6 +356,33 @@ and search box render light. The desktop theme is not touched.
 The alternative -- patching every lib builder to set an explicit font colour -- is
 far more invasive and would have to be re-applied after every package update.
 
+## Auditing which scripts build
+
+```sh
+linux/verify-scripts.py [SIMBA_DIR] [--jobs N] [--only SUBSTR]
+```
+
+Compiles every installed script and groups failures **by error message**, because
+that is where the signal is: one error across thirty scripts is a single Linux fix,
+thirty distinct errors are thirty rotted scripts.
+
+Result over 177 installed scripts (26 BASH + 151 third-party): **170 compile**. The
+7 remaining failures are all individual API drift against older WaspLib versions
+(`Unknown declaration "MAP_PATH"`, `"TRSBankWithdrawItem"`, `"FireConfig"`, `"Load"`),
+not Linux problems.
+
+### Case-sensitive include paths
+
+Six scripts failed only because they include
+`BashLib/optional/handlers/House/house.simba` with a capital H, while the directory
+is lowercase. Windows filesystems are case-insensitive so this works there; Linux is
+not. Rather than edit six scripts, `fix-includes.py` maintains a `House -> house`
+symlink, which fixes every such script at once including ones not installed yet.
+
+Exit codes are unreliable here (Simba aborts at teardown regardless), so success is
+read from the compiler's output, and the environment must be inherited -- a stripped
+env makes every script report a false failure.
+
 ## Check everything at once
 
 ```sh

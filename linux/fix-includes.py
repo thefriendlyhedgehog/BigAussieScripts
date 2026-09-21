@@ -202,6 +202,30 @@ end;""",
 ]
 
 
+# Case-only aliases. Windows filesystems are case-insensitive, so a script that
+# writes "House/house.simba" works there and fails here. A symlink fixes every such
+# script at once, including ones not installed yet, without editing any of them.
+LINKS = [
+    ('BashLib/optional/handlers/House', 'house'),
+]
+
+
+def ensure_links(includes: pathlib.Path) -> int:
+    made = 0
+    for rel, target in LINKS:
+        link = includes / rel
+        if link.is_symlink() or link.exists():
+            print(f'  ok       case alias {rel} -> {target} (present)')
+            continue
+        if not (link.parent / target).is_dir():
+            print(f'  MISSING  {rel}: target "{target}" does not exist')
+            continue
+        link.symlink_to(target)
+        print(f'  LINK     case alias {rel} -> {target}')
+        made += 1
+    return made
+
+
 def main() -> int:
     simba = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else
                          pathlib.Path.home() / 'Simba')
@@ -234,6 +258,8 @@ def main() -> int:
                         errors='surrogateescape')
         print(f'  PATCH    {label}')
         applied += 1
+
+    ensure_links(includes)
 
     print(f'\n{applied} applied, {skipped} already present.'
           f'{"  Originals kept as *.upstream." if applied else ""}')
