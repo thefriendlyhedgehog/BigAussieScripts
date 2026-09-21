@@ -135,6 +135,55 @@ building plugin metadata. It does so for plugins that were never `RWE` (e.g.
 `libslacktree64.so`) and Simba carries on regardless, so it looks cosmetic — but it
 is not explained yet.
 
+## RemoteInput pairing: the client JVM must still have java.applet
+
+With the plugin loading (above), injection now works — `libremoteinput64.so` shows
+up mapped in the client's address space. But pairing fails and takes the client
+with it:
+
+```
+Cannot Initialize Maps
+Terminating: [RemoteInput]:[Fatal]: Failed to pair client
+```
+
+and RuneLite dies with a JVM-level SIGSEGV whose stack has a libremoteinput frame:
+
+```
+SIGSEGV (0xb), si_addr: 0x0  (SEGV_MAPERR)
+Current thread: JavaThread "Thread-10" [_thread_in_vm]
+V  [libjvm.so+0x857183]
+... <offset 0x71a8c> in .../libremoteinput/libremoteinput64.so
+```
+
+`libremoteinput64.so` looks up `java/applet/Applet`, among `sun/awt/SunToolkit`
+and the AWT event classes. **The Applet API was removed outright in JDK 25**
+(JEP 504). On Java 25+ that lookup returns null, and a null dereference inside the
+VM is exactly the crash above. Confirm on any JVM with:
+
+```sh
+java --describe-module java.desktop | grep -c applet     # 0 == removed
+```
+
+So the client JVM must be **Java 24 or older** — `jre17-openjdk` matches what the
+SRL/Wasp toolchain targets, `jre21-openjdk` also still has the Applet API.
+
+The launcher spawns the client with whatever JVM it is itself running under, so
+normally this means changing the system default. To test a version without touching
+anything system-wide:
+
+```sh
+linux/run-client-with-java.sh                                    # audit installed JVMs
+linux/run-client-with-java.sh /usr/lib/jvm/java-17-openjdk/bin/java
+```
+
+It replays the exact client command from `~/.runelite/logs/launcher.log` with the
+JVM swapped, and warns if the JVM you picked also lacks `java.applet`.
+
+Not yet confirmed end to end: no JVM older than 26 is installed on the test machine,
+so "pairing succeeds on Java 17" remains a strong inference from the crash, not an
+observation. `Cannot Initialize Maps` appeared alongside the pairing failure and has
+not been investigated separately.
+
 ## Windows parity
 
 ```sh
