@@ -83,6 +83,13 @@ name with `pkill -f`, using a pattern specific enough not to catch bystanders
 
 ## Still to do
 
+- [ ] **Script GUI repaints badly on resize.** Dragging a window corner leaves black
+      rectangles and the gear image panel does not move with the layout. Cosmetic,
+      and only while resizing. Not investigated. Likely child controls lacking
+      anchors plus no repaint of the exposed region; the cheap workaround, if it is
+      not worth fixing properly, is to make the form non-resizable.
+- [ ] **Sidebar title is clipped** ("Tormented Demon" for "Tormented Demons") — a
+      label width vs. nav-panel width issue, unrelated to the combo height fix.
 - [ ] **Package update path (SRL-B / BashLib) on Linux.** Analysed, not yet
       exercised. `IsFileLocked()` tests for a lock by deleting the file and
       restoring it from a `.bak`. Linux has no mandatory locking, so deleting an
