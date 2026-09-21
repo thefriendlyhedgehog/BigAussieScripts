@@ -93,6 +93,48 @@ name with `pkill -f`, using a pattern specific enough not to catch bystanders
       Worth running a real package update to confirm, and to check the
       delete/restore round-trip cannot lose a plugin if it is interrupted.
 
+## RemoteInput plugin: executable stack
+
+Separate from the launcher, and hit when running a script rather than installing a
+profile. Simba reports:
+
+```
+Loading plugin failed. Architecture mismatch? (expected a 64 bit plugin)
+  at line 1, column 11 in file ".../SRL-B/osr/remoteinput.simba"
+```
+
+Nothing is mismatched — the binary is a valid x86-64 ELF whose dependencies all
+resolve. The actual loader error is:
+
+```
+dlopen: cannot enable executable stack as shared object requires
+```
+
+`libremoteinput64.so` ships with `PT_GNU_STACK` marked `RWE`; every sibling plugin
+is `RW`. Since **glibc 2.41** `dlopen` refuses that request outright instead of
+silently granting it, so on any current distro the plugin cannot load. The RWE
+marking is the usual artefact of hand-written assembly built without a
+`.note.GNU-stack` section — the plugin carries Detours-style inline hooking code,
+whose trampolines live in `mmap`'d memory rather than on the stack.
+
+```sh
+linux/fix-plugin-execstack.py [SIMBA_DIR]     # default: ~/Simba
+```
+
+Scans `Includes/` for plugins requesting an executable stack, clears `PF_X` from
+that one program header, keeps the original as `*.so.execstack`, and verifies each
+patched library actually `dlopen`s. Verified end to end: after patching, Simba's own
+`{$loadlib}` succeeds and `EIOS_*` entry points resolve.
+
+**The real fix belongs in the SRL-B / WaspLib build** — link the plugin with
+`-z noexecstack`. Until then this must be re-run after any package update, which
+restores the shipped binary.
+
+Unrelated and still open: Simba prints `Error dumping libremoteinput64.so` when
+building plugin metadata. It does so for plugins that were never `RWE` (e.g.
+`libslacktree64.so`) and Simba carries on regardless, so it looks cosmetic — but it
+is not explained yet.
+
 ## Windows parity
 
 ```sh
@@ -116,6 +158,8 @@ linux/install-to-simba.sh          # or SIMBA_DIR=/path/to/Simba linux/install-t
 
 Copies the launcher over both installed copies (`BashLauncher.simba` and
 `bash-launcher.simba`), keeps one `.upstream` backup each, and compiles both.
+Run `linux/fix-plugin-execstack.py` alongside it — the two cover different things
+(the launcher script vs. the native plugins) and a package update reverts the latter.
 
 **Re-run it after every launcher self-update.** `CheckBashLauncherUpdate()` pulls the
 upstream launcher whenever the remote `SCRIPT_REVISION` is higher, which reverts all
