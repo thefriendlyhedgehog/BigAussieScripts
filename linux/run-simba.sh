@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 #
-#  Launch Simba with a light GTK2 theme, so script-GUI labels stay readable.
-#  Affects this Simba process only -- the desktop theme is untouched.
+#  Launch Simba with a light GTK2 theme, so script GUIs look like they do on
+#  Windows. Affects this Simba process only -- the desktop theme is untouched.
+#
+#  You normally do NOT need this: ~/.local/share/applications/simba.desktop sets
+#  the same GTK2_RC_FILES, so launching Simba from the dock or apps menu already
+#  gets the light theme. Keep this for trying a different theme.
 #
 #  Script GUIs paint their panels white but many labels never set a font colour,
 #  so under a dark theme they inherit light text and vanish. Some controls also
