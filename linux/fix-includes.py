@@ -107,22 +107,65 @@ end;""",
     ),
     (
         'BashLib/utils/forms/formutils.simba',
-        """  Self.Caption.Create(Self.Panel);
+        """procedure TLabeledControl.Create(owner: TControl);
+begin
+  Self.Panel.Create(owner);
+  Self.Panel.setBevelWidth(0);
+
+  Self.Caption.Create(Self.Panel);
   Self.Caption.setAlign(alTop);
 end;""",
-        """  Self.Caption.Create(Self.Panel);
-  Self.Caption.setAlign(alTop);
+        """procedure TLabeledControl.Create(owner: TControl);
+begin
+  Self.Panel.Create(owner);
+  Self.Panel.setBevelWidth(0);
 
+  Self.Caption.Create(Self.Panel);
+  Self.Caption.setAlign(alTop);
   {$IFNDEF WINDOWS}
   // Script GUIs are designed against Windows' light system colours. On Linux the
   // GTK theme decides, so under a dark theme captions come out light on the white
   // panels these GUIs paint, and are invisible. Pin both ends explicitly so the
   // result no longer depends on the desktop theme.
+  //
+  // Deliberately NOT done for the inner TComboBox: GTK2 ignores setColor there (the
+  // box renders dark whatever we ask, and identically under a light theme) but DOES
+  // honour the font colour -- so pinning a dark font gives dark text on a dark box.
   Self.Panel.setColor($FFFFFF);
   Self.Caption.getFont().setColor($1C1C1E);
   {$ENDIF}
 end;""",
-        'BashLib: pin labeled-control colours (theme-independent)',
+        'BashLib: pin TLabeledControl colours',
+    ),
+    (
+        'BashLib/utils/forms/formutils.simba',
+        """procedure TLabeledPanel.Create(owner: TControl); override;
+begin
+  Self.Panel.Create(owner);
+
+  Self.Caption.Create(Self.Panel);
+  Self.Caption.setAlign(alTop);
+end;""",
+        """procedure TLabeledPanel.Create(owner: TControl); override;
+begin
+  Self.Panel.Create(owner);
+
+  Self.Caption.Create(Self.Panel);
+  Self.Caption.setAlign(alTop);
+  {$IFNDEF WINDOWS}
+  // Script GUIs are designed against Windows' light system colours. On Linux the
+  // GTK theme decides, so under a dark theme captions come out light on the white
+  // panels these GUIs paint, and are invisible. Pin both ends explicitly so the
+  // result no longer depends on the desktop theme.
+  //
+  // Deliberately NOT done for the inner TComboBox: GTK2 ignores setColor there (the
+  // box renders dark whatever we ask, and identically under a light theme) but DOES
+  // honour the font colour -- so pinning a dark font gives dark text on a dark box.
+  Self.Panel.setColor($FFFFFF);
+  Self.Caption.getFont().setColor($1C1C1E);
+  {$ENDIF}
+end;""",
+        'BashLib: pin TLabeledPanel colours',
     ),
     (
         'BashLib/utils/forms/formutils.simba',
