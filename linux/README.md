@@ -366,10 +366,20 @@ Compiles every installed script and groups failures **by error message**, becaus
 that is where the signal is: one error across thirty scripts is a single Linux fix,
 thirty distinct errors are thirty rotted scripts.
 
-Result over 177 installed scripts (26 BASH + 151 third-party): **170 compile**. The
-7 remaining failures are all individual API drift against older WaspLib versions
-(`Unknown declaration "MAP_PATH"`, `"TRSBankWithdrawItem"`, `"FireConfig"`, `"Load"`),
-not Linux problems.
+Baseline after de-duplication: **164 of 169 compile** (26 BASH + 142 third-party +
+the local Tormented Demons test copy). The 5 remaining failures are all individual
+drift against older WaspLib versions, not Linux problems:
+
+| error | scripts |
+|---|---|
+| `Unknown declaration "MAP_PATH"` | herbiboar-hunter, thief-aio-portroberts |
+| `Unknown declaration "TRSBankWithdrawItem"` | agility_arena_at_brimhaven |
+| `Unknown declaration "FireConfig"` | skunk-and-bootje-log-burner |
+| `Invalid cast` (line 6168) | garretts-flipper |
+
+The earlier sweep counted 177 because BigAussie's own scripts were duplicated into the
+third-party set at older revisions (e.g. Gemstone Crab at rev 75 and a `9 BETA 6`
+against rev 94 in the BASH set). Those 8 were removed.
 
 ### Case-sensitive include paths
 
