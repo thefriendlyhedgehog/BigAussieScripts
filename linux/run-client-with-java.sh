@@ -2,11 +2,12 @@
 #
 #  Relaunch the RuneLite client under a chosen JVM, bypassing the launcher.
 #
-#  Why: RemoteInput injects into the client JVM and references java/applet/Applet.
-#  The Applet API was REMOVED in JDK 25 (JEP 504), so on Java 25+ that lookup
-#  yields null and the injected code dereferences it -- the client dies with
-#  SIGSEGV inside libjvm while RemoteInput reports "Failed to pair client".
-#  Check with:  java --describe-module java.desktop | grep -c applet
+#  Why: a general diagnostic for running the client under a different JVM.
+#
+#  NOTE: this was written to test the theory that RemoteInput needs java.applet
+#  (removed in JDK 25, JEP 504). That theory was DISPROVED -- RemoteInput pairs
+#  fine on Java 26. Do not downgrade a JVM on the strength of it. The script is
+#  kept because swapping the client's JVM is independently useful.
 #
 #  The launcher spawns the client with whatever JVM it is itself running under,
 #  so pointing it at an older Java normally means changing the system default.
