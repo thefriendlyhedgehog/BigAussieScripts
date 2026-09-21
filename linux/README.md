@@ -167,17 +167,38 @@ Observed: on Java 26 the client hard-crashed twice with the above. On Java 17 it
 pairs — `EIOS_GetClients()` reports an injected client, and Settings Searcher ran to
 completion.
 
-The launcher spawns the client with whatever JVM it runs under, so pointing it at an
-older Java normally means changing the system default. To run the client under a
-chosen JVM without touching anything system-wide:
+### Launching the client on Java 17
+
+Arch's `runelite` package ships `/usr/bin/runelite` as a shell script honouring
+`RUNELITE_JAVA`, and the RuneLite launcher spawns the client with the JVM it is
+itself running under. So one environment variable pins the whole chain:
 
 ```sh
-linux/run-client-with-java.sh                                    # audit installed JVMs
-linux/run-client-with-java.sh /usr/lib/jvm/java-17-openjdk/bin/java
+RUNELITE_JAVA=/usr/lib/jvm/java-17-openjdk/bin/java runelite
 ```
 
-It replays the exact client command from `~/.runelite/logs/launcher.log` with the JVM
-swapped, and warns if the JVM you pick also lacks `java.applet`.
+Verified end to end: `launcher.log` then records
+`JvmLauncher - Running [/usr/lib/jvm/java-17-openjdk/bin/java, ...]`, and the client
+process runs on that JVM.
+
+For the dock / apps menu, put the same env in the desktop entries. A user-level
+`~/.local/share/applications/runelite.desktop` shadows the packaged one and survives
+package updates:
+
+```
+Exec=env RUNELITE_JAVA=/usr/lib/jvm/java-17-openjdk/bin/java runelite
+```
+
+The Jagex launcher invokes `runelite` from PATH, so the same env on its entry is
+inherited by the client it starts:
+
+```
+Exec=env RUNELITE_JAVA=/usr/lib/jvm/java-17-openjdk/bin/java "/opt/jagex-launcher/jagex-launcher.AppImage" %U
+```
+
+`linux/run-client-with-java.sh` predates this and is now only a fallback, for a
+client already started some other way -- it replays the last command from
+`launcher.log` with the JVM swapped. Prefer `RUNELITE_JAVA`.
 
 Still unexplained: `Cannot Initialize Maps`, printed just before one pairing failure.
 
