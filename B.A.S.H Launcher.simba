@@ -5928,7 +5928,11 @@ begin
     {$IFDEF WINDOWS}
     KillTask.SetCommandLine('taskkill /f /im RuneLite.exe');
     {$ELSE}
-    KillTask.SetCommandLine('pkill -if runelite');
+    // Anchored to a java binary running the RuneLite main class. 'pkill -if
+    // runelite' is far too loose -- it matches any process merely mentioning
+    // the word, e.g. a shell tailing a RuneLite log. The pattern deliberately
+    // contains no spaces, because SetCommandLine splits the string on them.
+    KillTask.SetCommandLine('pkill -f ^[^[:space:]]*/java[[:space:]].*net\.runelite\.client\.RuneLite');
     {$ENDIF}
     KillTask.SetOptions([poNoConsole]);
     KillTask.Execute();

@@ -40,28 +40,58 @@ Confirmed two ways rather than inferred:
   the safe way to test anything kill-adjacent here.
 
 **Rule for this codebase: never call `TOSWindow.Kill()` on Linux.** Kill by process
-name (`pkill -if <name>`) instead.
+name with `pkill -f`, using a pattern specific enough not to catch bystanders
+(see [Verified on Linux](#verified-on-linux)).
 
 ## Done
 
 | Fix | Symptom before |
 |---|---|
-| `CloseRuneLite()` uses `pkill -if runelite`; the `Kill()` fallback is Windows-only | whole desktop session SIGKILLed |
+| `CloseRuneLite()` uses an anchored `pkill -f` on the RuneLite main class; the `Kill()` fallback is Windows-only | whole desktop session SIGKILLed |
 | RuneLite `profiles2` path uses `$HOME`, not `%userprofile%` (2 sites) | `userprofile` is empty on Linux, so paths resolved to `/.runelite/profiles2/` and the profile install failed at `ForceDirectories` |
 | Generated async mover: `KillWindowByClass` / `KillSimbas` neutered on Linux | same `Kill()` landmine, reachable from a package update |
 | Async downloader argument quoting | the `destination="..."` quotes exist to survive `CommandLineToArgvW`; Linux `RunScript` passes them verbatim so they land *inside* the filename, and the updater misreports the failure as a rate limit |
 
+## Verified on Linux
+
+- **Install RuneLite Profile, end to end.** Writes
+  `<install-hex>-<id>.properties` and registers it in `profiles.json`; the desktop
+  session survives; a pre-existing profile is left byte-for-byte untouched.
+  Verified on CachyOS / KDE / X11, 2026-09-21.
+- **`pkill` pattern specificity.** `pkill -if runelite` is far too loose — with
+  RuneLite *not running* it still matched a shell whose command line merely
+  contained the word. Tested against a decoy carrying the client's real 2296-char
+  command line (reconstructed from `launcher.log`) plus an innocent bystander
+  process mentioning the main class:
+
+  | pattern | matches |
+  |---|---|
+  | `-if runelite` | decoy + bystander + unrelated shells |
+  | `net\.runelite\.client\.RuneLite` | decoy + bystander |
+  | `^[^[:space:]]*/java[[:space:]].*net\.runelite\.client\.RuneLite` | decoy only |
+
+  The anchored form is what ships. It also confirms `pkill -f` reads the whole
+  command line — the main class sits at offset 2268 and still matched. The pattern
+  contains no spaces on purpose, since `SetCommandLine` splits on them.
+  Known constraint: it assumes `argv[0]` ends in `/java`, which is how the official
+  launcher spawns the client (`JvmLauncher - Running [...]` in `launcher.log`).
+- **No other Windows assumptions in the repo.** `TOSWindow.Kill()` appears only at
+  the fenced sites — nothing in `Free Scripts/`. `SetCommandLine` and `.exe` occur
+  only in the fenced `taskkill`. `GetEnvironmentVariable` is only the four sites
+  above. Every backslash use is `path.Replace('\', '/')`, i.e. normalising *to*
+  forward slashes, which is already Linux-correct.
+
 ## Still to do
 
-- [ ] Run the full **Install RuneLite Profile** path end to end and confirm the
-      profile registers in `profiles.json`.
-- [ ] Audit remaining Windows assumptions (`TProcess.SetCommandLine` callers,
-      path separators, any other `GetEnvironmentVariable` Windows names).
-- [ ] Decide whether `pkill -if runelite` is specific enough, or whether it should
-      match the RuneLite main class instead.
-- [ ] Check the SRL-B / BashLib package update path on Linux (file locking is a
-      Windows concept; `IsFileLocked` always returns False here).
-- [ ] Confirm nothing else in `Free Scripts/` calls `TOSWindow.Kill()`.
+- [ ] **Package update path (SRL-B / BashLib) on Linux.** Analysed, not yet
+      exercised. `IsFileLocked()` tests for a lock by deleting the file and
+      restoring it from a `.bak`. Linux has no mandatory locking, so deleting an
+      in-use `libremoteinput.so` always succeeds and the function always reports
+      "unlocked" — which is arguably the right answer on Linux, since the file
+      genuinely can be replaced while mapped. `FindLockedPlugins()` then returns
+      empty, `UnlockPlugins()` exits early, and the kill paths are never reached.
+      Worth running a real package update to confirm, and to check the
+      delete/restore round-trip cannot lose a plugin if it is interrupted.
 
 ## Windows parity
 
