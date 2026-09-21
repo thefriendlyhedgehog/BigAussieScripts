@@ -135,15 +135,13 @@ building plugin metadata. It does so for plugins that were never `RWE` (e.g.
 `libslacktree64.so`) and Simba carries on regardless, so it looks cosmetic — but it
 is not explained yet.
 
-## RemoteInput pairing: intermittent, crashes the client when it fails
+## RemoteInput requires a client JVM that still has java.applet
 
-**Status: works, but has hard-crashed the client twice. Cause not established.**
+**The client JVM must be Java 24 or older.** `jre17-openjdk` is confirmed working.
 
-With the execstack fix, injection succeeds — `libremoteinput64.so` shows up mapped
-in the client's address space, and `EIOS_GetClients()` reports a paired client.
-RemoteInput has been confirmed working on **Java 26**.
-
-But two earlier attempts killed the client outright:
+`libremoteinput64.so` looks up `java/applet/Applet`. The Applet API was removed
+outright in JDK 25 (JEP 504), so on Java 25+ the lookup yields null and the
+unchecked dereference kills the client:
 
 ```
 Terminating: [RemoteInput]:[Fatal]: Failed to pair client
@@ -152,27 +150,56 @@ Current thread: JavaThread "Thread-10" [_thread_in_vm]
 V  [libjvm.so+0x857183]   ... <offset 0x71a8c> in libremoteinput64.so
 ```
 
-A null dereference inside the VM, from RemoteInput's code path. Both crashes were on
-a *first* injection into a long-running client; later attempts against a freshly
-started client paired cleanly. That is a hint, not a diagnosis.
+Check any JVM with:
 
-### A theory that was tested and disproved
+```sh
+java --describe-module java.desktop | grep -c applet     # 0 == removed
+```
 
-`libremoteinput64.so` looks up `java/applet/Applet`, and the Applet API was removed
-outright in JDK 25 (JEP 504) — verifiable with
-`java --describe-module java.desktop | grep -c applet`, which returns 0 on Java 26.
-That looked like an exact match for a null-class dereference.
+Observed: on Java 26 the client hard-crashed twice with the above. On Java 17 it
+pairs — `EIOS_GetClients()` reports an injected client, and Settings Searcher ran to
+completion.
 
-**It is not the cause.** RemoteInput pairs successfully on Java 26 regardless, so the
-missing class is either not fatal or not reached. Recorded here so the theory is not
-re-derived and acted on; do not downgrade the JVM on the strength of it.
+The launcher spawns the client with whatever JVM it runs under, so pointing it at an
+older Java normally means changing the system default. To run the client under a
+chosen JVM without touching anything system-wide:
 
-`linux/run-client-with-java.sh` remains useful for launching the client under a
-chosen JVM without changing the system default, but it is a general diagnostic now,
-not a fix for this.
+```sh
+linux/run-client-with-java.sh                                    # audit installed JVMs
+linux/run-client-with-java.sh /usr/lib/jvm/java-17-openjdk/bin/java
+```
 
-Still unexplained: `Cannot Initialize Maps`, printed immediately before the pairing
-failure in one of the crashing runs.
+It replays the exact client command from `~/.runelite/logs/launcher.log` with the JVM
+swapped, and warns if the JVM you pick also lacks `java.applet`.
+
+Still unexplained: `Cannot Initialize Maps`, printed just before one pairing failure.
+
+## Script GUI is gated to Windows, and that breaks the build
+
+Every BigAussie script opens with:
+
+```pascal
+{$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}
+```
+
+so `BashLib/optional/handlers/bashgui.simba` is only included on Windows. The scripts
+then reference symbols it declares — `ENABLEWEBHOOKS`, `WEBHOOKURL` — **outside** any
+`{$IFDEF SCRIPT_GUI}` guard, so on Linux they do not compile at all:
+
+```
+Unknown declaration "ENABLEWEBHOOKS" at line 3616 in ".../Tormented Demons.simba"
+```
+
+`bashgui.simba` compiles fine on Linux, so the gate is an unnecessary restriction
+rather than a workaround. Removing it fixes the build *and* gives Linux users the
+script GUI they would otherwise lose entirely.
+
+```sh
+linux/fix-scripts.py [SIMBA_DIR] [--verify]
+```
+
+25 of 28 installed scripts carried the gate. With it removed, **25/25 compile**
+(`--verify`). Scripts are re-downloaded by the launcher, so re-run after updates.
 
 ## SRL-B and BashLib need fixes too (different repos)
 
