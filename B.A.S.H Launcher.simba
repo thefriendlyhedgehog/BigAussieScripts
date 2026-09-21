@@ -597,8 +597,13 @@ begin
   Result += "var" + LineEnding;
   Result += "  window: TOSWindow;" + LineEnding;
   Result += "begin" + LineEnding;
+  {$IFDEF WINDOWS}
   Result += "  for window in GetWindows().GetByClass(name) do" + LineEnding;
   Result += "    window.Kill();" + LineEnding;
+  {$ELSE}
+  // See CloseRuneLite: TOSWindow.Kill() is a session-killer on Linux.
+  Result += "  WriteLn('[AsyncMover]: window kill skipped (unsafe on Linux).');" + LineEnding;
+  {$ENDIF}
   Result += "end;" + LineEnding + LineEnding;
   Result += "procedure KillSimbas();" + LineEnding;
   Result += "var" + LineEnding;
@@ -610,8 +615,12 @@ begin
   Result += "  if MessageDlg('Close Simba', 'Simba needs to be restarted.'," + LineEnding;
   Result += "     TMsgDlgType.mtConfirmation, [mbOK, mbAbort]) = 3 then" + LineEnding;
   Result += "    TerminateScript('You need to close all Simba windows to update SRL.');" + LineEnding + LineEnding;
+  {$IFDEF WINDOWS}
   Result += "  for win in simbas do" + LineEnding;
   Result += "    win.Kill();" + LineEnding + LineEnding;
+  {$ELSE}
+  Result += "  WriteLn('[AsyncMover]: Simba kill skipped (unsafe on Linux).');" + LineEnding + LineEnding;
+  {$ENDIF}
   Result += "  TerminateScript();" + LineEnding;
   Result += "end;" + LineEnding + LineEnding + LineEnding;
   Result += "procedure UnlockPlugins();" + LineEnding;
@@ -1119,7 +1128,16 @@ begin
       TerminateScript('Unrecognized package to download: ' + pkg);
   end;
 
+  {$IFDEF WINDOWS}
   params := ['url=' + url,'destination="'+ Self.DownloadPath + pkg + '.zip"', 'pkg=' + pkg];
+  {$ELSE}
+  // Those quotes are there to survive CommandLineToArgvW, which strips them from
+  // the child's command line. Linux RunScript passes parameters through verbatim,
+  // so they survive into GetProcessParameter('destination') and end up inside the
+  // filename -- Unable to create file ""/.../downloads/srl-b.zip"" -- which the
+  // updater then misreports as a rate limit.
+  params := ['url=' + url, 'destination=' + Self.DownloadPath + pkg + '.zip', 'pkg=' + pkg];
+  {$ENDIF}
   WaspAsync.Run('downloader', params);
 end;
 
@@ -5110,8 +5128,15 @@ var
   files: TStringArray;
   i: Int32;
 begin
+  {$IFDEF WINDOWS}
   dir := GetEnvironmentVariable('userprofile') + DirectorySeparator + '.runelite' +
          DirectorySeparator + 'profiles2' + DirectorySeparator;
+  {$ELSE}
+  // 'userprofile' is a Windows environment variable and is empty on Linux, which
+  // resolves this to /.runelite/profiles2/ and fails at ForceDirectories.
+  dir := GetEnvironmentVariable('HOME') + DirectorySeparator + '.runelite' +
+         DirectorySeparator + 'profiles2' + DirectorySeparator;
+  {$ENDIF}
   if not DirectoryExists(dir) then
     Exit;
 
@@ -5231,8 +5256,15 @@ begin
   Result := False;
   updatedExisting := False;
   name := '';
+  {$IFDEF WINDOWS}
   path := GetEnvironmentVariable('userprofile') + DirectorySeparator + '.runelite' +
           DirectorySeparator + 'profiles2' + DirectorySeparator;
+  {$ELSE}
+  // 'userprofile' is a Windows environment variable and is empty on Linux, which
+  // resolves this to /.runelite/profiles2/ and fails at ForceDirectories.
+  path := GetEnvironmentVariable('HOME') + DirectorySeparator + '.runelite' +
+          DirectorySeparator + 'profiles2' + DirectorySeparator;
+  {$ENDIF}
 
   if not ForceDirectories(path) then
   begin
@@ -5887,20 +5919,36 @@ end;
 procedure TWaspForm.CloseRuneLite();
 var
   KillTask: TProcess;
+  {$IFDEF WINDOWS}
   window: TOSWindow;
+  {$ENDIF}
 begin
   try
     KillTask.Init(nil);
+    {$IFDEF WINDOWS}
     KillTask.SetCommandLine('taskkill /f /im RuneLite.exe');
+    {$ELSE}
+    KillTask.SetCommandLine('pkill -if runelite');
+    {$ENDIF}
     KillTask.SetOptions([poNoConsole]);
     KillTask.Execute();
     KillTask.Free();
     WriteLn('[B.A.S.H] Closed RuneLite.');
   except
+    {$IFDEF WINDOWS}
     WriteLn('[B.A.S.H] taskkill failed, trying window kill.');
     for window in GetWindows() do
       if Pos('runelite', LowerCase(window.GetTitle())) > 0 then
         window.Kill();
+    {$ELSE}
+    // Deliberately NO TOSWindow.Kill() fallback here. On Linux Simba resolves a
+    // window's PID from _NET_WM_PID; most X windows do not carry that property,
+    // GetPID() then returns -1, and Kill() degrades into kill(-1, SIGKILL) --
+    // SIGKILL to every process the user owns, systemd --user included. That
+    // takes down the entire desktop session, which is exactly what the taskkill
+    // except-branch above did on Linux before this guard.
+    WriteLn('[B.A.S.H] Could not run pkill - close RuneLite manually.');
+    {$ENDIF}
   end;
 
   Wait(1000);
