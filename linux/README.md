@@ -88,11 +88,26 @@ name with `pkill -f`, using a pattern specific enough not to catch bystanders
       still assume Windows' light system colours in places. Same shape of problem
       each time: a control that sets one half of a colour pair and inherits the
       other from GTK. Deferred until the scripts are actually running.
-- [ ] **Script GUI repaints badly on resize.** Dragging a window corner leaves black
-      rectangles and the gear image panel does not move with the layout. Cosmetic,
-      and only while resizing. Not investigated. Likely child controls lacking
-      anchors plus no repaint of the exposed region; the cheap workaround, if it is
-      not worth fixing properly, is to make the form non-resizable.
+- **Script GUI repaints badly on resize — WON'T FIX.** Dragging a corner leaves
+      black rectangles and the layout does not reflow. The form is *meant* to be
+      fixed: `TScriptForm.Setup` is called with `allowResize = False`. It does not
+      work on Linux, and cannot be made to from Simba's scripting API. Verified
+      against the actual X11 hints:
+
+      | approach | result |
+      |---|---|
+      | `SetInterfaceConstraints(w,h,w,h)` | hints still report `minimum size: 0 by 0` |
+      | `setBorderStyle(bsSingle)` | no change to hints |
+      | both re-applied in `OnShow` | no change |
+      | `setOnResize` snap-back | compiles, handler never fires |
+
+      Simba's `TForm` wrapper propagates none of it to GTK. A KWin window rule
+      would work, but script forms share `WM_CLASS = "Simba"` with the Simba IDE,
+      and a size rule forces one specific size — fine for BASH's uniform
+      1120x710, wrong for third-party scripts. Deliberately rejected: it is a
+      change to the user's desktop configuration, and mass deployability matters
+      more than a cosmetic artifact that only appears if you drag a corner.
+      A real fix belongs in Simba itself.
 - [ ] **Sidebar title is clipped** ("Tormented Demon" for "Tormented Demons") — a
       label width vs. nav-panel width issue, unrelated to the combo height fix.
 - [ ] **Package update path (SRL-B / BashLib) on Linux.** Analysed, not yet
@@ -409,6 +424,35 @@ packages and its scripts whenever a remote revision is newer, silently reverting
 everything here. That was observed mid-session: `bash-launcher.simba` reverted to an
 older patch and `Tormented Demons.simba` returned to its gated form, both without any
 visible message.
+
+## Deployment footprint
+
+Mass deployment is a goal, so it matters exactly what has to change on a user's
+system. Almost everything lives inside the Simba install.
+
+**Inside `~/Simba` (self-contained, no system impact):**
+- the patched launcher, both copies
+- `Includes/` patches — `fix-includes.py`, plus the `House -> house` case alias
+- `Scripts/` patches — `fix-scripts.py`
+- the RemoteInput plugin's cleared executable stack — `fix-plugin-execstack.py`
+- `gtkrc-light`, the light GTK2 theme used only by Simba
+
+**Outside the install (kept to a minimum):**
+- `~/.local/share/applications/simba.desktop` — sets `GTK2_RC_FILES` so the theme
+  applies without a terminal. The B.A.S.H installer already writes this file.
+- `~/.local/share/applications/runelite.desktop` — a user-level entry shadowing the
+  packaged one, setting `RUNELITE_JAVA`. Needed because RemoteInput requires a JVM
+  that still has `java.applet`.
+- `~/.local/share/applications/jagex-launcher.desktop` — same env, if the Jagex
+  launcher is used. Original kept as `.orig`.
+
+**Requires root (unavoidable):**
+- `jre17-openjdk` (or any JVM ≤ 24) — RemoteInput cannot pair without it.
+- `setcap cap_sys_ptrace=eip` on the Simba binary, which the installer already does,
+  and which must be re-applied after every Simba update.
+
+Deliberately **not** done: KWin window rules, changes to the desktop-wide GTK theme,
+and any edit to `~/.gtkrc-2.0`.
 
 ## Windows parity
 
