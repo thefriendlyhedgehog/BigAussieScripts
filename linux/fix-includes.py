@@ -105,6 +105,40 @@ end;""",
 end;""",
         'BashLib: minimum TLabeledComboBox height (GTK2 clipping)',
     ),
+    (
+        'BashLib/utils/forms/formutils.simba',
+        """  Self.Caption.Create(Self.Panel);
+  Self.Caption.setAlign(alTop);
+end;""",
+        """  Self.Caption.Create(Self.Panel);
+  Self.Caption.setAlign(alTop);
+
+  {$IFNDEF WINDOWS}
+  // Script GUIs are designed against Windows' light system colours. On Linux the
+  // GTK theme decides, so under a dark theme captions come out light on the white
+  // panels these GUIs paint, and are invisible. Pin both ends explicitly so the
+  // result no longer depends on the desktop theme.
+  Self.Panel.setColor($FFFFFF);
+  Self.Caption.getFont().setColor($1C1C1E);
+  {$ENDIF}
+end;""",
+        'BashLib: pin labeled-control colours (theme-independent)',
+    ),
+    (
+        'BashLib/utils/forms/formutils.simba',
+        """  Self.Edit.Create(Self.Panel);
+  Self.Edit.setAlign(alClient);
+""",
+        """  Self.Edit.Create(Self.Panel);
+  Self.Edit.setAlign(alClient);
+
+  {$IFNDEF WINDOWS}
+  Self.Edit.setColor($FFFFFF);
+  Self.Edit.getFont().setColor($1C1C1E);
+  {$ENDIF}
+""",
+        'BashLib: pin TLabeledEdit colours',
+    ),
 ]
 
 
