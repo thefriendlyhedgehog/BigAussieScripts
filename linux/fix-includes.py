@@ -182,6 +182,23 @@ end;""",
 """,
         'BashLib: pin TLabeledEdit colours',
     ),
+    (
+        'BashLib/optional/handlers/bashgui.simba',
+        """  box.SetFontSize(BASH_GUI_COMBO_FONT);
+  box.ComboBox.SetFontColor(BASH_GUI_TEXT);
+  box.ComboBox.GetFont().SetSize(BASH_GUI_COMBO_FONT);""",
+        """  box.SetFontSize(BASH_GUI_COMBO_FONT);
+  {$IFDEF WINDOWS}
+  box.ComboBox.SetFontColor(BASH_GUI_TEXT);
+  {$ELSE}
+  // BASH_GUI_TEXT is near-black, which is correct on Windows where a combo's box
+  // is white. GTK2 renders the box dark and ignores setColor on it, so forcing a
+  // dark font here makes the selection unreadable. Leave the font to the theme,
+  // which pairs it with its own background.
+  {$ENDIF}
+  box.ComboBox.GetFont().SetSize(BASH_GUI_COMBO_FONT);""",
+        'BashLib: leave combo font to the theme (readable selection)',
+    ),
 ]
 
 
