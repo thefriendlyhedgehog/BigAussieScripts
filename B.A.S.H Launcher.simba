@@ -1539,6 +1539,55 @@ begin
   WriteLn('[B.A.S.H] Migrated legacy includes to SRL-B/BashLib: ', ExtractFileName(filepath));
   Result := True;
 end;
+{$IFNDEF WINDOWS}
+(*
+Scripts open with a Windows-only GUI gate: an IFDEF on WINDOWS that defines
+SCRIPT_GUI and nothing else. So BashLib/optional/handlers/bashgui.simba is included
+on Windows only, yet the scripts reference globals it declares -- ENABLEWEBHOOKS,
+WEBHOOKURL, OVERRIDEBREAKS -- outside any {$IFDEF SCRIPT_GUI} guard. On Linux those
+symbols do not exist and the script will not compile:
+
+    Unknown declaration "ENABLEWEBHOOKS"
+
+13 of the 15 scripts in Free Scripts/ fail this way; all 15 compile once the gate is
+removed. bashgui.simba itself compiles fine on Linux, so the gate is an unnecessary
+restriction rather than a workaround.
+
+Doing it here means script authors do not have to change anything: the launcher
+un-gates on download and again on open, which also covers scripts that are re-fetched
+each time they are launched.
+*)
+function UngateScriptGUI(const filepath: String): Boolean;
+var
+  gate, content, updated: String;
+begin
+  Result := False;
+  if (filepath = '') or (not FileExists(filepath)) then
+    Exit;
+
+  // Assembled rather than written literally so no complete WINDOWS conditional
+  // appears inside a string in this file.
+  gate := '{$IFDEF ' + 'WINDOWS}{$DEFINE ' + 'SCRIPT_GUI}{$ENDIF}';
+
+  try
+    content := ReadFileContents(filepath);
+  except
+    Exit;
+  end;
+  if (content = '') or (Pos(gate, content) = 0) then
+    Exit;
+
+  updated := StringReplace(content, gate, '{$DEFINE ' + 'SCRIPT_GUI}', [rfReplaceAll]);
+  if not WriteFileContents(filepath, updated, False) then
+  begin
+    WriteLn('[B.A.S.H] Failed to enable the script GUI in: ', filepath);
+    Exit;
+  end;
+
+  WriteLn('[B.A.S.H] Enabled the script GUI on Linux: ', ExtractFileName(filepath));
+  Result := True;
+end;
+{$ENDIF}
 
 function ScriptMatchesActivity(const script: TScriptData; const activity: String): Boolean;
 var
@@ -2278,6 +2327,9 @@ begin
 
     WriteLn('[B.A.S.H] Premium script saved: ', dest);
     MigrateLegacyLibIncludes(dest);
+    {$IFNDEF WINDOWS}
+    UngateScriptGUI(dest);
+    {$ENDIF}
     Result := True;
   except
     if FileExists(tempDest) then
@@ -2358,6 +2410,9 @@ begin
 
     WriteLn('[B.A.S.H] Free script saved: ', dest);
     MigrateLegacyLibIncludes(dest);
+    {$IFNDEF WINDOWS}
+    UngateScriptGUI(dest);
+    {$ENDIF}
     Result := True;
   except
     if FileExists(tempDest) then
@@ -3107,6 +3162,9 @@ begin
 
     WriteLn('[B.A.S.H] Script saved: ', dest);
     MigrateLegacyLibIncludes(dest);
+    {$IFNDEF WINDOWS}
+    UngateScriptGUI(dest);
+    {$ENDIF}
   except
     if FileExists(dest) then DeleteFile(dest);
     WriteLn('[B.A.S.H] Download error: ', GetExceptionMessage());
@@ -5894,6 +5952,9 @@ begin
       path := script.URL;
     if (path = '') or (not FileExists(path)) then Exit;
     MigrateLegacyLibIncludes(path);
+    {$IFNDEF WINDOWS}
+    UngateScriptGUI(path);
+    {$ENDIF}
     SimbaOpenInTab(path);
     Self.Form.Close();
     Exit;
@@ -5903,6 +5964,9 @@ begin
   scriptFile := WaspUpdater.GetScriptFile(script.ID);
   if (scriptFile.Path = '') or (not FileExists(scriptFile.Path)) then Exit;
   MigrateLegacyLibIncludes(scriptFile.Path);
+  {$IFNDEF WINDOWS}
+  UngateScriptGUI(scriptFile.Path);
+  {$ENDIF}
   SimbaOpenInTab(scriptFile.Path);
   Self.Form.Close();
 end;
