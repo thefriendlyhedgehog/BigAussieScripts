@@ -264,6 +264,23 @@ destructor calling back into Simba (an earlier core showed
 once Simba has torn its memory manager down. Fixing it means rebuilding the plugins;
 out of scope here, and script results are unaffected.
 
+## Check everything at once
+
+```sh
+linux/status.sh
+```
+
+Verifies all five: both launcher copies, the plugin's executable stack, the two
+includes patches, that no script still gates its GUI to Windows, and that a JVM with
+`java.applet` is installed. Prints the exact command to fix anything that is off, and
+reports which JVM a running client is on.
+
+**Worth running before every session.** The launcher re-downloads itself, its
+packages and its scripts whenever a remote revision is newer, silently reverting
+everything here. That was observed mid-session: `bash-launcher.simba` reverted to an
+older patch and `Tormented Demons.simba` returned to its gated form, both without any
+visible message.
+
 ## Windows parity
 
 ```sh
