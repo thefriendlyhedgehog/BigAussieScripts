@@ -83,6 +83,11 @@ name with `pkill -f`, using a pattern specific enough not to catch bystanders
 
 ## Still to do
 
+- [ ] **Broader script-GUI polish on Linux.** The dropdown fixes (height, and
+      leaving the font to the theme) sorted the worst of it, but other controls
+      still assume Windows' light system colours in places. Same shape of problem
+      each time: a control that sets one half of a colour pair and inherits the
+      other from GTK. Deferred until the scripts are actually running.
 - [ ] **Script GUI repaints badly on resize.** Dragging a window corner leaves black
       rectangles and the gear image panel does not move with the layout. Cosmetic,
       and only while resizing. Not investigated. Likely child controls lacking
