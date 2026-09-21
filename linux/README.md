@@ -303,6 +303,33 @@ it, both render identically.
 cause, but rendering at 8 vs 10 is pixel-identical because the code sets the combo
 font explicitly. Do not change `~/.gtkrc-2.0` for this.
 
+## Unreadable labels under a dark GTK theme
+
+On the Accounts and Equipment pages the field captions are invisible -- blank space
+where "Account", "Password", "World" and the gear slot names should be -- while the
+Action page reads fine.
+
+Script GUIs paint their own panels white (`am.SetColor(BASH_GUI_BG)`), but many
+labels never set a font colour and so inherit the GTK theme default. Under a dark
+theme that default is *light*, which disappears on those white panels. The labels
+that do render are the ones bashgui creates itself -- `MakeLabel`, `AddEdit` and
+`AddCheck` all call `SetFontColor`; `AddLabel` and the shared lib builders
+(`CreateAccountManager`, gearhandler's `_SetupGearPanel`) do not.
+
+So it is an environment mismatch, not a layout bug: these GUIs assume the light
+system theme Windows gives them.
+
+```sh
+linux/run-simba.sh          # Simba with a light GTK2 theme, this process only
+```
+
+`linux/gtkrc-light` includes the user's real GTK2 settings and overrides only
+`gtk-theme-name`. Verified that `GTK2_RC_FILES` reaches Simba: its menus, file tree
+and search box render light. The desktop theme is not touched.
+
+The alternative -- patching every lib builder to set an explicit font colour -- is
+far more invasive and would have to be re-applied after every package update.
+
 ## Check everything at once
 
 ```sh

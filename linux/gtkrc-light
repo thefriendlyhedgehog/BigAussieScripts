@@ -1,0 +1,10 @@
+# Light GTK2 theme for Simba only, applied via GTK2_RC_FILES.
+#
+# Script GUIs paint their own panels white (BASH_GUI_BG) but many labels -- the
+# shared account manager, gearhandler's equipment panel -- never set a font colour,
+# so they inherit the GTK theme default. Under a dark theme that default is light,
+# which is invisible on those white panels.
+#
+# Inherits the user's real settings, then overrides only the theme.
+include "/home/cachy/.gtkrc-2.0"
+gtk-theme-name="Breeze"
