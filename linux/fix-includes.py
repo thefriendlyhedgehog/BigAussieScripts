@@ -199,6 +199,53 @@ end;""",
   box.ComboBox.GetFont().SetSize(BASH_GUI_COMBO_FONT);""",
         'BashLib: leave combo font to the theme (readable selection)',
     ),
+    (
+        'BashLib/optional/handlers/bashgui.simba',
+        """  bold: Boolean = False
+): TLabel;
+begin
+  Result.Create(parent);
+  Result.SetLeft(TControl.AdjustToDPI(left));
+  Result.SetTop(TControl.AdjustToDPI(top));
+  Result.SetCaption(labelText);
+  Result.GetFont().SetSize(fontSize);
+  Result.GetFont().SetColor(fontColor);
+  if bold then
+    Result.GetFont().SetStyle([fsBold]);
+end;""",
+        """  bold: Boolean = False;
+  maxWidth: Int32 = 0
+): TLabel;
+begin
+  Result.Create(parent);
+  Result.SetLeft(TControl.AdjustToDPI(left));
+  Result.SetTop(TControl.AdjustToDPI(top));
+  Result.SetCaption(labelText);
+  Result.GetFont().SetSize(fontSize);
+  Result.GetFont().SetColor(fontColor);
+  if bold then
+    Result.GetFont().SetStyle([fsBold]);
+
+  // A TLabel auto-sizes to its text, so a long caption simply overflows its parent
+  // and is clipped -- "Tormented Demons" became "Tormented Demon" in the 190px nav
+  // panel. Step the font down until it fits. Font metrics differ per platform, so
+  // this matters more on Linux, but a long enough name overflows anywhere.
+  if maxWidth > 0 then
+    while (fontSize > 8) and (Result.GetWidth() > maxWidth) do
+    begin
+      Dec(fontSize);
+      Result.GetFont().SetSize(fontSize);
+    end;
+end;""",
+        'BashLib: sidebar title shrinks to fit the nav panel',
+    ),
+    (
+        'BashLib/optional/handlers/bashgui.simba',
+        """  Self.BrandLabel := Self.MakeLabel(Self.NavPanel, Self.BrandTitle, 16, 28, 14, BASH_GUI_TEXT, True);""",
+        """  Self.BrandLabel := Self.MakeLabel(Self.NavPanel, Self.BrandTitle, 16, 28, 14, BASH_GUI_TEXT, True,
+    TControl.AdjustToDPI(BASH_GUI_NAV_W - 26));""",
+        'BashLib: pass the nav width to the sidebar title',
+    ),
 ]
 
 

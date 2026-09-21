@@ -425,6 +425,44 @@ everything here. That was observed mid-session: `bash-launcher.simba` reverted t
 older patch and `Tormented Demons.simba` returned to its gated form, both without any
 visible message.
 
+## Where each fix has to live, long-term
+
+The intent is that `bash-setup-linux.sh` installs Simba and the libs once, and
+everything after that updates from inside B.A.S.H with the fixes **already upstream** —
+no on-the-fly patching. Here is what that would take, per fix.
+
+**Upstreamable as ordinary source changes** (all `{$IFDEF WINDOWS}`-fenced, no
+Windows behaviour change):
+
+| fix | repo |
+|---|---|
+| `CloseRuneLite` kill(-1), generated-mover kills, downloader quoting, profile path | BigAussie/BASH |
+| `SCRIPT_GUI` Windows-only gate | BigAussie/BASH (`Free Scripts/`) + premium scripts |
+| profiles2 `$HOME` path, combo height, labeled-control colours, combo font, title shrink | BigWaspBackup/BashLib |
+| client detection by title prefix | BigWaspBackup/SRL-B |
+
+**Cannot be a source patch:**
+
+- **RemoteInput's executable stack.** The `.so` must be rebuilt with `-z noexecstack`
+  by whoever builds it. Until that happens `fix-plugin-execstack.py` is required on
+  every install and after every package update.
+- **Case-sensitive include paths.** Six third-party scripts write `House/` for a
+  lowercase `house/` directory. Each author would have to fix their own script; the
+  `House -> house` symlink is a local workaround and probably permanent.
+- **A JVM <= 24** and the `setcap` — environment requirements, not code.
+
+### Keeping the tooling honest
+
+`fix-includes.py` run against pristine upstream libs must reproduce the installed
+files **byte for byte**. That invariant caught real drift: the sidebar-title fix had
+been applied by hand and was missing from the tool, so a package update would have
+silently dropped it. To check:
+
+```sh
+curl -fsSL -o BashLib.zip https://github.com/BigWaspBackup/BashLib/archive/refs/heads/master.zip
+# unzip somewhere, run fix-includes.py against it, then cmp against ~/Simba/Includes
+```
+
 ## Deployment footprint
 
 Mass deployment is a goal, so it matters exactly what has to change on a user's
