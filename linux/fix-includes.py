@@ -15,7 +15,14 @@ both, so re-run this after any package update.
        BASH RuneLite profile is not installed.
    both of which are false on Linux even with the profile correctly installed.
 
-2. SRL-B rsclient GetCurrentClient()  --  NOT Linux-specific, applied unconditionally
+2. BashLib TLabeledComboBox.Create()  --  Linux-only, {$IFNDEF WINDOWS} fenced
+   Sizes its panel from the combo's height *before* the widget is realised. GTK2
+   renders a combo taller than that, so the panel is too short and every dropdown
+   in a script GUI shows its text clipped. Callers that set an explicit height
+   (bashgui's AddCombo does) were fine; callers that do not (a script's own helper,
+   and gearhandler's 13 equipment combos) were not.
+
+3. SRL-B rsclient GetCurrentClient()  --  NOT Linux-specific, applied unconditionally
    Matches the root window title exactly against 'RuneLite'. RuneLite appends the
    logged-in display name ("RuneLite - someone"), so the match only ever succeeds
    while logged out, and the client is reported as UNKNOWN:
@@ -73,6 +80,30 @@ var
   title: String;
 begin""",
         'SRL-B: declare title local',
+    ),
+    (
+        'BashLib/utils/forms/formutils.simba',
+        """  h += TControl.AdjustToDPI(Self.Caption.getHeight());
+  h += TControl.AdjustToDPI(Self.ComboBox.getHeight());
+
+  Self.Panel.setHeight(h);
+end;""",
+        """  h += TControl.AdjustToDPI(Self.Caption.getHeight());
+  h += TControl.AdjustToDPI(Self.ComboBox.getHeight());
+
+  {$IFNDEF WINDOWS}
+  // GTK2 renders a combo taller than the default height reported here, before the
+  // widget is realised, so a panel sized from it clips the combo -- every dropdown
+  // shows its text cut off. Reserve at least what bashgui's AddCombo reserves.
+  // A caller's later SetHeight still overrides this, so only callers that set no
+  // height at all are affected -- exactly the ones that are already broken.
+  if h < TControl.AdjustToDPI(58) then
+    h := TControl.AdjustToDPI(58);
+  {$ENDIF}
+
+  Self.Panel.setHeight(h);
+end;""",
+        'BashLib: minimum TLabeledComboBox height (GTK2 clipping)',
     ),
 ]
 

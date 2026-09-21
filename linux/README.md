@@ -264,6 +264,38 @@ destructor calling back into Simba (an earlier core showed
 once Simba has torn its memory manager down. Fixing it means rebuilding the plugins;
 out of scope here, and script results are unaffected.
 
+## Clipped combo boxes in script GUIs
+
+Every dropdown in a script GUI renders with its text cut off at the bottom, while
+edits, labels, buttons and checkboxes are fine.
+
+`TLabeledComboBox.Create` sizes its panel as
+`Caption.getHeight() + ComboBox.getHeight()` *at creation time*, then
+`ComboBox.setAlign(alClient)` makes the combo fill what is left. GTK2 renders a combo
+taller than the default height reported before the widget is realised, so the panel
+is too short and the combo is clipped. On Windows that default is big enough, which
+is why this is Linux-only.
+
+It only affects callers that never set an explicit height:
+
+| caller | sets height? | result |
+|---|---|---|
+| bashgui `AddCombo` | yes, `AdjustToDPI(58)` | fine |
+| a script's own helper (e.g. `AddComboByText`) | no | clipped |
+| `gearhandler` equipment combos (13 of them) | no | clipped |
+
+Fixed in `linux/fix-includes.py` with a minimum height inside `Create`, fenced
+`{$IFNDEF WINDOWS}`. A caller's later `SetHeight` still wins, so the only behaviour
+that changes is for callers that are already broken.
+
+Proved with a two-combo test form — one built with `SetHeight(58)`, one without,
+identical otherwise. Before the fix the second reproduced the clipping exactly; after
+it, both render identically.
+
+**Not the GTK font.** `gtk-font-name` is `Noto Sans 10`, which looks like the obvious
+cause, but rendering at 8 vs 10 is pixel-identical because the code sets the combo
+font explicitly. Do not change `~/.gtkrc-2.0` for this.
+
 ## Check everything at once
 
 ```sh
