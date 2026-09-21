@@ -184,6 +184,69 @@ so "pairing succeeds on Java 17" remains a strong inference from the crash, not 
 observation. `Cannot Initialize Maps` appeared alongside the pairing failure and has
 not been investigated separately.
 
+## SRL-B and BashLib need fixes too (different repos)
+
+Found by running Settings Searcher to completion. These live in
+`BigWaspBackup/SRL-B` and `BigWaspBackup/BashLib`, so they are **not** covered by
+this branch — `linux/fix-includes.py` patches the installed copies, and must be
+re-run after any package update.
+
+```sh
+linux/fix-includes.py [SIMBA_DIR]        # default: ~/Simba
+```
+
+**BashLib `GetProfilesPath()`** — the same `%userprofile%` Windows-ism the launcher
+had, in a second copy (`BashLib/osr/handlers/settingshandler.simba`). Empty on Linux,
+so the path resolved to `/.runelite/profiles2` and a correctly installed profile was
+reported as missing:
+
+```
+GetProfilesPath -> Returning profiles2 path
+CheckGPUPlugin -> profiles.json not found, skipping check
+_CheckBashProfileRequired -> BASH RuneLite profile is not installed.
+```
+
+Fenced with `{$IFDEF WINDOWS}`. Verified after patching: the path resolves to the
+real directory and `profiles.json` is found.
+
+**SRL-B `GetCurrentClient()`** — *not* Linux-specific. It matches the root window
+title exactly against `'RuneLite'`, but RuneLite appends the logged-in display name:
+
+```
+root title = "RuneLite - <name>"     →  ERSClient.UNKNOWN
+[BASH] Client: UNKNOWN
+[BASH] Warning: BASH scripts expect RuneLite
+```
+
+So the exact match only ever succeeds while logged out. Changed to a prefix match,
+applied unconditionally — strictly more permissive, so it can only turn an UNKNOWN
+into a correct answer.
+
+## Known: `free(): invalid pointer` at Simba exit
+
+Harmless to results, but it aborts the process and dumps core. It is **not** caused
+by anything on this branch, and not by RemoteInput. Reproduces with a two-line
+script:
+
+```pascal
+{$loadlib ../plugins/libtpaex/libtpaex}
+begin WriteLn('done'); end.
+```
+
+Per-plugin, loading each on its own:
+
+| plugin | exit |
+|---|---|
+| libtpaex, libslacktree, libsimpleocr | 134 (abort at teardown) |
+| libasyncmouse, libremoteinput | 0, clean |
+
+It fires at process exit, after the script has finished successfully, from a plugin
+destructor calling back into Simba (an earlier core showed
+`exit → __run_exit_handlers → libslacktree64.so → Simba`). All five plugins export
+`SetPluginMemoryManager`, so the likely shape is a free through the wrong allocator
+once Simba has torn its memory manager down. Fixing it means rebuilding the plugins;
+out of scope here, and script results are unaffected.
+
 ## Windows parity
 
 ```sh
