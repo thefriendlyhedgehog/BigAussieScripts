@@ -246,6 +246,88 @@ end;""",
     TControl.AdjustToDPI(BASH_GUI_NAV_W - 26));""",
         'BashLib: pass the nav width to the sidebar title',
     ),
+    (
+        # NOT Linux-specific. Eagle Eye and Mystic Might no longer exist in OSRS; they
+        # were replaced by Deadeye and Mystic Vigour, which also sit in DIFFERENT slots
+        # (after Chivalry rather than before Retribution). The count is unchanged at 29,
+        # so nothing looks wrong until a prayer is clicked.
+        #
+        # Everything here is positional -- PrayerBoxes[prayer] is "the nth cell" -- so
+        # the stale order made every index from 19 on address the wrong prayer.
+        # CanActivate(CHIVALRY) probed slot 25, which is really Mystic Vigour, and lit
+        # that up for the melee phase.
+        #
+        # Verified 2026-09-24 against a live client by hovering every cell and reading
+        # MainScreen.GetUpText (Scripts/linux-test/Prayer Book Scan.simba). Do not
+        # change this order from a screenshot -- measure it.
+        'SRL-B/osr/interfaces/gametabs/prayer.simba',
+        """    INCREDIBLE_REFLEXES,
+    PROTECT_FROM_MAGIC,
+    PROTECT_FROM_MISSILES,
+    PROTECT_FROM_MELEE,
+    EAGLE_EYE,
+
+    MYSTIC_MIGHT,
+    RETRIBUTION,
+    REDEMPTION,
+    SMITE,
+    PRESERVE,
+
+    CHIVALRY,
+    PIETY,
+    RIGOUR,
+    AUGURY
+  );""",
+        """    INCREDIBLE_REFLEXES,
+    PROTECT_FROM_MAGIC,
+    PROTECT_FROM_MISSILES,
+    PROTECT_FROM_MELEE,
+    RETRIBUTION,
+
+    REDEMPTION,
+    SMITE,
+    PRESERVE,
+    CHIVALRY,
+    DEADEYE,
+
+    MYSTIC_VIGOUR,
+    PIETY,
+    RIGOUR,
+    AUGURY
+  );""",
+        'SRL-B: ERSPrayer matches the live prayer book',
+    ),
+    (
+        'BashLib/osr/interfaces/gametabs/prayer.simba',
+        """    ERSPrayer.EAGLE_EYE,""",
+        """    ERSPrayer.DEADEYE,""",
+        'BashLib: RANGED_PRAYERS uses Deadeye',
+    ),
+    (
+        'BashLib/osr/interfaces/gametabs/prayer.simba',
+        """    ERSPrayer.MYSTIC_MIGHT,""",
+        """    ERSPrayer.MYSTIC_VIGOUR,""",
+        'BashLib: MAGIC_PRAYERS uses Mystic Vigour',
+    ),
+    (
+        # The 8.7.0 Antiban profile window is a separate TForm whose Breaks/Tasks tab
+        # sheets take the GTK theme colour -- dark here -- while every label and
+        # checkbox caption on them is pinned near-black: unreadable. Colour the sheets,
+        # NOT the form: a light form also turns the inactive tab captions white-on-light.
+        # (Activity Antiban is already fine; its content panel sets BASH_GUI_BG.)
+        'BashLib/optional/handlers/bashgui_antiban_profile.simba',
+        """  Self.AntibanTasksTab.Create(Self.AntibanProfilePages);
+  Self.AntibanTasksTab.SetCaption('Tasks');
+""",
+        """  Self.AntibanTasksTab.Create(Self.AntibanProfilePages);
+  Self.AntibanTasksTab.SetCaption('Tasks');
+  {$IFNDEF WINDOWS}
+  Self.AntibanBreaksTab.SetColor(BASH_GUI_BG);
+  Self.AntibanTasksTab.SetColor(BASH_GUI_BG);
+  {$ENDIF}
+""",
+        'BashLib: light background on the Antiban profile tabs',
+    ),
 ]
 
 

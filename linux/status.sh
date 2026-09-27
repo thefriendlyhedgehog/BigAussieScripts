@@ -47,6 +47,24 @@ grep -q "Pos('RuneLite', title) = 1" "$INC/SRL-B/osr/rsclient.simba" 2>/dev/null
     && ok "SRL-B client detection" \
     || fail "SRL-B still matches the client title exactly" "linux/fix-includes.py"
 
+# Every ERSPrayer member BashLib names must exist in SRL-B's enum. A fresh BashLib
+# still says EAGLE_EYE / MYSTIC_MIGHT, which the patched SRL-B enum dropped, and
+# that fails to compile EVERY script ("Constant expression expected" in
+# BashLib/.../prayer.simba) -- this check was green while that was happening.
+# Comparing the two sides also catches the reverse: SRL-B reverted, BashLib patched.
+enum="$(sed -n '/ERSPrayer = (/,/);/p' "$INC/SRL-B/osr/interfaces/gametabs/prayer.simba" 2>/dev/null \
+        | grep -oE '[A-Z][A-Z_]+' | sort -u)"
+used="$(grep -rhoE 'ERSPrayer\.[A-Z][A-Z_]+' --include='*.simba' "$INC/BashLib" 2>/dev/null \
+        | sed 's/^ERSPrayer\.//' | sort -u)"
+if [ -z "$enum" ]; then
+    fail "SRL-B ERSPrayer enum not found" "reinstall SRL-B, then linux/fix-includes.py"
+else
+    missing="$(comm -13 <(echo "$enum") <(echo "$used") | tr '\n' ' ')"
+    [ -z "$missing" ] \
+        && ok "BashLib prayers match the SRL-B prayer enum" \
+        || fail "BashLib uses prayers SRL-B does not define: $missing" "linux/fix-includes.py"
+fi
+
 # 4. scripts (ignore .upstream backups)
 gated=$(find "$SCR" -name '*.simba' -exec grep -l '{$IFDEF WINDOWS}{$DEFINE SCRIPT_GUI}{$ENDIF}' {} + 2>/dev/null | wc -l)
 [ "$gated" -eq 0 ] \

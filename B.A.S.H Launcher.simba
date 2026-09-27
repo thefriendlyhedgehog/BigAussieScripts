@@ -415,6 +415,15 @@ begin
   Result += "  except" + LineEnding;
   Result += "    WriteLn('[AsyncDownloader]: Error: ', GetExceptionMessage());" + LineEnding;
   Result += "  end;" + LineEnding;
+  {$IFNDEF WINDOWS}
+  // Write the marker here as well as in Free(). A plugin destructor can abort the
+  // helper at exit on Linux, which skips AddOnTerminate entirely and leaves the
+  // launcher polling a marker that never arrives. Creating it twice is harmless.
+  Result += "  if ok then" + LineEnding;
+  Result += "    CloseFile(CreateFile(donePath))" + LineEnding;
+  Result += "  else" + LineEnding;
+  Result += "    CloseFile(CreateFile(failPath));" + LineEnding;
+  {$ENDIF}
   Result += "end;" + LineEnding;
 end;
 
@@ -428,7 +437,11 @@ begin
   Result += "end;" + LineEnding + LineEnding;
   Result += "begin" + LineEnding;
   Result += "  path := GetProcessParameter('path');" + LineEnding;
+  {$IFDEF WINDOWS}
   Result += "  name := GetProcessParameter('name');" + LineEnding + LineEnding;
+  {$ELSE}
+  Result += "  name := GetProcessParameter('pkg');" + LineEnding + LineEnding;
+  {$ENDIF}
   Result += "  if FileExists({$MACRO CURRENT_DIRECTORY} + 'downloader-' + LowerCase(name) + '.done') then" + LineEnding;
   Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'downloader-' + LowerCase(name) + '.done');" + LineEnding + LineEnding;
   Result += "  AddOnTerminate(@Free);" + LineEnding + LineEnding;
@@ -439,6 +452,10 @@ begin
   Result += "  except" + LineEnding;
   Result += "    WriteLn('[AsyncUnzipper]: Error: ', GetExceptionMessage());" + LineEnding;
   Result += "  end;" + LineEnding;
+  {$IFNDEF WINDOWS}
+  // See the downloader: don't rely on AddOnTerminate surviving to write this.
+  Result += "  CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'unzipper-' + LowerCase(name) + '.done'));" + LineEnding;
+  {$ENDIF}
   Result += "end;" + LineEnding;
 end;
 
@@ -665,6 +682,15 @@ begin
   Result += "  if Length(paths) <> 1 then" + LineEnding;
   Result += "    TerminateScript('The ' + pkg + ' download is empty or has unexpected things inside.');" + LineEnding + LineEnding;
   Result += "  destination := IncludePath + GetInstallDir(pkg) + SEP;" + LineEnding;
+  {$IFNDEF WINDOWS}
+  // Unlink directory symlinks first (e.g. fix-includes.py's House -> house case alias).
+  // FindDirectories reports them as directories, DeleteDirectory can't rmdir a link, and
+  // RMDir aborted part-way leaving the library half-deleted. DeleteFile is unlink(2):
+  // it removes a symlink but fails harmlessly (EISDIR) on a real directory.
+  Result += "  if DirectoryExists(destination) then" + LineEnding;
+  Result += "    for path in FindDirectories(destination, True) do" + LineEnding;
+  Result += "      DeleteFile(path);" + LineEnding;
+  {$ENDIF}
   Result += "  if DirectoryExists(destination) and not RMDir(destination, True, ['.git', 'overrides.simba']) then" + LineEnding;
   Result += "    TerminateScript('Failed to delete old ' + GetInstallDir(pkg) + ' library');" + LineEnding;
   Result += "  if not ForceDirectories(destination) then" + LineEnding;
@@ -704,6 +730,10 @@ begin
   Result += "  end;" + LineEnding + LineEnding;
   Result += "  WriteLn('[AsyncMover]: Moving ', pkg, ' files, this will take a while.');" + LineEnding;
   Result += "  MoveFiles(GetProcessParameter('origin'), pkg);" + LineEnding;
+  {$IFNDEF WINDOWS}
+  // See the downloader: don't rely on AddOnTerminate surviving to write this.
+  Result += "  CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done'));" + LineEnding;
+  {$ENDIF}
   Result += "end;" + LineEnding;
 end;
 
@@ -3702,11 +3732,25 @@ begin
   end;
 
 
+  {$IFDEF WINDOWS}
   if (Self.State = EMonitorState.DOWNLOAD) and (Self.StartedAt > 0) and (GetTickCount() - Self.StartedAt > 120000) then
   begin
     TTimer(sender).SetEnabled(False);
     Self.Fail('Timed out');
   end;
+  {$ELSE}
+  // Only DOWNLOAD had a deadline, so a lost unzipper/mover marker left this polling
+  // forever on "Unzipping"/"Cleaning" with no error shown. The helpers now write their
+  // marker inline, and this covers the remaining case: a crash part-way through the
+  // work, where no marker is ever written.
+  if Self.StartedAt > 0 then
+    if ((Self.State = EMonitorState.DOWNLOAD) and (GetTickCount() - Self.StartedAt > 120000)) or
+       ((Self.State <> EMonitorState.DOWNLOAD) and (GetTickCount() - Self.StartedAt > 600000)) then
+    begin
+      TTimer(sender).SetEnabled(False);
+      Self.Fail('Timed out');
+    end;
+  {$ENDIF}
 end;
 
 procedure TMonitor.NextState();
@@ -3744,7 +3788,14 @@ begin
     begin
       Self.CurrentFile := 'unzipper-' + LowerCase(Self.Package) + '.done';
       Self.StartedAt := GetTickCount();
+      {$IFDEF WINDOWS}
       params := ['path=' + GitHubClient.DownloadPath, 'name=' + Self.Package];
+      {$ELSE}
+      // GTK's init consumes --name (its X window-name option) before the script sees
+      // it, so GetProcessParameter('name') came back empty and the unzipper looked for
+      // "downloads/.zip". Use pkg=, like the downloader and mover already do.
+      params := ['path=' + GitHubClient.DownloadPath, 'pkg=' + Self.Package];
+      {$ENDIF}
       WaspAsync.Run('unzipper', params);
 
       Self.Caption.setCaption('Unzipping');
