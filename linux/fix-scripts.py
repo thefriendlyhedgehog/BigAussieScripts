@@ -439,6 +439,40 @@ end;""",
         'Tempoross: FishHover logs uptext and no-spot failures',
     ),
     (
+        # NOT Linux-specific. The boat wait gives up after 33-40 s. When that lands just as
+        # the game starts, the teleport has already moved us off the lobby boat (OnBoat is
+        # False) but the game HUD isn't drawn yet (IsGameRunning is False), so
+        # HandleGameStart took the lobby path and walked to the lobby ladder -- from the
+        # island. That can't path: one run lost 2m10s before "Couldn't get to ship!",
+        # another sat on the ship until stopped (2026-09-28). Outside the lobby, wait for
+        # the HUD (bounded at 20 s) instead.
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """        Self.Debugln("Exited game, not enough players", EOutputLevel.USER);
+        Exit;
+      end;
+    end;
+
+    //Pause the running timer because this is going to lose some time.""",
+        """        Self.Debugln("Exited game, not enough players", EOutputLevel.USER);
+        Exit;
+      end;
+    end;
+
+    // The boat wait can give up just as the game starts: the teleport has already moved
+    // us off the lobby boat, but the game HUD isn't drawn yet so IsGameRunning() is still
+    // false. Walking to the lobby ladder from the island can't path, and the walker took
+    // ~2 minutes to give up. If we're not in the lobby, wait for the HUD instead.
+    if Self.OutsideLobbyArea(pos) then
+    begin
+      Self.Debugln("Off the lobby boat but no game HUD yet, waiting for the game", EOutputLevel.USER);
+      if WaitUntil(Self.IsGameRunning(), 300, 20000) then
+        Exit;
+    end;
+
+    //Pause the running timer because this is going to lose some time.""",
+        'Tempoross: wait for the game HUD instead of walking to the lobby from the island',
+    ),
+    (
         # HandleBanking had no give-up path: on any Withdraw failure (e.g. the bank
         # stack of a loadout item coming up short of the requested quantity -- see
         # BashLib basescript.simba's own 'bankempty' screenshot check) it just logged
