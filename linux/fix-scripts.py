@@ -344,6 +344,38 @@ end;""",
         'Tempoross: wait out loading screens instead of spinning GAME_START',
     ),
     (
+        # NOT Linux-specific. FishHover (the walk-click onto a fishing spot) checked the
+        # uptext with a bare ConfirmUptext, whose yellow-text test is instant. Uptext lags
+        # the cursor by a frame, so it read the stale "Walk here", short-circuited past
+        # IsUpText's own settle wait, and all five hover attempts failed ("WalkFish
+        # clicked? False"). ClickFishingSpot -- the path that does succeed -- already
+        # wraps the same call in WaitUntil(..., 30, 350); do the same here.
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """      Mouse.OnMovingEx := @Self._UpdateSpot;
+      Mouse.Move(targetTPA.NearestPoint(Mouse.Position()));
+
+      if Self.ConfirmUptext(Self.GetFishingUptext()) then""",
+        """      Mouse.OnMovingEx := @Self._UpdateSpot;
+      Mouse.Move(targetTPA.NearestPoint(Mouse.Position()));
+
+      // Uptext lags the cursor by a frame, and ConfirmUptext's yellow-text check is
+      // instant, so a bare call reads the stale "Walk here" and fails. Same wait as
+      // ClickFishingSpot, which is the path that does succeed.
+      if WaitUntil(Self.ConfirmUptext(Self.GetFishingUptext()), 30, 350) then""",
+        'Tempoross: FishHover waits for the uptext to settle',
+    ),
+    (
+        # targetTPA was never cleared between hover attempts, so an attempt whose search
+        # found no spot re-hovered the previous attempt's (by then stale) position.
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """    Writeln("Hover attempt: ", attempt);
+    rects := Self.GetMSFishRects(Mainscreen.Bounds);""",
+        """    Writeln("Hover attempt: ", attempt);
+    targetTPA := [];
+    rects := Self.GetMSFishRects(Mainscreen.Bounds);""",
+        'Tempoross: FishHover resets its target each attempt',
+    ),
+    (
         # HandleBanking had no give-up path: on any Withdraw failure (e.g. the bank
         # stack of a loadout item coming up short of the requested quantity -- see
         # BashLib basescript.simba's own 'bankempty' screenshot check) it just logged
