@@ -376,6 +376,69 @@ end;""",
         'Tempoross: FishHover resets its target each attempt',
     ),
     (
+        # NOT Linux-specific. WalkBlind(..., 43) returns while the player is still ~10
+        # tiles out and running. On the long first walk off the boat the camera is still
+        # panning, so the spot slides out from under the cursor and all five hovers miss
+        # (2026-09-28: both remaining misses in a 9-walk run were game-start walks, each
+        # attempt ~0.46 s, i.e. spot found, cursor moved, 350 ms uptext wait expired).
+        # On failure, wait for the player to stop and hover again. Bounded at 2.5 s plus
+        # two attempts because nothing in WalkFish watches for hazards.
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """  clickedFish := Self.FishHover(4);
+  Self.Debugln("WalkFish clicked? " + ToStr(clickedFish), EOutputLevel.USEFUL);""",
+        """  clickedFish := Self.FishHover(4);
+
+  // WalkBlind stops waiting 43 units short, so on the long first walk off the boat the
+  // player is still running and the camera still panning: the spot slides out from
+  // under the cursor on every attempt. Once standing it holds still, so retry there.
+  // Kept short -- nothing in here watches for hazards.
+  if not clickedFish then
+  begin
+    Minimap.WaitPlayerMoving(500, 2500);
+    Writeln("Hover retry after stopping");
+    clickedFish := Self.FishHover(1);
+  end;
+
+  Self.Debugln("WalkFish clicked? " + ToStr(clickedFish), EOutputLevel.USEFUL);""",
+        'Tempoross: WalkFish retries the hover once the player stops',
+    ),
+    (
+        # Diagnostics: say WHY a hover attempt failed, so the retry above can be judged
+        # from a log instead of inferred from timings.
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """    if Length(rects) < 1 then
+    begin
+      Self.SetFishingAngle();
+      continue;
+    end;""",
+        """    if Length(rects) < 1 then
+    begin
+      Writeln("  no fish rects in view");
+      Self.SetFishingAngle();
+      continue;
+    end;""",
+        'Tempoross: FishHover logs empty fish rects',
+    ),
+    (
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """          Exit(true);
+          }
+      end;
+    end;
+  end;
+end;""",
+        """          Exit(true);
+          }
+      end;
+      Writeln("  uptext was: ", Mainscreen.GetUpText());
+    end
+    else
+      Writeln("  no spot found in rects");
+  end;
+end;""",
+        'Tempoross: FishHover logs uptext and no-spot failures',
+    ),
+    (
         # HandleBanking had no give-up path: on any Withdraw failure (e.g. the bank
         # stack of a loadout item coming up short of the requested quantity -- see
         # BashLib basescript.simba's own 'bankempty' screenshot check) it just logged
