@@ -321,6 +321,29 @@ end;""",
         'TD: ResolvePrayerIndex is a pass-through (no double correction)',
     ),
     (
+        # NOT Linux-specific. During the instance loading screen the minimap is black and
+        # IsGameRunning() is still False, so GetState returns GAME_START and
+        # HandleGameStart returned instantly on the black-minimap check. MainLoop has no
+        # delay of its own, so it spun: 2026-09-28 logged "State: GAME_START" ~2,400 times
+        # in 1.2 s (one loading screen). Wait for the minimap instead, bounded at 5 s.
+        'waspscripts.com/cjs-tempoross-by-canadianjames.simba',
+        """  if Minimap.PercentBlack() > 40 then
+    Exit;
+
+  Self.ResetGame();""",
+        """  // A black minimap means a loading screen. Returning at once made MainLoop call
+  // back in with no delay, re-logging "State: GAME_START" thousands of times until
+  // the screen cleared. Wait it out (bounded) so each loading screen costs one pass.
+  if Minimap.PercentBlack() > 40 then
+  begin
+    WaitUntil(Minimap.PercentBlack() <= 40, 100, 5000);
+    Exit;
+  end;
+
+  Self.ResetGame();""",
+        'Tempoross: wait out loading screens instead of spinning GAME_START',
+    ),
+    (
         # HandleBanking had no give-up path: on any Withdraw failure (e.g. the bank
         # stack of a loadout item coming up short of the requested quantity -- see
         # BashLib basescript.simba's own 'bankempty' screenshot check) it just logged
