@@ -72,6 +72,13 @@ gated=$(find "$SCR" -name '*.simba' -exec grep -l '{$IFDEF WINDOWS}{$DEFINE SCRI
     && ok "script GUI un-gated (0 scripts still gated)" \
     || fail "$gated script(s) still gate the GUI to Windows" "linux/fix-scripts.py"
 
+# A re-downloaded script brings back prayer names the patched SRL-B enum dropped,
+# and fails to compile ("Unknown declaration EAGLE_EYE").
+stale=$(find "$SCR" -name '*.simba' -exec grep -lE 'ERSPrayer\.(EAGLE_EYE|MYSTIC_MIGHT)\b' {} + 2>/dev/null | wc -l)
+[ "$stale" -eq 0 ] \
+    && ok "scripts use the patched prayer names" \
+    || fail "$stale script(s) still name EAGLE_EYE / MYSTIC_MIGHT" "linux/fix-scripts.py"
+
 # 5. a client JVM that still has java.applet
 found=''
 for j in /usr/lib/jvm/*/bin/java; do
