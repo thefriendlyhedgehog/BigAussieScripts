@@ -527,6 +527,21 @@ begin''',
         'TD: debug overlay text cannot crash the script',
     ),
     (
+        # Taking a hit right after a bomb (post-bomb prayer guess wrong) cancelled the
+        # punish, although every branch below corrects the protection prayer on the
+        # spot, and eating/prayer potions already outrank the punish states. Seen
+        # 2026-10-28: punish loadout equipped, then "Aborting punish: wrong protection
+        # prayer" before the swing. Keep the punish; just fix the prayer.
+        'bigaussie/Tormented Demons.simba',
+        """  if Self.NeedPunishHit then
+    Self.CancelPunishHit('wrong protection prayer');
+""",
+        """  if Self.NeedPunishHit then
+    Self.DebugMsg('Punish continues - correcting protection prayer after a hit.');
+""",
+        'TD: a hit after the bomb corrects the prayer instead of cancelling the punish',
+    ),
+    (
         # NOT Linux-specific. During the instance loading screen the minimap is black and
         # IsGameRunning() is still False, so GetState returns GAME_START and
         # HandleGameStart returned instantly on the black-minimap check. MainLoop has no
