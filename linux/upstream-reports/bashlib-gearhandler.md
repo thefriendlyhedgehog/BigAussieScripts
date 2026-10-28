@@ -19,8 +19,12 @@ Patch against current BashLib attached (`bashlib-gearhandler.patch`, applies cle
 
 **BashLib bashgui: the Discord webhook is forgotten on every run when you have 2+ saved accounts (all platforms)**
 
-The Accounts panel reads the saved webhook (`<user> Webhook Settings` in `Configs/BASettings.ini`) for whichever account is current while the GUI is being built, which is the *first* saved account. Then the account manager switches to the last-used account. `OnAccountSelected()` reloads that account's antiban profile but not its webhook, so the box keeps the first account's URL, which is usually empty. On Start, `StartScript` writes that box to the selected account's section, so the URL you entered last time is erased.
+The Accounts panel reads the saved webhook (`<user> Webhook Settings` in `Configs/BASettings.ini`) for whichever account is current while the GUI is being built, which is the *first* saved account. `CreateAccountManager` then selects the account matching the client window (`_SelectClientAccount`), but the webhook widgets don't exist yet at that point, and `OnAccountSelected()` reloads only the antiban profile anyway. So the box opens with the first account's URL, usually empty, and on Start `StartScript` writes that box to the selected account's section. The URL you entered last time is erased.
 
 Repro: save accounts `A` and `B`, select `B`, enter a webhook, Start. Stop, run the script again: the box is empty, and `[B Webhook Settings]` now has `WebhookURL=` and `EnableWebhooks=false`.
 
-Fix: `OnAccountSelected()` also reloads the webhook URL and checkbox for the new account (`bashlib-webhook-account.patch`, 7 lines, applies cleanly to current BashLib). Tormented Demons rev 24 compiles with it.
+Fix (`bashlib-webhook-account.patch`, two small hunks, applies cleanly to current BashLib):
+- the Accounts panel re-reads the webhook for `BASHPremiumCurrentUser()` right before creating the webhook widgets, so the box opens with the selected account's URL;
+- `OnAccountSelected()` also reloads the webhook URL and checkbox when the account changes later.
+
+Tormented Demons rev 24 compiles with it.

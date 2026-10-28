@@ -1,3 +1,14 @@
+--- a/optional/handlers/bashgui.simba
++++ b/optional/handlers/bashgui.simba
+@@ -1131,6 +1131,8 @@
+ 
+   if Self.HasWebhooks then
+   begin
++    savedURL := Self.ReadINIKey(BASHPremiumCurrentUser() + BASH_GUI_WEBHOOK_SECTION, 'WebhookURL', '');
++    savedEnable := StrToBoolDef(Self.ReadINIKey(BASHPremiumCurrentUser() + BASH_GUI_WEBHOOK_SECTION, 'EnableWebhooks', 'false'), False);
+     hookTop := profileTop + chipH + TControl.AdjustToDPI(20);
+     Self.AddCheck(Self.AccountsSection, Self.EnableWebhooksCheckBox, 'cb_bash_webhooks',
+       'Discord notifications', 24, 350, savedEnable);
 --- a/optional/handlers/bashgui_antiban_profile.simba
 +++ b/optional/handlers/bashgui_antiban_profile.simba
 @@ -757,6 +757,13 @@

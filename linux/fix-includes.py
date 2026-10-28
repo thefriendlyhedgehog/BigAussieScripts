@@ -330,6 +330,24 @@ end;""",
         'BashLib: switching account reloads its saved Discord webhook',
     ),
     (
+        # Same bug, GUI-open half: savedURL is read before CreateAccountManager selects
+        # the account matching the client window (_SelectClientAccount), so the box
+        # opened with the first account's webhook; the account switch fires before the
+        # webhook widgets exist. Re-read it for the account actually selected.
+        'BashLib/optional/handlers/bashgui.simba',
+        """  if Self.HasWebhooks then
+  begin
+    hookTop := profileTop + chipH + TControl.AdjustToDPI(20);
+""",
+        """  if Self.HasWebhooks then
+  begin
+    savedURL := Self.ReadINIKey(BASHPremiumCurrentUser() + BASH_GUI_WEBHOOK_SECTION, 'WebhookURL', '');
+    savedEnable := StrToBoolDef(Self.ReadINIKey(BASHPremiumCurrentUser() + BASH_GUI_WEBHOOK_SECTION, 'EnableWebhooks', 'false'), False);
+    hookTop := profileTop + chipH + TControl.AdjustToDPI(20);
+""",
+        'BashLib: webhook box opens with the selected account\'s saved URL',
+    ),
+    (
         # NOT Linux-specific. Edit() and Remove() find the JSON key to drop by
         # position, but Edit() re-adds the edited loadout at the END of the file while
         # Sets[] keeps it in place. After editing any loadout but the last, the two
