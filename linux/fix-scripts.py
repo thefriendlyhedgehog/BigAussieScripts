@@ -508,6 +508,25 @@ begin''',
         'TD: drink every carried boost type, not only the first',
     ),
     (
+        # Debug mode draws "Next bomb: Xs" on the client overlay. Simba 1400 finds fonts
+        # only in Debian-style dirs (/usr/share/fonts/truetype, ~/.fonts), so on Arch
+        # DrawText raises "No fonts found" -- which terminated the script mid-fight and
+        # got the player killed (2026-10-28). The overlay text is optional; never let
+        # it stop the script.
+        'bigaussie/Tormented Demons.simba',
+        """  img.SetFontSize(14);
+  yPos := 25;
+  img.DrawText('Next bomb: ' + nextBomb, Point(10, yPos), $00FF00);""",
+        """  try
+    img.SetFontSize(14);
+    yPos := 25;
+    img.DrawText('Next bomb: ' + nextBomb, Point(10, yPos), $00FF00);
+  except
+    // No usable font (see fix-scripts.py); the overlay text is optional.
+  end;""",
+        'TD: debug overlay text cannot crash the script',
+    ),
+    (
         # NOT Linux-specific. During the instance loading screen the minimap is black and
         # IsGameRunning() is still False, so GetState returns GAME_START and
         # HandleGameStart returned instantly on the black-minimap check. MainLoop has no
