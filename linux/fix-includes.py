@@ -22,6 +22,14 @@ both, so re-run this after any package update.
    (bashgui's AddCombo does) were fine; callers that do not (a script's own helper,
    and gearhandler's 13 equipment combos) were not.
 
+3. BashLib gearhandler Edit()/Remove()  --  NOT Linux-specific, unfenced
+   Drop the JSON key by position after Edit() has moved keys around, so saving or
+   removing one loadout can silently delete another one. Rewrites the file instead.
+
+4. BashLib gearhandler equipment dropdowns  --  Linux-only, {$IFNDEF WINDOWS} fenced
+   GTK2 shows each slot's full item list as one screen-tall menu; make them
+   type-to-search (csDropDown + AutoComplete).
+
 (Formerly 3: SRL-B GetCurrentClient() exact title match -- fixed upstream, Dec 2025.)
 """
 import pathlib, sys
@@ -291,6 +299,138 @@ end;""",
   {$ENDIF}
 """,
         'BashLib: light background on the Antiban profile tabs',
+    ),
+    (
+        # NOT Linux-specific. Edit() and Remove() find the JSON key to drop by
+        # position, but Edit() re-adds the edited loadout at the END of the file while
+        # Sets[] keeps it in place. After editing any loadout but the last, the two
+        # orders disagree, so the next Edit/Remove drops a DIFFERENT loadout from
+        # gearhandler.json, and scripts that saved a loadout by index (Tormented
+        # Demons' Loadout1Index/Loadout2Index) point at the wrong set or none after a
+        # restart -- TD then stops with "Invalid gear loadout configuration".
+        # Fix: rewrite the whole file from Sets[], so file order always == Sets order.
+        'BashLib/optional/handlers/gearhandler.simba',
+        """function TRSGearHandler.Add(gear: TRSGear): Boolean;
+var""",
+        """// Rewrites gearhandler.json from Sets[] so key order always matches Sets order.
+procedure TRSGearHandler._WriteConfig();
+var
+  keys: TStringList;
+  i: Int32;
+  obj: TJSONObject;
+  slot: ERSEquipmentSlot;
+begin
+  keys := Self.Config.JSON.keys();
+  for i := 0 to keys.getCount() - 1 do
+    Self.Config.JSON.remove(keys.GetStrings(i));
+
+  for i := 0 to High(Self.Sets) do
+  begin
+    obj.Init();
+    for slot := Low(ERSEquipmentSlot) to High(ERSEquipmentSlot) do
+      obj.Put(ToStr(slot).Lower(), ToStr(Self.Sets[i].Items[slot]));
+    Self.Config.Put(Self.Sets[i].Name, obj, False);
+  end;
+
+  Self.Config.SaveConfig();
+end;
+
+function TRSGearHandler.Add(gear: TRSGear): Boolean;
+var""",
+        'BashLib: gearhandler writes loadouts in Sets order',
+    ),
+    (
+        'BashLib/optional/handlers/gearhandler.simba',
+        """  Self.Sets[idx] := gear;
+  keys := Self.Config.JSON.keys();
+  Self.Config.Remove(keys.GetStrings(idx));
+
+  obj.Init();
+  for slot := Low(ERSEquipmentSlot) to High(ERSEquipmentSlot) do
+    obj.Put(ToStr(slot).Lower(), ToStr(gear.Items[slot]));
+
+  Self.Config.Put(gear.Name, obj, True);
+""",
+        """  Self.Sets[idx] := gear;
+  Self._WriteConfig();
+""",
+        'BashLib: gearhandler Edit() no longer drops another loadout',
+    ),
+    (
+        'BashLib/optional/handlers/gearhandler.simba',
+        """  Result := True;
+  keys := Self.Config.JSON.keys();
+  Self.Config.Remove(keys.GetStrings(idx));
+""",
+        """  Result := True;
+  Self._WriteConfig();
+""",
+        'BashLib: gearhandler Remove() deletes the selected loadout',
+    ),
+    (
+        # GTK2 draws a csDropDownList as one screen-tall menu holding every item for
+        # the slot (hundreds of weapons), with only scroll arrows to move through it.
+        # Make the 13 equipment combos editable with autocomplete, so typing "arcl"
+        # selects Arclight. The two hunks below keep typed text safe.
+        'BashLib/optional/handlers/gearhandler.simba',
+        """  Self._RefreshSets(Result);
+  cb.SetItemIndex(0);
+""",
+        """  {$IFNDEF WINDOWS}
+  for slot := Low(ERSEquipmentSlot) to High(ERSEquipmentSlot) do
+    with TComboBox(Result.GetChild(ToStr(slot).Lower() + '_slot_combobox')) do
+    begin
+      setStyle(TComboBoxStyle.csDropDown);
+      setAutoComplete(True);
+    end;
+  {$ENDIF}
+
+  Self._RefreshSets(Result);
+  cb.SetItemIndex(0);
+""",
+        'BashLib: gear slot dropdowns accept typing (autocomplete)',
+    ),
+    (
+        'BashLib/optional/handlers/gearhandler.simba',
+        """function TScriptForm._SetupGearPanel(parent: TComponent): TPanel;
+var
+  save, duplicate, remove, load, clear: TButton;
+""",
+        """function TScriptForm._SetupGearPanel(parent: TComponent): TPanel;
+var
+  {$IFNDEF WINDOWS}
+  slot: ERSEquipmentSlot;
+  {$ENDIF}
+  save, duplicate, remove, load, clear: TButton;
+""",
+        'BashLib: gear slot dropdowns accept typing (var)',
+    ),
+    (
+        # Half-typed text is not an item: GetItemIDs(...)[0] would index an empty array.
+        'BashLib/optional/handlers/gearhandler.simba',
+        """  if combobox.getText() = 'None' then
+  begin
+    img.setVisible(False);""",
+        """  if (combobox.getText() = 'None') or
+     (combobox.getItems().IndexOf(combobox.getText()) < 0) then
+  begin
+    img.setVisible(False);""",
+        'BashLib: gear slot image ignores half-typed text',
+    ),
+    (
+        # Store the list's own spelling; text that matches no item is saved as None
+        # (its slot image is blank in the form, which is the visible hint).
+        'BashLib/optional/handlers/gearhandler.simba',
+        """    cb := parent.GetChild(ToStr(slot).ToLower() + '_slot_combobox');
+    gear.Items[slot] := cb.getText();
+""",
+        """    cb := parent.GetChild(ToStr(slot).ToLower() + '_slot_combobox');
+    if cb.getItems().IndexOf(cb.getText()) < 0 then
+      gear.Items[slot] := 'None'
+    else
+      gear.Items[slot] := cb.getItems().getStrings(cb.getItems().IndexOf(cb.getText()));
+""",
+        'BashLib: gear save ignores text that is not an item',
     ),
 ]
 
