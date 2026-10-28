@@ -22,14 +22,7 @@ both, so re-run this after any package update.
    (bashgui's AddCombo does) were fine; callers that do not (a script's own helper,
    and gearhandler's 13 equipment combos) were not.
 
-3. SRL-B rsclient GetCurrentClient()  --  NOT Linux-specific, applied unconditionally
-   Matches the root window title exactly against 'RuneLite'. RuneLite appends the
-   logged-in display name ("RuneLite - someone"), so the match only ever succeeds
-   while logged out, and the client is reported as UNKNOWN:
-       [BASH] Client: UNKNOWN
-       [BASH] Warning: BASH scripts expect RuneLite
-   Changed to a prefix match, which is strictly more permissive -- it can only turn
-   an UNKNOWN into a correct answer, never the reverse.
+(Formerly 3: SRL-B GetCurrentClient() exact title match -- fixed upstream, Dec 2025.)
 """
 import pathlib, sys
 
@@ -51,35 +44,6 @@ FIXES = [
             DirectorySeparator + 'profiles2';
   {$ENDIF}""",
         'BashLib: profiles2 path uses $HOME on Linux',
-    ),
-    (
-        'SRL-B/osr/rsclient.simba',
-        """  case win.GetRootWindow().GetTitle() of
-    'Old School RuneScape': Result := ERSClient.LEGACY;
-    'RuneLite': Result := ERSClient.RUNELITE;
-  end;""",
-        """  title := win.GetRootWindow().GetTitle();
-
-  // RuneLite appends the logged-in display name ("RuneLite - someone"), so an
-  // exact match only ever succeeds while logged out. Match on the prefix.
-  if Pos('RuneLite', title) = 1 then
-    Exit(ERSClient.RUNELITE);
-  if Pos('Old School RuneScape', title) = 1 then
-    Exit(ERSClient.LEGACY);""",
-        'SRL-B: client detection matches title prefix',
-    ),
-    (
-        'SRL-B/osr/rsclient.simba',
-        """function TRSClient.GetCurrentClient(): ERSClient;
-var
-  win: TOSWindow;
-begin""",
-        """function TRSClient.GetCurrentClient(): ERSClient;
-var
-  win: TOSWindow;
-  title: String;
-begin""",
-        'SRL-B: declare title local',
     ),
     (
         'BashLib/utils/forms/formutils.simba',

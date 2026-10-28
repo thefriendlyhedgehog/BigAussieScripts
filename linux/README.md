@@ -283,9 +283,9 @@ root title = "RuneLite - <name>"     →  ERSClient.UNKNOWN
 [BASH] Warning: BASH scripts expect RuneLite
 ```
 
-So the exact match only ever succeeds while logged out. Changed to a prefix match,
-applied unconditionally — strictly more permissive, so it can only turn an UNKNOWN
-into a correct answer.
+So the exact match only ever succeeds while logged out. **Fixed upstream** (SRL-B,
+Dec 2025: `Copy(title, 1, 9) = 'RuneLite '`), so the local patch was retired;
+`status.sh` now just checks the upstream fix is still there.
 
 ## Known: `free(): invalid pointer` at Simba exit
 

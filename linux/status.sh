@@ -43,9 +43,10 @@ grep -q "GetEnvironmentVariable('HOME')" \
     && ok "BashLib profiles2 path" \
     || fail "BashLib still uses %userprofile%" "linux/fix-includes.py"
 
-grep -q "Pos('RuneLite', title) = 1" "$INC/SRL-B/osr/rsclient.simba" 2>/dev/null \
+# Fixed upstream in SRL-B (Dec 2025): prefix match on 'RuneLite '.
+grep -q "Copy(title, 1, 9) = 'RuneLite '" "$INC/SRL-B/osr/rsclient.simba" 2>/dev/null \
     && ok "SRL-B client detection" \
-    || fail "SRL-B still matches the client title exactly" "linux/fix-includes.py"
+    || fail "SRL-B client detection is an exact title match again" "check upstream rsclient.simba"
 
 # Every ERSPrayer member BashLib names must exist in SRL-B's enum. A fresh BashLib
 # still says EAGLE_EYE / MYSTIC_MIGHT, which the patched SRL-B enum dropped, and
