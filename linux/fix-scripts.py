@@ -304,21 +304,208 @@ begin
     Exit;
   end;
 end;""",
-        """function ResolvePrayerIndex(prayer: ERSPrayer): Int32;
+        """// Slot of each prayer in the live book, read by hovering (DetectPrayerBookLayout).
+var
+  PrayerSlot: array [ERSPrayer] of Int32;
+  PrayerSlotScanned: Boolean;
+
+function ResolvePrayerIndex(prayer: ERSPrayer): Int32;
 begin
-  // Pass-through. This used to remap slots to compensate for stock ERSPrayer, which
-  // still listed Eagle Eye and Mystic Might and so mis-numbered every prayer past 18 on
-  // an account whose scrolls upgraded them to Deadeye and Mystic Vigour.
-  //
-  // ERSPrayer now matches the live book (measured by Scripts/linux-test/Prayer Book
-  // Scan.simba), so the ordinal is already right and the old remap corrected a second
-  // time: it forced RIGOUR and AUGURY to slot 25, which is Mystic Vigour. CanActivate
-  // then saw that lit, took the first cascade branch, and prayed Mystic Vigour for both
-  // the ranged and magic phases. Chivalry had no case here, which is why melee looked
-  // fine while the other two did not.
+  // The book from slot 19 on is not fixed: it differs with and without the giants'
+  // prayer scrolls (Deadeye / Mystic Vigour), and an order measured on 2026-09-24 no
+  // longer matched the same account a month later. So read it from the client.
+  // Upstream's DTM check never matched on this client (EE=False MM=False with both
+  // icons on screen), and its remap sent RIGOUR, AUGURY and MYSTIC_VIGOUR all to 25.
+  // Before the scan, or for a prayer it did not find, trust ERSPrayer.
   Result := Ord(prayer);
+  if PrayerSlotScanned and (PrayerSlot[prayer] >= 0) then
+    Result := PrayerSlot[prayer];
 end;""",
-        'TD: ResolvePrayerIndex is a pass-through (no double correction)',
+        'TD: ResolvePrayerIndex uses the scanned prayer book layout',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        '''procedure DetectPrayerBookLayout();
+var
+  tpa: TPointArray;
+begin
+  hasEE := False;
+  hasMM := False;
+
+  if not Prayer.IsOpen() then
+    Exit;
+
+  EagleEye := DTMFromString('mlwAAAHicY2dgYDjBxMBwDogvAvEZKD4LxKeBOJwRgeOAOBCIQ6G4r4yDwd6CGwX/vyrIYKzDzYAPMCJhBiQaCQAAouYNeQ==');
+  MysticMight := DTMFromString('mggAAAHicY2NgYDBlYmAwAWJzILYCYksgtgDiekYGhlogrgHiKkYIvxyI/2vJw/FNfUaG1RqsDL+jXBlwAUacMiAAAJw4C6A=');
+
+  FindDTMs(EagleEye, tpa, Prayer.Bounds);
+  if Length(tpa) >= 1 then
+    hasEE := True;
+  FindDTMs(MysticMight, tpa, Prayer.Bounds);
+  if Length(tpa) >= 1 then
+    hasMM := True;
+
+  FreeDTM(EagleEye);
+  FreeDTM(MysticMight);
+end;''',
+        '''// Which ERSPrayer the current uptext names, or -1. Only slots 19+ are scanned, so
+// "might"/"vigour" cannot be Mystic Will/Lore. Eagle Eye counts as DEADEYE's tier.
+function UpTextPrayer(): Int32;
+var
+  s: String;
+begin
+  Result := -1;
+  s := MainScreen.GetUpText().ToLower();
+  if s.Contains('eagle') or s.Contains('deadeye') then Exit(Ord(ERSPrayer.DEADEYE));
+  if s.Contains('might') or s.Contains('vigour') then Exit(Ord(ERSPrayer.MYSTIC_VIGOUR));
+  if s.Contains('retribution') then Exit(Ord(ERSPrayer.RETRIBUTION));
+  if s.Contains('redemption') then Exit(Ord(ERSPrayer.REDEMPTION));
+  if s.Contains('smite') then Exit(Ord(ERSPrayer.SMITE));
+  if s.Contains('preserve') then Exit(Ord(ERSPrayer.PRESERVE));
+  if s.Contains('chivalry') then Exit(Ord(ERSPrayer.CHIVALRY));
+  if s.Contains('piety') then Exit(Ord(ERSPrayer.PIETY));
+  if s.Contains('rigour') then Exit(Ord(ERSPrayer.RIGOUR));
+  if s.Contains('augury') then Exit(Ord(ERSPrayer.AUGURY));
+end;
+
+procedure DetectPrayerBookLayout();
+var
+  p: ERSPrayer;
+  slot, found, last: Int32;
+  t: UInt64;
+  line: String;
+begin
+  hasEE := False;
+  hasMM := False;
+
+  if not Prayer.IsOpen() then
+    Exit;
+
+  // Hover slots 19-28 once and read each name (the method Scripts/linux-test/Prayer
+  // Book Scan.simba uses). Uptext lags the cursor, so wait for a NEW name per slot.
+  for p := Low(ERSPrayer) to High(ERSPrayer) do
+    PrayerSlot[p] := -1;
+
+  last := -1;
+  for slot := 19 to 28 do
+  begin
+    Mouse.Move(Prayer.PrayerBoxes[slot]);
+    t := GetTickCount() + 1200;
+    repeat
+      Wait(40);
+      found := UpTextPrayer();
+    until ((found >= 0) and (found <> last)) or (GetTickCount() > t);
+
+    if (found >= 0) and (found <> last) then
+    begin
+      PrayerSlot[ERSPrayer(found)] := slot;
+      line += ' ' + ToStr(slot) + '=' + ToStr(ERSPrayer(found));
+      last := found;
+    end
+    else
+      line += ' ' + ToStr(slot) + '=?';
+  end;
+
+  PrayerSlotScanned := True;
+  WriteLn('[TD] Prayer book scan:' + line);
+end;''',
+        'TD: read the prayer book layout by hovering, not DTMs',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        '''  if Prayer.CanActivate(ERSPrayer.RIGOUR) then
+    Self.BestRangePrayer := ERSPrayer.RIGOUR
+  else if Prayer.CanActivate(ERSPrayer.DEADEYE) then
+    Self.BestRangePrayer := ERSPrayer.DEADEYE
+  else if Prayer.CanActivate(ERSPrayer.HAWK_EYE) then
+    Self.BestRangePrayer := ERSPrayer.HAWK_EYE
+  else
+    Self.BestRangePrayer := ERSPrayer.SHARP_EYE;
+
+  if Prayer.CanActivate(ERSPrayer.AUGURY) then
+    Self.BestMagePrayer := ERSPrayer.AUGURY
+  else if Prayer.CanActivate(ERSPrayer.MYSTIC_VIGOUR) then
+    Self.BestMagePrayer := ERSPrayer.MYSTIC_VIGOUR
+  else''',
+        '''  // Deadeye / Mystic Vigour over Rigour / Augury, for the same drain reason as Chivalry.
+  if Prayer.CanActivate(ERSPrayer.DEADEYE) then
+    Self.BestRangePrayer := ERSPrayer.DEADEYE
+  else if Prayer.CanActivate(ERSPrayer.RIGOUR) then
+    Self.BestRangePrayer := ERSPrayer.RIGOUR
+  else if Prayer.CanActivate(ERSPrayer.HAWK_EYE) then
+    Self.BestRangePrayer := ERSPrayer.HAWK_EYE
+  else
+    Self.BestRangePrayer := ERSPrayer.SHARP_EYE;
+
+  if Prayer.CanActivate(ERSPrayer.MYSTIC_VIGOUR) then
+    Self.BestMagePrayer := ERSPrayer.MYSTIC_VIGOUR
+  else if Prayer.CanActivate(ERSPrayer.AUGURY) then
+    Self.BestMagePrayer := ERSPrayer.AUGURY
+  else''',
+        'TD: prefer Deadeye and Mystic Vigour over Rigour and Augury',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        '''procedure TormentedDemonSlayer.MaybeDrinkBoosts(const context: String);
+var
+  consumable: ERSConsumable;
+  i, startIdx, idx: Int32;
+begin''',
+        '''procedure TormentedDemonSlayer.MaybeDrinkBoosts(const context: String);
+var
+  consumable: ERSConsumable;
+  i, startIdx, idx: Int32;
+  found: Boolean;
+begin''',
+        'TD: boost loop flag (var)',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        '''  startIdx := Random(Length(TD_BOOST_TYPES));
+  for i := 0 to High(TD_BOOST_TYPES) do
+  begin
+    idx := (startIdx + i) mod Length(TD_BOOST_TYPES);
+    consumable := TD_BOOST_TYPES[idx];
+    if not Inventory.ContainsAny(CONSUMABLE_ARRAYS[consumable]) then
+      Continue;
+
+    WriteLn('[TD] ' + context + 'boost attempt (' + ToStr(consumable) + ')');
+    if Inventory.Consume(consumable) then
+      WriteLn('[TD] ' + context + 'boost consumed: ' + ToStr(consumable))
+    else
+      WriteLn('[TD] ' + context + 'boost not drunk (cooldown)');
+    Self.OpenPrayerBookFast();
+    Exit;
+  end;
+
+  WriteLn('[TD] ' + context + 'no boost potion in inventory');''',
+        '''  // Drink EVERY boost type carried, not just the first found: separate attack and
+  // strength potions used to get one of the two per kill. Cooldowns are per type
+  // (Consume's handler), so an active boost is skipped, not re-drunk.
+  found := False;
+  startIdx := Random(Length(TD_BOOST_TYPES));
+  for i := 0 to High(TD_BOOST_TYPES) do
+  begin
+    idx := (startIdx + i) mod Length(TD_BOOST_TYPES);
+    consumable := TD_BOOST_TYPES[idx];
+    if not Inventory.ContainsAny(CONSUMABLE_ARRAYS[consumable]) then
+      Continue;
+
+    if found then
+      Wait(600, 900);
+    found := True;
+    WriteLn('[TD] ' + context + 'boost attempt (' + ToStr(consumable) + ')');
+    if Inventory.Consume(consumable) then
+      WriteLn('[TD] ' + context + 'boost consumed: ' + ToStr(consumable))
+    else
+      WriteLn('[TD] ' + context + 'boost not drunk (cooldown)');
+  end;
+
+  if found then
+    Self.OpenPrayerBookFast()
+  else
+    WriteLn('[TD] ' + context + 'no boost potion in inventory');''',
+        'TD: drink every carried boost type, not only the first',
     ),
     (
         # NOT Linux-specific. During the instance loading screen the minimap is black and
