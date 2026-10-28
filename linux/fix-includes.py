@@ -30,6 +30,10 @@ both, so re-run this after any package update.
    GTK2 shows each slot's full item list as one screen-tall menu; make them
    type-to-search (csDropDown + AutoComplete).
 
+5. BashLib bashgui account switch  --  NOT Linux-specific, unfenced
+   The saved Discord webhook was loaded for the first saved account only, then
+   overwritten with an empty box on Start for the account actually selected.
+
 (Formerly 3: SRL-B GetCurrentClient() exact title match -- fixed upstream, Dec 2025.)
 """
 import pathlib, sys
@@ -299,6 +303,31 @@ end;""",
   {$ENDIF}
 """,
         'BashLib: light background on the Antiban profile tabs',
+    ),
+    (
+        # NOT Linux-specific. The Accounts panel reads the saved webhook for whichever
+        # account is current while the GUI is built (the FIRST saved account), then
+        # the account manager switches to the last-used one. OnAccountSelected reloads
+        # that account's antiban profile but not its webhook, so the box keeps the
+        # first account's (usually empty) URL and Start writes it over the selected
+        # account's -- the webhook is "forgotten" on every run with 2+ saved accounts.
+        'BashLib/optional/handlers/bashgui_antiban_profile.simba',
+        """  Self.ProfileUser := nextUser;
+  Self.Username := nextUser;
+  Self.LoadAntibanProfile();
+""",
+        """  Self.ProfileUser := nextUser;
+  Self.Username := nextUser;
+  Self.LoadAntibanProfile();
+  if Self.HasWebhooks and Assigned(Self.WebHookInput) and Assigned(Self.EnableWebhooksCheckBox) then
+  begin
+    Self.WebHookInput.SetText(Self.ReadINIKey(nextUser + BASH_GUI_WEBHOOK_SECTION, 'WebhookURL', ''));
+    Self.EnableWebhooksCheckBox.CheckBox.SetChecked(StrToBoolDef(
+      Self.ReadINIKey(nextUser + BASH_GUI_WEBHOOK_SECTION, 'EnableWebhooks', 'false'), False));
+    Self.WebhooksCheckboxChanged(nil);
+  end;
+""",
+        'BashLib: switching account reloads its saved Discord webhook',
     ),
     (
         # NOT Linux-specific. Edit() and Remove() find the JSON key to drop by
