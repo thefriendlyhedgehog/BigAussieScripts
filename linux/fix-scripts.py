@@ -542,6 +542,102 @@ begin''',
         'TD: a hit after the bomb corrects the prayer instead of cancelling the punish',
     ),
     (
+        'bigaussie/Tormented Demons.simba',
+        """procedure DetectPrayerBookLayout();
+var
+  p: ERSPrayer;
+  slot, found, last: Int32;
+""",
+        """procedure DetectPrayerBookLayout();
+var
+  p: ERSPrayer;
+  slot, found, last, i: Int32;
+  taken: Boolean;
+  known: array of ERSPrayer;
+""",
+        'TD: prayer scan retry (vars)',
+    ),
+    (
+        # 2026-10-29: a scan read "21=? ... 25=?", so CHIVALRY fell back to Ord() = slot
+        # 23 (Smite) and melee phases prayed Smite/Retribution all session. Retry the
+        # missed slots with a longer wait, then fill any still-unread prayer from the
+        # order measured on this account, never from Ord().
+        'bigaussie/Tormented Demons.simba',
+        """  PrayerSlotScanned := True;
+  WriteLn('[TD] Prayer book scan:' + line);
+end;""",
+        """  WriteLn('[TD] Prayer book scan:' + line);
+
+  // Second pass for slots the first one missed (uptext lag or a misread name).
+  for slot := 19 to 28 do
+  begin
+    taken := False;
+    for p := Low(ERSPrayer) to High(ERSPrayer) do
+      if PrayerSlot[p] = slot then
+        taken := True;
+    if taken then
+      Continue;
+
+    Mouse.Move(Prayer.PrayerBoxes[slot]);
+    t := GetTickCount() + 2500;
+    repeat
+      Wait(60);
+      found := UpTextPrayer();
+    until ((found >= 0) and (PrayerSlot[ERSPrayer(found)] < 0)) or (GetTickCount() > t);
+
+    if (found >= 0) and (PrayerSlot[ERSPrayer(found)] < 0) then
+    begin
+      PrayerSlot[ERSPrayer(found)] := slot;
+      WriteLn('[TD] Prayer book scan retry: ', slot, '=', ERSPrayer(found));
+    end;
+  end;
+
+  // Still unread: assume the order measured on this account (2026-10-28) when that
+  // slot is free. Ord(prayer) is wrong here (CHIVALRY -> slot 23 = Smite).
+  known := [ERSPrayer.DEADEYE, ERSPrayer.MYSTIC_VIGOUR, ERSPrayer.RETRIBUTION,
+            ERSPrayer.REDEMPTION, ERSPrayer.SMITE, ERSPrayer.PRESERVE,
+            ERSPrayer.CHIVALRY, ERSPrayer.PIETY, ERSPrayer.RIGOUR, ERSPrayer.AUGURY];
+  for i := 0 to High(known) do
+  begin
+    if PrayerSlot[known[i]] >= 0 then
+      Continue;
+    taken := False;
+    for p := Low(ERSPrayer) to High(ERSPrayer) do
+      if PrayerSlot[p] = 19 + i then
+        taken := True;
+    if taken then
+      Continue;
+    PrayerSlot[known[i]] := 19 + i;
+    WriteLn('[TD] Prayer book scan: ', known[i], ' unread - assuming slot ', 19 + i, '.');
+  end;
+
+  PrayerSlotScanned := True;
+end;""",
+        'TD: prayer scan retries missed slots, falls back to the measured order',
+    ),
+    (
+        # After an emergency teleport the bank route (with its Ferox pool step) is
+        # skipped, so the script returned to the lair at 17-33 HP, ate 2-5 karambwans on
+        # arrival and ran dry again (2026-10-29). Top up at the pool whenever banking
+        # ends at Ferox with HP/prayer low.
+        'bigaussie/Tormented Demons.simba',
+        """    WriteLn('[BANK] Pool after bank (antiban bank-first order).');
+    Navigation.UseFeroxPool();
+  end;
+""",
+        """    WriteLn('[BANK] Pool after bank (antiban bank-first order).');
+    Navigation.UseFeroxPool();
+  end;
+
+  if Navigation.IsAtFerox() and Navigation.NeedsRestore() then
+  begin
+    WriteLn('[BANK] HP/prayer low after banking - using the Ferox pool before returning.');
+    Navigation.UseFeroxPool();
+  end;
+""",
+        'TD: use the Ferox pool after any bank trip that ends with low HP/prayer',
+    ),
+    (
         # NOT Linux-specific. During the instance loading screen the minimap is black and
         # IsGameRunning() is still False, so GetState returns GAME_START and
         # HandleGameStart returned instantly on the black-minimap check. MainLoop has no
