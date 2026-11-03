@@ -61,14 +61,14 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.10'
-LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 45, cave walk, Arclight spec'
+LINUX_FIXES_TAG = '2026-11-03.11'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 25-35, cave walk, Arclight spec'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider levels: 0 = fully zoomed out, 100 = fully zoomed in.
-TD_ZOOM_LEVEL = 45
-TD_ZOOM_MIN = 35
-TD_ZOOM_MAX = 50
+TD_ZOOM_LEVEL = 30
+TD_ZOOM_MIN = 25
+TD_ZOOM_MAX = 35
 
 SCRIPT_FIXES = [
     (
