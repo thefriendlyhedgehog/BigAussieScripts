@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.13'
-LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 20-30, cave/gear retries, Arclight spec'
+LINUX_FIXES_TAG = '2026-11-03.14'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 20-30, cave/gear retries, tracker stickiness, Arclight spec'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider levels: 0 = fully zoomed out, 100 = fully zoomed in.
@@ -1089,6 +1089,95 @@ var
   end;
 """,
         'TD: retry an incomplete gear swap and name the stuck item',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  NPC_LOST_KILL_MS: Int32 = 600;
+""",
+        """  NPC_LOST_KILL_MS: Int32 = 600;
+  NPC_STICKY_MAX_TILES: Int32 = 4;
+""",
+        'TD: tracker stickiness radius',
+    ),
+    (
+        # While fighting, follow the NPC nearest the demon's last known tile rather
+        # than the one nearest the player. A second demon in the room otherwise keeps
+        # Tracker.Found true after a kill and the kill check never confirms.
+        'bigaussie/Tormented Demons.simba',
+        """procedure TormentedDemonSlayer.UpdateDemonPosition();
+var
+  dots: TPointArray;
+  i: Int32;
+  bestDistance, distance: Double;
+  bestDot, mmCenter: TPoint;
+  cuboid: TCuboidEx;
+begin
+  Self.Tracker.Found := False;
+
+  dots := Minimap.GetDots(ERSMinimapDot.NPC);
+  if Length(dots) = 0 then
+    Exit;
+
+  mmCenter := Self.GetCachedMinimapCenter();
+  bestDistance := $FFFFFF;
+  for i := 0 to High(dots) do
+  begin
+    distance := dots[i].DistanceTo(mmCenter);
+    if distance < bestDistance then
+    begin
+      bestDistance := distance;
+      bestDot := dots[i];
+    end;
+  end;
+
+  if bestDistance > 60 then
+    Exit;
+""",
+        """procedure TormentedDemonSlayer.UpdateDemonPosition();
+var
+  dots: TPointArray;
+  i: Int32;
+  bestDistance, distance: Double;
+  bestDot, mmCenter, anchorTile, dotTile: TPoint;
+  sticky: Boolean;
+  cuboid: TCuboidEx;
+begin
+  Self.Tracker.Found := False;
+
+  dots := Minimap.GetDots(ERSMinimapDot.NPC);
+  if Length(dots) = 0 then
+    Exit;
+
+  mmCenter := Self.GetCachedMinimapCenter();
+
+  sticky := Self.FightingDemon and Self.Tracker.LastDemonWorldTileValid;
+  if sticky then
+    anchorTile := Self.Tracker.LastDemonWorldTile;
+
+  bestDistance := $FFFFFF;
+  for i := 0 to High(dots) do
+  begin
+    if sticky then
+    begin
+      dotTile := RSTranslator.NormalizeNearestTile(Map.MM2Map(dots[i]));
+      distance := dotTile.DistanceTo(anchorTile);
+    end
+    else
+      distance := dots[i].DistanceTo(mmCenter);
+
+    if distance < bestDistance then
+    begin
+      bestDistance := distance;
+      bestDot := dots[i];
+    end;
+  end;
+
+  if sticky and (bestDistance > NPC_STICKY_MAX_TILES) then
+    Exit;
+  if (not sticky) and (bestDistance > 60) then
+    Exit;
+""",
+        'TD: keep the tracked demon while fighting',
     ),
 ]
 
