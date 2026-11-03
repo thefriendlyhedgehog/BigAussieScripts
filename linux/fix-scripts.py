@@ -539,7 +539,9 @@ begin''',
       Continue;
 
     if found then
-      Wait(600, 900);
+      // The client ignores a second drink click while the first is still
+      // animating, so separate drinks by a full 3s instead of 0.6-0.9s.
+      Wait(3000);
     found := True;
     WriteLn('[TD] ' + context + 'boost attempt (' + ToStr(consumable) + ')');
     if Inventory.Consume(consumable) then
