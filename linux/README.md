@@ -425,6 +425,16 @@ everything here. That was observed mid-session: `bash-launcher.simba` reverted t
 older patch and `Tormented Demons.simba` returned to its gated form, both without any
 visible message.
 
+### After a B.A.S.H update
+
+A package or script update restores upstream files: the executable-stack RemoteInput
+plugin, the unpatched BashLib and the Windows-only script GUI gate. Run
+`linux/apply-linux-fixes.sh` -- it applies `fix-plugin-execstack.py`,
+`fix-includes.py` and `fix-scripts.py`, then `status.sh`, and offers to restart Simba
+so the patched plugin is loaded. On Cachy there is a desktop shortcut for it
+(`Apply B.A.S.H Linux Fixes`); `--no-ui` is the headless form and exits with
+`status.sh`'s status.
+
 ## Where each fix has to live, long-term
 
 The intent is that `bash-setup-linux.sh` installs Simba and the libs once, and
