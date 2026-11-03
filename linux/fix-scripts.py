@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.11'
-LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 25-35, cave walk, Arclight spec'
+LINUX_FIXES_TAG = '2026-11-03.12'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 25-35, cave/gear retries, Arclight spec'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider levels: 0 = fully zoomed out, 100 = fully zoomed in.
@@ -1047,6 +1047,48 @@ function TormentedDemonSlayer.ClickDemon(): Boolean;
     Result := Self.DemonCave.Click(True, 3) and Self.WaitMinimapLoad();
 """,
         'TD: walk to the demon cave opening on retries',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """function TormentedDemonSlayer.SwapToGearSet(gear: TRSGear; style: EDemonStyle;
+  skipReattack: Boolean): Boolean;
+var
+  gearLabel: String;
+""",
+        """function TormentedDemonSlayer.SwapToGearSet(gear: TRSGear; style: EDemonStyle;
+  skipReattack: Boolean): Boolean;
+var
+  gearLabel: String;
+  i: Int32;
+""",
+        'TD: gear swap retry vars',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  Result := Self.GearSetIsWorn(style);
+  if not Result then
+  begin
+    Self.DebugMsg('Gear swap incomplete - ' + StyleToString(style) + ' set not fully worn.');
+    Exit;
+  end;
+""",
+        """  Result := Self.GearSetIsWorn(style);
+  if not Result then
+  begin
+    Self.DebugMsg('Gear swap incomplete - retrying the ' + StyleToString(style) + ' set.');
+    Self.EquipGearSetItems(gear, style);
+    Result := Self.GearSetIsWorn(style);
+  end;
+  if not Result then
+  begin
+    Self.DebugMsg('Gear swap incomplete - ' + StyleToString(style) + ' set not fully worn.');
+    for i := 0 to High(Self.GearSets[style]) do
+      if Self.InventoryHasGearItem(Self.GearSets[style][i]) then
+        WriteLn('[TD] gear swap left in inventory: ', Self.GearSets[style][i]);
+    Exit;
+  end;
+""",
+        'TD: retry an incomplete gear swap and name the stuck item',
     ),
 ]
 
