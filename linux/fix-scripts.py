@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.4'
-LINUX_FIXES_NOTE = '3s boost spacing, camera cap, full zoom-out, prayer scan'
+LINUX_FIXES_TAG = '2026-11-03.5'
+LINUX_FIXES_NOTE = '3s boost spacing, camera cap, full zoom-out, Arclight spec, prayer scan'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 
@@ -986,6 +986,67 @@ begin
   if Length(Login.GetPlayer().Worlds) < 2 then
 """,
         'TD: pin the camera zoom fully out',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  BURNING_CLAWS_SPEC_COST: Int32   = 30;
+""",
+        """  BURNING_CLAWS_SPEC_COST: Int32   = 30;
+  ARCLIGHT_SPEC_COST: Int32        = 50;
+""",
+        'TD: Arclight spec cost',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """function TormentedDemonSlayer.ClickDemon(): Boolean;
+""",
+        """function TormentedDemonSlayer.ShouldUseArclightSpec(): Boolean;
+begin
+  Result := False;
+  // Only the Arclight: never the atlatl or a blood-moon weapon.
+  if not Equipment.ContainsItem(ARCLIGHT_ITEM) then
+    Exit;
+  if Self.CurrentGearStyle <> DS_MELEE then
+    Exit;
+  if Self.BurningClawsSpecWindowOpen or Self.BurningClawsActive then
+    Exit;
+  if Minimap.GetSpecLevel() < ARCLIGHT_SPEC_COST then
+    Exit;
+  if Minimap.IsSpecEnabled() then
+    Exit;
+  Result := True;
+end;
+
+function TormentedDemonSlayer.ClickDemon(): Boolean;
+""",
+        'TD: Arclight spec eligibility',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """      Mouse.Click(MOUSE_LEFT);
+      Exit(True);
+""",
+        """      if Minimap.IsSpecEnabled() and (not Equipment.ContainsItem(ARCLIGHT_ITEM)) then
+        Minimap.DisableSpec();
+
+      if Self.ShouldUseArclightSpec() then
+      begin
+        if Minimap.EnableSpec(ARCLIGHT_SPEC_COST) then
+        begin
+          Self.DebugMsg('Arclight spec enabled.');
+          Wait(80, 150);
+          Mouse.Click(MOUSE_LEFT);
+          Wait(250, 400);
+          Minimap.DisableSpec();
+          Self.DebugMsg('Arclight spec used; orb reset.');
+          Exit(True);
+        end;
+      end;
+
+      Mouse.Click(MOUSE_LEFT);
+      Exit(True);
+""",
+        'TD: use the Arclight special attack',
     ),
 ]
 
