@@ -1,5 +1,8 @@
 {$DEFINE SCRIPT_ID := 'bfde3085-80dc-4bd6-870a-8cb3186a938c'}
 {$DEFINE SCRIPT_REVISION := '40'}
+{$IFNDEF WINDOWS}
+// Linux fork 2026-11-03: patched launcher; Linux updates come from this fork.
+{$ENDIF}
 
 {.$DEFINE DEVELOPER_MODE}
 
@@ -8239,6 +8242,9 @@ var
 
 begin
   ClearDebug();
+{$IFNDEF WINDOWS}
+  WriteLn('[B.A.S.H] Linux fork 2026-11-03: patched launcher (updates from this fork)');
+{$ENDIF}
   WaspAsync.Setup();
   LauncherConfig.Setup(AppPath + 'Configs' + DirectorySeparator + 'bash-launcher.json');
   BashScriptClient.Setup();

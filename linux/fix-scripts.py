@@ -59,6 +59,13 @@ RENAMES = [
 #    failed with 'Failed to advance path', leaving the player parked 12-14 tiles from
 #    the creatures against an 8-tile threshold, spinning forever with no error. Now it
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
+# Bump this whenever a patch in this file changes. It is stamped into the TD
+# script header and printed at startup so the running build is identifiable.
+LINUX_FIXES_TAG = '2026-11-03.4'
+LINUX_FIXES_NOTE = '3s boost spacing, camera cap, full zoom-out, prayer scan'
+LINUX_HEADER_MARK = '// Linux fixes:'
+LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
+
 SCRIPT_FIXES = [
     (
         'bigaussie/Tormented Demons.simba',
@@ -960,6 +967,26 @@ begin
 """,
         'TD: 3s between boost drinks (from the old 0.6-0.9s spacing)',
     ),
+    (
+        # The demon overhead and both spawns need the widest view. BashLib's
+        # antiban otherwise re-randomises the zoom to mid-range (seen: 51/100).
+        'bigaussie/Tormented Demons.simba',
+        """  inherited;
+
+  if Length(Login.GetPlayer().Worlds) < 2 then
+""",
+        """  inherited;
+
+  // Widest view: the demon's overhead and the room need to be on screen, and
+  // BashLib's antiban otherwise re-randomises the zoom to mid-range (seen: 51).
+  Antiban.MinZoom := 100;
+  Antiban.MaxZoom := 100;
+  Options.SetZoomLevel(100);
+
+  if Length(Login.GetPlayer().Worlds) < 2 then
+""",
+        'TD: pin the camera zoom fully out',
+    ),
 ]
 
 
@@ -974,6 +1001,37 @@ def compiles(simba: pathlib.Path, script: pathlib.Path) -> bool:
     except subprocess.TimeoutExpired:
         return False
     return 'uccesfully compiled' in (r.stdout + r.stderr)
+
+
+def stamp_linux_fixes(path: pathlib.Path) -> None:
+    """Put the patch-set tag in the header and at the start of Init."""
+    text = path.read_text(encoding='utf-8', errors='surrogateescape')
+    header = f"{LINUX_HEADER_MARK} {LINUX_FIXES_TAG} ({LINUX_FIXES_NOTE}) - linux/fix-scripts.py"
+    console = f"  WriteLn('{LINUX_CONSOLE_MARK} {LINUX_FIXES_TAG} ({LINUX_FIXES_NOTE})');"
+
+    lines, header_done = [], False
+    for ln in text.splitlines():
+        if ln.startswith(LINUX_HEADER_MARK):
+            continue
+        if ln.strip().startswith(f"WriteLn('{LINUX_CONSOLE_MARK}"):
+            continue
+        lines.append(ln)
+        if not header_done and ln.startswith('{$DEFINE SCRIPT_REVISION'):
+            lines.append(header)
+            header_done = True
+
+    out, armed = [], False
+    for ln in lines:
+        out.append(ln)
+        if ln.startswith('procedure TormentedDemonSlayer.Init(maxActions'):
+            armed = True
+        elif armed and ln.strip() == 'begin':
+            out.append(console)
+            armed = False
+
+    new = '\n'.join(out) + ('\n' if text.endswith('\n') else '')
+    if new != text:
+        path.write_text(new, encoding='utf-8', errors='surrogateescape')
 
 
 def main() -> int:
@@ -1051,6 +1109,11 @@ def main() -> int:
 
     if SCRIPT_FIXES:
         print(f'\n{len(fixed)} script fixes applied, {present} already present.')
+
+    td = scripts / 'bigaussie' / 'Tormented Demons.simba'
+    if td.is_file():
+        stamp_linux_fixes(td)
+        print(f'  stamped  {td.relative_to(scripts)}  ({LINUX_FIXES_TAG})')
 
     # Verify everything currently in the ungated state, not just this run's edits.
     targets = patched + already + [p for p in fixed + renamed if p not in patched + already]
