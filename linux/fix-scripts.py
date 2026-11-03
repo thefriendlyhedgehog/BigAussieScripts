@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.5'
-LINUX_FIXES_NOTE = '3s boost spacing, camera cap, full zoom-out, Arclight spec, prayer scan'
+LINUX_FIXES_TAG = '2026-11-03.6'
+LINUX_FIXES_NOTE = '3s boost spacing, camera cap, zoom check, Arclight spec, prayer scan'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 
@@ -1047,6 +1047,15 @@ function TormentedDemonSlayer.ClickDemon(): Boolean;
       Exit(True);
 """,
         'TD: use the Arclight special attack',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  Options.SetZoomLevel(100);
+""",
+        """  Options.SetZoomLevel(100);
+  WriteLn('[TD] Zoom pinned to ', Options.GetZoomLevel(), '/100 (antiban 100-100).');
+""",
+        'TD: log the zoom after pinning it',
     ),
 ]
 
