@@ -61,12 +61,14 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.9'
-LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 80, cave walk fallback, Arclight spec'
+LINUX_FIXES_TAG = '2026-11-03.10'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 45, cave walk, Arclight spec'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
-# Slider value 0-100; 100 is the widest possible view and felt too far.
-TD_ZOOM_LEVEL = 80
+# Slider levels: 0 = fully zoomed out, 100 = fully zoomed in.
+TD_ZOOM_LEVEL = 45
+TD_ZOOM_MIN = 35
+TD_ZOOM_MAX = 50
 
 SCRIPT_FIXES = [
     (
@@ -1109,15 +1111,15 @@ def set_td_zoom(path: pathlib.Path) -> None:
 
     lvl = TD_ZOOM_LEVEL
     block = [
-        '  // Keep the view wide enough for the demon overhead and loot tiles, but not',
-        '  // the widest possible view; BashLib can otherwise re-randomise it to mid-range.',
-        f'  Antiban.MinZoom := {lvl};',
-        f'  Antiban.MaxZoom := {lvl};',
+        '  // Slider levels: 0 = fully zoomed out, 100 = fully zoomed in. Keep the view',
+        '  // wide enough for the demon overhead and loot tiles without the max zoom-out.',
+        f'  Antiban.MinZoom := {TD_ZOOM_MIN};',
+        f'  Antiban.MaxZoom := {TD_ZOOM_MAX};',
         '  // The settings slider and the wheel zoom are separate states: the slider can',
-        '  // read 80 while the wheel is still near, and Options.SetZoomLevel then returns',
+        '  // read one value while the wheel is at another, and Options.SetZoomLevel then',
         '  // early without moving the camera. Drive the wheel instead.',
         f'  RSMouseZoom.SetZoomLevel({lvl});',
-        f"  WriteLn('[TD] Zoom pinned: wheel ', RSMouseZoom.Level2Slider(), '/{lvl} (antiban {lvl}-{lvl}).');",
+        f"  WriteLn('[TD] Zoom pinned: wheel ', RSMouseZoom.Level2Slider(), '/{lvl} (antiban {TD_ZOOM_MIN}-{TD_ZOOM_MAX}).');",
     ]
 
     out, in_init, done = [], False, False
