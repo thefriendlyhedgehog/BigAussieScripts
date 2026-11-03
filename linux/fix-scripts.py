@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.8'
-LINUX_FIXES_NOTE = '3s boost spacing, camera cap, wheel zoom 80, Arclight spec, prayer scan'
+LINUX_FIXES_TAG = '2026-11-03.9'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 80, cave walk fallback, Arclight spec'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider value 0-100; 100 is the widest possible view and felt too far.
@@ -1029,6 +1029,22 @@ function TormentedDemonSlayer.ClickDemon(): Boolean;
       Exit(True);
 """,
         'TD: use the Arclight special attack',
+    ),
+    (
+        # Click() only hovers the mainscreen, so when the opening is behind the
+        # camera or off screen all five attempts fail. Walk to it on the retries.
+        'bigaussie/Tormented Demons.simba',
+        """  Result := Self.DemonCave.Click(True, 3) and Self.WaitMinimapLoad();
+""",
+        """  if attemptNo >= 2 then
+  begin
+    WriteLn('[NAV] Demon cave attempt ', attemptNo, ' - walking to the opening');
+    Result := Self.DemonCave.WalkClick(True, 3) and Self.WaitMinimapLoad();
+  end
+  else
+    Result := Self.DemonCave.Click(True, 3) and Self.WaitMinimapLoad();
+""",
+        'TD: walk to the demon cave opening on retries',
     ),
 ]
 
