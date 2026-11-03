@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.7'
-LINUX_FIXES_NOTE = '3s boost spacing, camera cap, zoom 80, Arclight spec, prayer scan'
+LINUX_FIXES_TAG = '2026-11-03.8'
+LINUX_FIXES_NOTE = '3s boost spacing, camera cap, wheel zoom 80, Arclight spec, prayer scan'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider value 0-100; 100 is the widest possible view and felt too far.
@@ -1081,7 +1081,7 @@ def set_td_zoom(path: pathlib.Path) -> None:
     """Pin the camera zoom, replacing whatever an earlier fix left behind."""
     text = path.read_text(encoding='utf-8', errors='surrogateescape')
     drop = ('Antiban.MinZoom :=', 'Antiban.MaxZoom :=', 'Options.SetZoomLevel(',
-            '[TD] Zoom pinned to')
+            'RSMouseZoom.SetZoomLevel(', '[TD] Zoom pinned')
 
     cleaned = []
     for ln in text.splitlines():
@@ -1097,8 +1097,11 @@ def set_td_zoom(path: pathlib.Path) -> None:
         '  // the widest possible view; BashLib can otherwise re-randomise it to mid-range.',
         f'  Antiban.MinZoom := {lvl};',
         f'  Antiban.MaxZoom := {lvl};',
-        f'  Options.SetZoomLevel({lvl});',
-        f"  WriteLn('[TD] Zoom pinned to ', Options.GetZoomLevel(), '/{lvl} (antiban {lvl}-{lvl}).');",
+        '  // The settings slider and the wheel zoom are separate states: the slider can',
+        '  // read 80 while the wheel is still near, and Options.SetZoomLevel then returns',
+        '  // early without moving the camera. Drive the wheel instead.',
+        f'  RSMouseZoom.SetZoomLevel({lvl});',
+        f"  WriteLn('[TD] Zoom pinned: wheel ', RSMouseZoom.Level2Slider(), '/{lvl} (antiban {lvl}-{lvl}).');",
     ]
 
     out, in_init, done = [], False, False
