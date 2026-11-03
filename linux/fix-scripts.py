@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.14'
-LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 20-30, cave/gear retries, tracker stickiness, Arclight spec'
+LINUX_FIXES_TAG = '2026-11-03.15'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 20-30, cave/gear/tracker, approach fallback, Arclight spec'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider levels: 0 = fully zoomed out, 100 = fully zoomed in.
@@ -1178,6 +1178,41 @@ begin
     Exit;
 """,
         'TD: keep the tracked demon while fighting',
+    ),
+    (
+        # After a kill the next demon can be 7-8 tiles away: the click cannot hover
+        # it, and without an approach the script re-checks gear and re-arms the spec
+        # in a loop. Walk toward the tracked tile before the next attempt.
+        'bigaussie/Tormented Demons.simba',
+        """  if not Self.ClickDemon() then
+    Exit;
+""",
+        """  if not Self.ClickDemon() then
+  begin
+    if Self.Tracker.Found and (Self.DemonDistanceTiles() > 2) then
+    begin
+      Self.DebugMsg('Demon click failed - walking closer.');
+      Map.Walker.WebWalk(Self.Tracker.LastDemonWorldTile, 2);
+      Wait(250, 450);
+    end;
+    Exit;
+  end;
+""",
+        'TD: approach the demon when the attack click fails',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  Self.DebugMsg('Attack click did not register (no health bars).');
+""",
+        """  if Self.Tracker.Found and (Self.DemonDistanceTiles() > 2) then
+  begin
+    Self.DebugMsg('Attack click did not register - walking closer.');
+    Map.Walker.WebWalk(Self.Tracker.LastDemonWorldTile, 2);
+    Wait(250, 450);
+  end;
+  Self.DebugMsg('Attack click did not register (no health bars).');
+""",
+        'TD: approach the demon when no combat starts',
     ),
 ]
 
