@@ -61,10 +61,12 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.6'
-LINUX_FIXES_NOTE = '3s boost spacing, camera cap, zoom check, Arclight spec, prayer scan'
+LINUX_FIXES_TAG = '2026-11-03.7'
+LINUX_FIXES_NOTE = '3s boost spacing, camera cap, zoom 80, Arclight spec, prayer scan'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
+# Slider value 0-100; 100 is the widest possible view and felt too far.
+TD_ZOOM_LEVEL = 80
 
 SCRIPT_FIXES = [
     (
@@ -968,26 +970,6 @@ begin
         'TD: 3s between boost drinks (from the old 0.6-0.9s spacing)',
     ),
     (
-        # The demon overhead and both spawns need the widest view. BashLib's
-        # antiban otherwise re-randomises the zoom to mid-range (seen: 51/100).
-        'bigaussie/Tormented Demons.simba',
-        """  inherited;
-
-  if Length(Login.GetPlayer().Worlds) < 2 then
-""",
-        """  inherited;
-
-  // Widest view: the demon's overhead and the room need to be on screen, and
-  // BashLib's antiban otherwise re-randomises the zoom to mid-range (seen: 51).
-  Antiban.MinZoom := 100;
-  Antiban.MaxZoom := 100;
-  Options.SetZoomLevel(100);
-
-  if Length(Login.GetPlayer().Worlds) < 2 then
-""",
-        'TD: pin the camera zoom fully out',
-    ),
-    (
         'bigaussie/Tormented Demons.simba',
         """  BURNING_CLAWS_SPEC_COST: Int32   = 30;
 """,
@@ -1048,15 +1030,6 @@ function TormentedDemonSlayer.ClickDemon(): Boolean;
 """,
         'TD: use the Arclight special attack',
     ),
-    (
-        'bigaussie/Tormented Demons.simba',
-        """  Options.SetZoomLevel(100);
-""",
-        """  Options.SetZoomLevel(100);
-  WriteLn('[TD] Zoom pinned to ', Options.GetZoomLevel(), '/100 (antiban 100-100).');
-""",
-        'TD: log the zoom after pinning it',
-    ),
 ]
 
 
@@ -1098,6 +1071,45 @@ def stamp_linux_fixes(path: pathlib.Path) -> None:
         elif armed and ln.strip() == 'begin':
             out.append(console)
             armed = False
+
+    new = '\n'.join(out) + ('\n' if text.endswith('\n') else '')
+    if new != text:
+        path.write_text(new, encoding='utf-8', errors='surrogateescape')
+
+
+def set_td_zoom(path: pathlib.Path) -> None:
+    """Pin the camera zoom, replacing whatever an earlier fix left behind."""
+    text = path.read_text(encoding='utf-8', errors='surrogateescape')
+    drop = ('Antiban.MinZoom :=', 'Antiban.MaxZoom :=', 'Options.SetZoomLevel(',
+            '[TD] Zoom pinned to')
+
+    cleaned = []
+    for ln in text.splitlines():
+        if any(d in ln for d in drop):
+            while cleaned and cleaned[-1].strip().startswith('//'):
+                cleaned.pop()
+            continue
+        cleaned.append(ln)
+
+    lvl = TD_ZOOM_LEVEL
+    block = [
+        '  // Keep the view wide enough for the demon overhead and loot tiles, but not',
+        '  // the widest possible view; BashLib can otherwise re-randomise it to mid-range.',
+        f'  Antiban.MinZoom := {lvl};',
+        f'  Antiban.MaxZoom := {lvl};',
+        f'  Options.SetZoomLevel({lvl});',
+        f"  WriteLn('[TD] Zoom pinned to ', Options.GetZoomLevel(), '/{lvl} (antiban {lvl}-{lvl}).');",
+    ]
+
+    out, in_init, done = [], False, False
+    for ln in cleaned:
+        out.append(ln)
+        if ln.startswith('procedure TormentedDemonSlayer.Init('):
+            in_init = True
+            continue
+        if in_init and (not done) and ln.strip() == 'inherited;':
+            out.extend(block)
+            done = True
 
     new = '\n'.join(out) + ('\n' if text.endswith('\n') else '')
     if new != text:
@@ -1182,6 +1194,7 @@ def main() -> int:
 
     td = scripts / 'bigaussie' / 'Tormented Demons.simba'
     if td.is_file():
+        set_td_zoom(td)
         stamp_linux_fixes(td)
         print(f'  stamped  {td.relative_to(scripts)}  ({LINUX_FIXES_TAG})')
 
