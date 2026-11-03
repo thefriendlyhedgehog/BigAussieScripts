@@ -371,7 +371,9 @@ end;
 procedure DetectPrayerBookLayout();
 var
   p: ERSPrayer;
-  slot, found, last: Int32;
+  slot, found, last, i: Int32;
+  taken: Boolean;
+  known: array of ERSPrayer;
   t: UInt64;
   line: String;
 begin
@@ -406,9 +408,54 @@ begin
       line += ' ' + ToStr(slot) + '=?';
   end;
 
-  PrayerSlotScanned := True;
   WriteLn('[TD] Prayer book scan:' + line);
-end;''',
+
+  // Second pass for slots the first one missed (uptext lag or a misread name).
+  for slot := 19 to 28 do
+  begin
+    taken := False;
+    for p := Low(ERSPrayer) to High(ERSPrayer) do
+      if PrayerSlot[p] = slot then
+        taken := True;
+    if taken then
+      Continue;
+
+    Mouse.Move(Prayer.PrayerBoxes[slot]);
+    t := GetTickCount() + 2500;
+    repeat
+      Wait(60);
+      found := UpTextPrayer();
+    until ((found >= 0) and (PrayerSlot[ERSPrayer(found)] < 0)) or (GetTickCount() > t);
+
+    if (found >= 0) and (PrayerSlot[ERSPrayer(found)] < 0) then
+    begin
+      PrayerSlot[ERSPrayer(found)] := slot;
+      WriteLn('[TD] Prayer book scan retry: ', slot, '=', ERSPrayer(found));
+    end;
+  end;
+
+  // Still unread: assume the order measured on this account (2026-10-28) when that
+  // slot is free. Ord(prayer) is wrong here (CHIVALRY -> slot 23 = Smite).
+  known := [ERSPrayer.DEADEYE, ERSPrayer.MYSTIC_VIGOUR, ERSPrayer.RETRIBUTION,
+            ERSPrayer.REDEMPTION, ERSPrayer.SMITE, ERSPrayer.PRESERVE,
+            ERSPrayer.CHIVALRY, ERSPrayer.PIETY, ERSPrayer.RIGOUR, ERSPrayer.AUGURY];
+  for i := 0 to High(known) do
+  begin
+    if PrayerSlot[known[i]] >= 0 then
+      Continue;
+    taken := False;
+    for p := Low(ERSPrayer) to High(ERSPrayer) do
+      if PrayerSlot[p] = 19 + i then
+        taken := True;
+    if taken then
+      Continue;
+    PrayerSlot[known[i]] := 19 + i;
+    WriteLn('[TD] Prayer book scan: ', known[i], ' unread - assuming slot ', 19 + i, '.');
+  end;
+
+  PrayerSlotScanned := True;
+end;
+''',
         'TD: read the prayer book layout by hovering, not DTMs',
     ),
     (
