@@ -27,8 +27,16 @@ const
   BASH_SCRIPTS_REPO   = 'BigAussie/BASH';
   BASH_SCRIPTS_BRANCH = 'main';
   BASH_FREE_SCRIPTS_DIR = 'Free Scripts';
+  {$IFDEF WINDOWS}
   BASH_LAUNCHER_GITHUB_RAW =
     'https://raw.githubusercontent.com/BigAussie/BASH/main/B.A.S.H%20Launcher.simba';
+  {$ELSE}
+  // The upstream launcher is Windows-only, and rev 41 retires it in favour of the
+  // Windows BASH.exe installer. Pulling it on Linux reverts every fix in this branch
+  // and asks the user to download an .exe. Linux updates come from this fork.
+  BASH_LAUNCHER_GITHUB_RAW =
+    'https://raw.githubusercontent.com/thefriendlyhedgehog/BigAussieScripts/linux-support/B.A.S.H%20Launcher.simba';
+  {$ENDIF}
   WASPSCRIPTS_DIR     = ScriptPath + 'waspscripts.com' + DirectorySeparator;
   BASH_PREMIUM_API    = 'https://bash-premium-api.cdn-gate.workers.dev';
   BASH_DISCORD_URL    = 'https://discord.gg/qsmKs5uKfR';
@@ -430,25 +438,38 @@ end;
 function TWaspAsync.GetUnzipperContent(): String;
 begin
   Result += "var" + LineEnding;
-  Result += "  path, name: String;" + LineEnding + LineEnding;
+  Result += "  path, name: String;" + LineEnding;
+  Result += "  ok: Boolean;" + LineEnding + LineEnding;
   Result += "procedure Free();" + LineEnding;
   Result += "begin" + LineEnding;
-  Result += "  CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'unzipper-' + LowerCase(name) + '.done'));" + LineEnding;
+  Result += "  if ok then" + LineEnding;
+  Result += "    CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'unzipper-' + LowerCase(name) + '.done'))" + LineEnding;
+  Result += "  else" + LineEnding;
+  Result += "    CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'unzipper-' + LowerCase(name) + '.fail'));" + LineEnding;
   Result += "end;" + LineEnding + LineEnding;
   Result += "begin" + LineEnding;
   Result += "  path := GetProcessParameter('path');" + LineEnding;
   {$IFDEF WINDOWS}
-  Result += "  name := GetProcessParameter('name');" + LineEnding + LineEnding;
+  Result += "  name := GetProcessParameter('name');" + LineEnding;
   {$ELSE}
-  Result += "  name := GetProcessParameter('pkg');" + LineEnding + LineEnding;
+  // GTK drops a `name` process parameter, so the caller passes `pkg` instead.
+  Result += "  name := GetProcessParameter('pkg');" + LineEnding;
   {$ENDIF}
+  Result += "  ok := False;" + LineEnding + LineEnding;
   Result += "  if FileExists({$MACRO CURRENT_DIRECTORY} + 'downloader-' + LowerCase(name) + '.done') then" + LineEnding;
-  Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'downloader-' + LowerCase(name) + '.done');" + LineEnding + LineEnding;
+  Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'downloader-' + LowerCase(name) + '.done');" + LineEnding;
+  Result += "  if FileExists({$MACRO CURRENT_DIRECTORY} + 'unzipper-' + LowerCase(name) + '.fail') then" + LineEnding;
+  Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'unzipper-' + LowerCase(name) + '.fail');" + LineEnding + LineEnding;
   Result += "  AddOnTerminate(@Free);" + LineEnding + LineEnding;
   Result += "  WriteLn('[AsyncUnzipper]: Unzipping ', name, ', this might take a while.');" + LineEnding + LineEnding;
   Result += "  try" + LineEnding;
+  Result += "    if not FileExists(path + name + '.zip') then" + LineEnding;
+  Result += "      TerminateScript();" + LineEnding;
   Result += "    UnZipFile(path + name + '.zip', path + name);" + LineEnding;
   Result += "    DeleteFile(path + name + '.zip');" + LineEnding;
+  Result += "    ok := Length(FindDirectories(path + name, False)) > 0;" + LineEnding;
+  Result += "    if not ok then" + LineEnding;
+  Result += "      WriteLn('[AsyncUnzipper]: Error: the ', name, ' archive was empty.');" + LineEnding;
   Result += "  except" + LineEnding;
   Result += "    WriteLn('[AsyncUnzipper]: Error: ', GetExceptionMessage());" + LineEnding;
   Result += "  end;" + LineEnding;
@@ -488,29 +509,6 @@ begin
   Result += "  Result := Self[0];" + LineEnding;
   Result += "  for i:=1 to High(Self) do" + LineEnding;
   Result += "    Result += glue + Self[i];" + LineEnding;
-  Result += "end;" + LineEnding + LineEnding;
-  Result += "function BackupFile(filePath: String): Boolean;" + LineEnding;
-  Result += "var" + LineEnding;
-  Result += "  f: Int32;" + LineEnding;
-  Result += "  contents: String;" + LineEnding;
-  Result += "begin" + LineEnding;
-  Result += "  f := OpenFile(filePath, False);" + LineEnding;
-  Result += "  if not ReadFileString(f, contents, FileSize(f)) then" + LineEnding;
-  Result += "    Exit;" + LineEnding + LineEnding;
-  Result += "  CloseFile(f);" + LineEnding;
-  Result += "  Result := WriteFileContents(filePath + '.bak', contents, False);" + LineEnding;
-  Result += "end;" + LineEnding + LineEnding;
-  Result += "function RestoreFile(filePath: String): Boolean;" + LineEnding;
-  Result += "var" + LineEnding;
-  Result += "  f: Int32;" + LineEnding;
-  Result += "  contents: String;" + LineEnding;
-  Result += "begin" + LineEnding;
-  Result += "  f := OpenFile(filePath + '.bak', False);" + LineEnding;
-  Result += "  if not ReadFileString(f, contents, FileSize(f)) then" + LineEnding;
-  Result += "    Exit;" + LineEnding + LineEnding;
-  Result += "  CloseFile(f);" + LineEnding;
-  Result += "  Result := WriteFileContents(filePath, contents, False);" + LineEnding;
-  Result += "  DeleteFile(filePath + '.bak');" + LineEnding;
   Result += "end;" + LineEnding + LineEnding;
   Result += "function DirectoryIsEmpty(const directory: String): Boolean;" + LineEnding;
   Result += "begin" + LineEnding;
@@ -583,87 +581,148 @@ begin
   Result += "    Exit;" + LineEnding + LineEnding;
   Result += "  Result := DeleteSubDirectories(directory, deleteRoot, skip);" + LineEnding;
   Result += "end;" + LineEnding + LineEnding + LineEnding;
+  Result += "(* Exclusive open fails while any process (RuneLite, Simba) has the DLL mapped. Non destructive. *)" + LineEnding;
   Result += "function IsFileLocked(path: String): Boolean;" + LineEnding;
+  Result += "var" + LineEnding;
+  Result += "  f: Int32;" + LineEnding;
   Result += "begin" + LineEnding;
   Result += "  if not FileExists(path) then" + LineEnding;
-  Result += "    Exit;" + LineEnding + LineEnding;
-  Result += "  if not BackupFile(path) then" + LineEnding;
-  Result += "    TerminateScript('Failed to backup file: ' + path);" + LineEnding + LineEnding;
-  Result += "  Result := not DeleteFile(path);" + LineEnding + LineEnding;
-  Result += "  if Result then" + LineEnding;
-  Result += "    DeleteFile(path + '.bak')" + LineEnding;
-  Result += "  else if not RestoreFile(path) then" + LineEnding;
-  Result += "    TerminateScript('Failed to restore file: ' + path);" + LineEnding;
+  Result += "    Exit(False);" + LineEnding;
+  Result += "  f := OpenFile(path, False);" + LineEnding;
+  Result += "  Result := f < 0;" + LineEnding;
+  Result += "  if not Result then" + LineEnding;
+  Result += "    CloseFile(f);" + LineEnding;
   Result += "end;" + LineEnding + LineEnding;
-  Result += "function FindLockedPlugins(): TStringArray;" + LineEnding;
-  Result += "const" + LineEnding;
-  Result += "  PATHS = [" + LineEnding;
-  Result += "    IncludePath + 'SRL'   + SEP + 'plugins' + SEP + 'libremoteinput' + SEP," + LineEnding;
-  Result += "    IncludePath + 'SRL-T' + SEP + 'plugins' + SEP + 'libremoteinput' + SEP," + LineEnding;
-  Result += "    IncludePath + 'SRL-B' + SEP + 'plugins' + SEP + 'libremoteinput' + SEP" + LineEnding;
-  Result += "  ];" + LineEnding;
+  Result += "(* Only the library being replaced matters: renaming its folder fails if any file inside is open. *)" + LineEnding;
+  Result += "function FindLockedPlugins(pkgDir: String): TStringArray;" + LineEnding;
   Result += "var" + LineEnding;
-  Result += "  path, plugin: String;" + LineEnding;
+  Result += "  plugin: String;" + LineEnding;
+  Result += "  files: TStringArray;" + LineEnding;
   Result += "begin" + LineEnding;
-  Result += "  for path in PATHS do" + LineEnding;
-  Result += "    for plugin in FindFiles(path, False) do" + LineEnding;
-  Result += "      if IsFileLocked(plugin) then" + LineEnding;
-  Result += "        Result += plugin;" + LineEnding;
-  Result += "end;" + LineEnding + LineEnding + LineEnding;
+  Result += "  if not DirectoryExists(IncludePath + pkgDir) then" + LineEnding;
+  Result += "    Exit;" + LineEnding;
+  Result += "  files := FindFiles(IncludePath + pkgDir + SEP, True);" + LineEnding;
+  Result += "  for plugin in files do" + LineEnding;
+  Result += "    if (LowerCase(ExtractFileExt(plugin)) = '.dll') and IsFileLocked(plugin) then" + LineEnding;
+  Result += "      Result += plugin;" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
+  Result += "function AnyLocked(files: TStringArray): Boolean;" + LineEnding;
+  Result += "var" + LineEnding;
+  Result += "  f: String;" + LineEnding;
+  Result += "begin" + LineEnding;
+  Result += "  for f in files do" + LineEnding;
+  Result += "    if IsFileLocked(f) then" + LineEnding;
+  Result += "      Exit(True);" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
+  Result += "function WaitUnlocked(files: TStringArray; timeout: Int32): Boolean;" + LineEnding;
+  Result += "var" + LineEnding;
+  Result += "  t: UInt64;" + LineEnding;
+  Result += "begin" + LineEnding;
+  Result += "  t := GetTickCount() + timeout;" + LineEnding;
+  Result += "  while GetTickCount() < t do" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    if not AnyLocked(files) then" + LineEnding;
+  Result += "      Exit(True);" + LineEnding;
+  Result += "    Wait(500);" + LineEnding;
+  Result += "  end;" + LineEnding;
+  Result += "  Result := not AnyLocked(files);" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
   Result += "procedure KillWindowByClass(name: String);" + LineEnding;
   Result += "var" + LineEnding;
   Result += "  window: TOSWindow;" + LineEnding;
+  Result += "  windows: TOSWindowArray;" + LineEnding;
   Result += "begin" + LineEnding;
   {$IFDEF WINDOWS}
-  Result += "  for window in GetWindows().GetByClass(name) do" + LineEnding;
+  Result += "  windows := GetWindows();" + LineEnding;
+  Result += "  windows := windows.GetByClass(name);" + LineEnding;
+  Result += "  for window in windows do" + LineEnding;
   Result += "    window.Kill();" + LineEnding;
   {$ELSE}
   // See CloseRuneLite: TOSWindow.Kill() is a session-killer on Linux.
   Result += "  WriteLn('[AsyncMover]: window kill skipped (unsafe on Linux).');" + LineEnding;
   {$ENDIF}
   Result += "end;" + LineEnding + LineEnding;
-  Result += "procedure KillSimbas();" + LineEnding;
+  Result += "procedure CloseRSClients();" + LineEnding;
   Result += "var" + LineEnding;
-  Result += "  windows, simbas: TOSWindowArray;" + LineEnding;
-  Result += "  win: TOSWindow;" + LineEnding;
+  Result += "  proc: TProcess;" + LineEnding;
   Result += "begin" + LineEnding;
-  Result += "  windows := GetWindows();" + LineEnding;
-  Result += "  simbas := windows.GetByTitleAndClass('Output,File Browser,Editor,Function List', 'Window');" + LineEnding + LineEnding;
-  Result += "  if MessageDlg('Close Simba', 'Simba needs to be restarted.'," + LineEnding;
-  Result += "     TMsgDlgType.mtConfirmation, [mbOK, mbAbort]) = 3 then" + LineEnding;
-  Result += "    TerminateScript('You need to close all Simba windows to update SRL.');" + LineEnding + LineEnding;
+  Result += "  try" + LineEnding;
+  Result += "    proc.Init(nil);" + LineEnding;
+  Result += "    proc.SetCommandLine('taskkill /f /im RuneLite.exe');" + LineEnding;
+  Result += "    proc.Execute();" + LineEnding;
+  Result += "    proc.Free();" + LineEnding;
+  Result += "  except" + LineEnding;
+  Result += "  end;" + LineEnding;
+  Result += "  KillWindowByClass('SunAwtCanvas');" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
+  Result += "function RestartCommand(): String;" + LineEnding;
+  Result += "begin" + LineEnding;
+  Result += "  if FileExists(AppPath + 'BASH.exe') then" + LineEnding;
+  Result += "    Result := #34 + AppPath + 'BASH.exe' + #34 + ' --update'" + LineEnding;
+  Result += "  else" + LineEnding;
+  Result += "    Result := #34 + AppPath + 'Simba64.exe' + #34 + ' --open --run ' + #34 + ScriptPath + 'bash-launcher.simba' + #34;" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
+  Result += "procedure RestartSimba();" + LineEnding;
+  Result += "var" + LineEnding;
+  Result += "  proc: TProcess;" + LineEnding;
+  Result += "  win: TOSWindow;" + LineEnding;
+  Result += "  simbas: TOSWindowArray;" + LineEnding;
+  Result += "begin" + LineEnding;
   {$IFDEF WINDOWS}
+  Result += "  WriteLn('[AsyncMover]: Restarting Simba: ' + RestartCommand());" + LineEnding;
+  Result += "  try" + LineEnding;
+  Result += "    proc.Init(nil);" + LineEnding;
+  Result += "    proc.SetCommandLine(RestartCommand());" + LineEnding;
+  Result += "    proc.Execute();" + LineEnding;
+  Result += "    proc.Free();" + LineEnding;
+  Result += "  except" + LineEnding;
+  Result += "    WriteLn('[AsyncMover]: Failed to start: ', GetExceptionMessage());" + LineEnding;
+  Result += "  end;" + LineEnding;
+  Result += "  Wait(1500);" + LineEnding;
+  Result += "  simbas := GetWindows();" + LineEnding;
+  Result += "  simbas := simbas.GetByTitleAndClass('Output,File Browser,Editor,Function List', 'Window');" + LineEnding;
   Result += "  for win in simbas do" + LineEnding;
-  Result += "    win.Kill();" + LineEnding + LineEnding;
+  Result += "    win.Kill();" + LineEnding;
   {$ELSE}
-  Result += "  WriteLn('[AsyncMover]: Simba kill skipped (unsafe on Linux).');" + LineEnding + LineEnding;
+  // TOSWindow.Kill() is kill(-1, SIGKILL) on Linux: never call it.
+  Result += "  WriteLn('[AsyncMover]: Simba restart skipped (unsafe on Linux).');" + LineEnding;
   {$ENDIF}
   Result += "  TerminateScript();" + LineEnding;
-  Result += "end;" + LineEnding + LineEnding + LineEnding;
-  Result += "procedure UnlockPlugins();" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
+  Result += "(* Plugin DLLs stay loaded in RuneLite (RemoteInput) and in any Simba that ran a script. *)" + LineEnding;
+  Result += "(* Returns False when the update must be skipped because files are still in use.        *)" + LineEnding;
+  Result += "function UnlockPlugins(pkgDir: String): Boolean;" + LineEnding;
   Result += "var" + LineEnding;
   Result += "  locked: TStringArray;" + LineEnding;
-  Result += "  plugin: String;" + LineEnding;
   Result += "begin" + LineEnding;
-  Result += "  locked := FindLockedPlugins();" + LineEnding;
+  Result += "  locked := FindLockedPlugins(pkgDir);" + LineEnding;
   Result += "  if locked = [] then" + LineEnding;
-  Result += "    Exit;" + LineEnding + LineEnding;
-  Result += "  if MessageDlg('Close RuneScape', 'RS Clients need to be closed to update this package.'," + LineEnding;
-  Result += "     TMsgDlgType.mtConfirmation, [mbOK, mbAbort]) = 3 then" + LineEnding;
-  Result += "    TerminateScript('You need to close your RS Clients to update SRL.');" + LineEnding + LineEnding;
-  Result += "  KillWindowByClass('SunAwtCanvas');" + LineEnding + LineEnding;
-  Result += "  for plugin in locked do" + LineEnding;
-  Result += "    if IsFileLocked(plugin) then" + LineEnding;
-  Result += "    begin" + LineEnding;
-  Result += "      KillWindowByClass('Jagex Launcher');" + LineEnding;
-  Result += "      Break;" + LineEnding;
-  Result += "    end;" + LineEnding + LineEnding;
-  Result += "  for plugin in locked do" + LineEnding;
-  Result += "    if IsFileLocked(plugin) then" + LineEnding;
-  Result += "    begin" + LineEnding;
-  Result += "      KillSimbas();" + LineEnding;
-  Result += "      Break;" + LineEnding;
-  Result += "    end;" + LineEnding;
+  Result += "    Exit(True);" + LineEnding + LineEnding;
+  Result += "  if MessageDlg('B.A.S.H - Close RuneLite'," + LineEnding;
+  Result += "     'RuneLite (or another client) is using the ' + pkgDir + ' plugin files.' + LineEnding + LineEnding +" + LineEnding;
+  Result += "     'It must be closed before ' + pkgDir + ' can be updated.' + LineEnding +" + LineEnding;
+  Result += "     'Close RuneLite now and continue?'," + LineEnding;
+  Result += "     TMsgDlgType.mtWarning, [mbYes, mbNo]) <> mrYes then" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    WriteLn('[AsyncMover]: Update skipped, RuneLite still open.');" + LineEnding;
+  Result += "    Exit(False);" + LineEnding;
+  Result += "  end;" + LineEnding + LineEnding;
+  Result += "  CloseRSClients();" + LineEnding;
+  Result += "  if WaitUnlocked(locked, 15000) then" + LineEnding;
+  Result += "    Exit(True);" + LineEnding + LineEnding;
+  Result += "  KillWindowByClass('Jagex Launcher');" + LineEnding;
+  Result += "  if WaitUnlocked(locked, 5000) then" + LineEnding;
+  Result += "    Exit(True);" + LineEnding + LineEnding;
+  Result += "  if MessageDlg('B.A.S.H - Restart Simba'," + LineEnding;
+  Result += "     'Simba itself still has ' + pkgDir + ' plugin files loaded (a script used them earlier).' + LineEnding + LineEnding +" + LineEnding;
+  Result += "     'Simba needs to restart to finish the update. It will reopen the B.A.S.H launcher.' + LineEnding +" + LineEnding;
+  Result += "     'Restart now?'," + LineEnding;
+  Result += "     TMsgDlgType.mtWarning, [mbYes, mbNo]) <> mrYes then" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    WriteLn('[AsyncMover]: Update skipped, Simba restart declined.');" + LineEnding;
+  Result += "    Exit(False);" + LineEnding;
+  Result += "  end;" + LineEnding;
+  Result += "  RestartSimba();" + LineEnding;
   Result += "end;" + LineEnding + LineEnding + LineEnding;
   Result += "function GetInstallDir(pkg: String): String;" + LineEnding;
   Result += "begin" + LineEnding;
@@ -673,85 +732,163 @@ begin
   Result += "    else Result := pkg;" + LineEnding;
   Result += "  end;" + LineEnding;
   Result += "end;" + LineEnding + LineEnding;
-  Result += "procedure MoveFiles(origin, pkg: String);" + LineEnding;
+  Result += "(* Copy an extracted tree into `staging`, skipping .git and overrides.simba. *)" + LineEnding;
+  Result += "procedure CopyTree(source, staging: String);" + LineEnding;
   Result += "var" + LineEnding;
-  Result += "  paths, files: TStringArray;" + LineEnding;
-  Result += "  path, f, fPath, destination: String;" + LineEnding;
+  Result += "  f, fPath: String;" + LineEnding;
+  Result += "begin" + LineEnding;
+  Result += "  for f in FindFiles(source, True) do" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    fPath := Replace(f, source, '', [rfReplaceAll]);" + LineEnding;
+  Result += "    if (Pos('.git', fPath) > 0) or (Pos('overrides.simba', fPath) > 0) then" + LineEnding;
+  Result += "      Continue;" + LineEnding;
+  Result += "    if not ForceDirectories(staging + ExtractFilePath(fPath)) then" + LineEnding;
+  Result += "      TerminateScript('Failed to create path: ' + staging + ExtractFilePath(fPath));" + LineEnding;
+  Result += "    if not CopyFile(f, staging + fPath, False) then" + LineEnding;
+  Result += "      TerminateScript('Failed to copy file: ' + fPath);" + LineEnding;
+  Result += "  end;" + LineEnding;
+  Result += "end;" + LineEnding + LineEnding;
+  Result += "(*" + LineEnding;
+  Result += "  Atomic swap: build Includes\<pkg>.new, rename the live library to <pkg>.old," + LineEnding;
+  Result += "  rename .new into place, then delete .old. Any failure before the final rename" + LineEnding;
+  Result += "  leaves the previous library exactly as it was." + LineEnding;
+  Result += "*)" + LineEnding;
+  Result += "function MoveFiles(origin, pkg: String): Boolean;" + LineEnding;
+  Result += "var" + LineEnding;
+  Result += "  paths: TStringArray;" + LineEnding;
+  {$IFDEF WINDOWS}
+  Result += "  dir, source, destination, staging, old: String;" + LineEnding;
+  {$ELSE}
+  Result += "  path, dir, source, destination, staging, old: String;" + LineEnding;
+  {$ENDIF}
   Result += "begin" + LineEnding;
   Result += "  paths := GetDirectories(origin + pkg + SEP);" + LineEnding;
   Result += "  if Length(paths) <> 1 then" + LineEnding;
   Result += "    TerminateScript('The ' + pkg + ' download is empty or has unexpected things inside.');" + LineEnding + LineEnding;
-  Result += "  destination := IncludePath + GetInstallDir(pkg) + SEP;" + LineEnding;
+  Result += "  dir := GetInstallDir(pkg);" + LineEnding;
+  Result += "  destination := IncludePath + dir;" + LineEnding;
+  Result += "  staging := IncludePath + dir + '.new';" + LineEnding;
+  Result += "  old := IncludePath + dir + '.old';" + LineEnding;
+  Result += "  source := origin + pkg + SEP + paths[0] + SEP;" + LineEnding + LineEnding;
+  Result += "  if DirectoryExists(destination + SEP + '.git') then" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    WriteLn('[AsyncMover]: ' + dir + ' is a git checkout (developer install). Not touching it.');" + LineEnding;
+  Result += "    RMDir(origin + pkg, True);" + LineEnding;
+  Result += "    Exit(True);" + LineEnding;
+  Result += "  end;" + LineEnding + LineEnding;
+  Result += "  if DirectoryExists(staging) and not RMDir(staging, True) then" + LineEnding;
+  Result += "    TerminateScript('Failed to clear ' + staging);" + LineEnding;
   {$IFNDEF WINDOWS}
-  // Unlink directory symlinks first (e.g. fix-includes.py's House -> house case alias).
-  // FindDirectories reports them as directories, DeleteDirectory can't rmdir a link, and
-  // RMDir aborted part-way leaving the library half-deleted. DeleteFile is unlink(2):
-  // it removes a symlink but fails harmlessly (EISDIR) on a real directory.
-  Result += "  if DirectoryExists(destination) then" + LineEnding;
-  Result += "    for path in FindDirectories(destination, True) do" + LineEnding;
+  // Unlink directory symlinks (fix-includes.py's House -> house case alias) before
+  // RMDir: DeleteDirectory cannot rmdir a link and leaves the old tree half-deleted.
+  Result += "  if DirectoryExists(old) then" + LineEnding;
+  Result += "    for path in FindDirectories(old, True) do" + LineEnding;
   Result += "      DeleteFile(path);" + LineEnding;
   {$ENDIF}
-  Result += "  if DirectoryExists(destination) and not RMDir(destination, True, ['.git', 'overrides.simba']) then" + LineEnding;
-  Result += "    TerminateScript('Failed to delete old ' + GetInstallDir(pkg) + ' library');" + LineEnding;
-  Result += "  if not ForceDirectories(destination) then" + LineEnding;
-  Result += "    TerminateScript('Failed to create path: ' + destination);" + LineEnding + LineEnding;
-  Result += "  path := origin + pkg + SEP + paths[0] + SEP;" + LineEnding;
-  Result += "  files := FindFiles(path, True);" + LineEnding + LineEnding;
-  Result += "  for f in files do" + LineEnding;
+  Result += "  if DirectoryExists(old) and not RMDir(old, True) then" + LineEnding;
+  Result += "    TerminateScript('Failed to clear ' + old + '. Close RuneLite and Simba and try again.');" + LineEnding + LineEnding;
+  Result += "  if not ForceDirectories(staging) then" + LineEnding;
+  Result += "    TerminateScript('Failed to create path: ' + staging);" + LineEnding;
+  Result += "  CopyTree(source, staging + SEP);" + LineEnding;
+  Result += "  if FileExists(destination + SEP + 'overrides.simba') then" + LineEnding;
+  Result += "    CopyFile(destination + SEP + 'overrides.simba', staging + SEP + 'overrides.simba', True);" + LineEnding + LineEnding;
+  Result += "  if not UnlockPlugins(dir) then" + LineEnding;
   Result += "  begin" + LineEnding;
-  Result += "    fPath := Replace(f, path, '', [rfReplaceAll]);" + LineEnding;
-  Result += "    if Pos('.git', fPath) > 0 then" + LineEnding;
-  Result += "      Continue;" + LineEnding + LineEnding;
-  Result += "    if Pos('overrides.simba', fPath) > 0 then" + LineEnding;
-  Result += "      Continue;" + LineEnding + LineEnding;
-  Result += "    if not ForceDirectories(destination + ExtractFilePath(fPath)) then" + LineEnding;
-  Result += "      TerminateScript('Failed to create path: ' + destination + ExtractFilePath(fPath));" + LineEnding + LineEnding;
-  Result += "    if not CopyFile(f, destination + fPath, False) then" + LineEnding;
-  Result += "      TerminateScript('Failed to copy file: ' + fPath);" + LineEnding + LineEnding;
-  Result += "    DeleteFile(f);" + LineEnding;
-  Result += "    if (FindFiles(ExtractFilePath(f), True) = []) and (FindDirectories(ExtractFilePath(f), True) = []) then" + LineEnding;
-  Result += "      DeleteDirectory(ExtractFilePath(f), False);" + LineEnding;
+  Result += "    RMDir(staging, True);" + LineEnding;
+  Result += "    RMDir(origin + pkg, True);" + LineEnding;
+  Result += "    Exit(False);" + LineEnding;
   Result += "  end;" + LineEnding + LineEnding;
+  Result += "  if DirectoryExists(destination) and not RenameFile(destination, old) then" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    RMDir(staging, True);" + LineEnding;
+  Result += "    RMDir(origin + pkg, True);" + LineEnding;
+  Result += "    TerminateScript(dir + ' is in use. Close RuneLite and any other Simba windows, then try again. Nothing was changed.');" + LineEnding;
+  Result += "  end;" + LineEnding;
+  Result += "  if not RenameFile(staging, destination) then" + LineEnding;
+  Result += "  begin" + LineEnding;
+  Result += "    if DirectoryExists(old) then" + LineEnding;
+  Result += "      RenameFile(old, destination);" + LineEnding;
+  Result += "    RMDir(staging, True);" + LineEnding;
+  Result += "    RMDir(origin + pkg, True);" + LineEnding;
+  Result += "    TerminateScript('Failed to install the new ' + dir + '. The previous version was restored.');" + LineEnding;
+  Result += "  end;" + LineEnding + LineEnding;
+  {$IFNDEF WINDOWS}
+  // Unlink directory symlinks (fix-includes.py's House -> house case alias) before
+  // RMDir: DeleteDirectory cannot rmdir a link and leaves the old tree half-deleted.
+  Result += "  if DirectoryExists(old) then" + LineEnding;
+  Result += "    for path in FindDirectories(old, True) do" + LineEnding;
+  Result += "      DeleteFile(path);" + LineEnding;
+  {$ENDIF}
+  Result += "  if DirectoryExists(old) and not RMDir(old, True) then" + LineEnding;
+  Result += "    WriteLn('[AsyncMover]: Could not remove ' + old + ' yet, it will be cleaned up next launch.');" + LineEnding;
   Result += "  RMDir(origin + pkg, True);" + LineEnding;
+  Result += "  Result := True;" + LineEnding;
   Result += "end;" + LineEnding + LineEnding;
   Result += "var" + LineEnding;
-  Result += "  pkg: String;" + LineEnding + LineEnding;
+  Result += "  pkg: String;" + LineEnding;
+  Result += "  ok: Boolean;" + LineEnding + LineEnding;
   Result += "procedure Free();" + LineEnding;
   Result += "begin" + LineEnding;
-  Result += "  CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done'));" + LineEnding;
+  Result += "  if ok then" + LineEnding;
+  Result += "    CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done'))" + LineEnding;
+  Result += "  else" + LineEnding;
+  Result += "    CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.fail'));" + LineEnding;
   Result += "end;" + LineEnding + LineEnding;
   Result += "begin" + LineEnding;
-  Result += "  pkg := GetProcessParameter('pkg');" + LineEnding + LineEnding;
+  Result += "  pkg := GetProcessParameter('pkg');" + LineEnding;
+  Result += "  ok := False;" + LineEnding + LineEnding;
   Result += "  if FileExists({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done') then" + LineEnding;
-  Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done');" + LineEnding + LineEnding;
+  Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done');" + LineEnding;
+  Result += "  if FileExists({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.fail') then" + LineEnding;
+  Result += "    DeleteFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.fail');" + LineEnding + LineEnding;
   Result += "  AddOnTerminate(@Free);" + LineEnding + LineEnding;
-  Result += "  case LowerCase(pkg) of" + LineEnding;
-  Result += "    'srl-b', 'srlb', 'srl': UnlockPlugins();" + LineEnding;
-  Result += "  end;" + LineEnding + LineEnding;
-  Result += "  WriteLn('[AsyncMover]: Moving ', pkg, ' files, this will take a while.');" + LineEnding;
-  Result += "  MoveFiles(GetProcessParameter('origin'), pkg);" + LineEnding;
+  Result += "  WriteLn('[AsyncMover]: Installing ', pkg, ', this can take a moment.');" + LineEnding;
+  Result += "  ok := MoveFiles(GetProcessParameter('origin'), pkg);" + LineEnding;
   {$IFNDEF WINDOWS}
-  // See the downloader: don't rely on AddOnTerminate surviving to write this.
-  Result += "  CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done'));" + LineEnding;
+  // The plugin exit-abort can skip AddOnTerminate, so write the marker inline too.
+  Result += "  if ok then" + LineEnding;
+  Result += "    CloseFile(CreateFile({$MACRO CURRENT_DIRECTORY} + 'mover-' + LowerCase(pkg) + '.done'));" + LineEnding;
   {$ENDIF}
   Result += "end;" + LineEnding;
 end;
 
 procedure TWaspAsync.Setup();
+var
+  dir, suffix: String;
+{$IFNDEF WINDOWS}
+  path: String;
+{$ENDIF}
 begin
   Self.Path := LAUNCHER_DATA + 'async' + DirectorySeparator;
 
   if not ForceDirectories(LAUNCHER_DATA) then
     TerminateScript('WaspAsync failed to create directory: ' + LAUNCHER_DATA);
 
+  // The generated helper scripts are rewritten every launch; the downloads
+  // folder is left alone (each package clears its own files before a new
+  // download) so a launcher restart never throws away work in progress.
   if DirectoryExists(Self.Path) and not RMDir(Self.Path, True) then
     TerminateScript('WaspAsync failed to delete old files. Please manually delete:' + Self.Path);
 
-  if DirectoryExists(LAUNCHER_DATA + 'downloads') and not RMDir(LAUNCHER_DATA + 'downloads') then
-    TerminateScript('WaspAsync failed to delete old files. Please manually delete: ' + LAUNCHER_DATA + 'downloads' + DirectorySeparator);
-
   if not ForceDirectories(Self.Path) then
     TerminateScript('WaspAsync can''t create async directory.');
+
+  // Leftovers from an interrupted atomic library swap.
+  for dir in [SRLB_INSTALL_DIR, BASHLIB_INSTALL_DIR] do
+    for suffix in ['.old', '.new'] do
+      {$IFDEF WINDOWS}
+      if DirectoryExists(IncludePath + dir + suffix) and (not DirectoryExists(IncludePath + dir + suffix + DirectorySeparator + '.git')) then
+        if not RMDir(IncludePath + dir + suffix, True) then
+          WriteLn('[B.A.S.H] Could not remove ', IncludePath + dir + suffix, ' (still in use?)');
+      {$ELSE}
+      if DirectoryExists(IncludePath + dir + suffix) and (not DirectoryExists(IncludePath + dir + suffix + DirectorySeparator + '.git')) then
+      begin
+        for path in FindDirectories(IncludePath + dir + suffix, True) do
+          DeleteFile(path);
+        if not RMDir(IncludePath + dir + suffix, True) then
+          WriteLn('[B.A.S.H] Could not remove ', IncludePath + dir + suffix, ' (still in use?)');
+      end;
+      {$ENDIF}
 
   Self.Write('downloader.simba', Self.GetDownloaderContent());
   Self.Write('unzipper.simba', Self.GetUnzipperContent());
@@ -3686,6 +3823,7 @@ var
   WaspUpdater: TWaspUpdater;
 
 procedure TMonitor.NextState(); forward;
+function TMonitor.StageTimeout(): UInt64; forward;
 
 procedure TMonitor.Fail(const reason: String);
 begin
@@ -3731,26 +3869,24 @@ begin
     Exit;
   end;
 
-
-  {$IFDEF WINDOWS}
-  if (Self.State = EMonitorState.DOWNLOAD) and (Self.StartedAt > 0) and (GetTickCount() - Self.StartedAt > 120000) then
+  // Every stage gets a deadline so a stuck async tab can't leave the button
+  // disabled forever. The mover may wait on the user ("close RuneLite?") so it
+  // gets the longest one.
+  if (Self.StartedAt > 0) and (GetTickCount() - Self.StartedAt > Self.StageTimeout()) then
   begin
     TTimer(sender).SetEnabled(False);
     Self.Fail('Timed out');
   end;
-  {$ELSE}
-  // Only DOWNLOAD had a deadline, so a lost unzipper/mover marker left this polling
-  // forever on "Unzipping"/"Cleaning" with no error shown. The helpers now write their
-  // marker inline, and this covers the remaining case: a crash part-way through the
-  // work, where no marker is ever written.
-  if Self.StartedAt > 0 then
-    if ((Self.State = EMonitorState.DOWNLOAD) and (GetTickCount() - Self.StartedAt > 120000)) or
-       ((Self.State <> EMonitorState.DOWNLOAD) and (GetTickCount() - Self.StartedAt > 600000)) then
-    begin
-      TTimer(sender).SetEnabled(False);
-      Self.Fail('Timed out');
-    end;
-  {$ENDIF}
+end;
+
+function TMonitor.StageTimeout(): UInt64;
+begin
+  case Self.State of
+    EMonitorState.DOWNLOAD: Result := 120000;
+    EMonitorState.UNZIP:    Result := 180000;
+    EMonitorState.CLEAN:    Result := 300000;
+    else                    Result := 120000;
+  end;
 end;
 
 procedure TMonitor.NextState();
@@ -3772,6 +3908,13 @@ begin
         Self.Fail('Rate limited');
         Exit;
       end;
+
+      // A leftover extraction from an earlier attempt would make the unzip
+      // merge into it and confuse the mover, so clear just this package.
+      if DirectoryExists(GitHubClient.DownloadPath + Self.Package) then
+        RMDir(GitHubClient.DownloadPath + Self.Package, True);
+      if FileExists(GitHubClient.DownloadPath + Self.Package + '.zip') then
+        DeleteFile(GitHubClient.DownloadPath + Self.Package + '.zip');
 
       GitHubClient.Download(Self.Package);
 
@@ -3877,11 +4020,104 @@ begin
   Self.NextState();
 end;
 
+(*
+  One clear prompt before a library is replaced. The async mover still detects
+  locked plugin files and asks before closing RuneLite, so nothing is killed
+  without a second confirmation.
+*)
+function TWaspUpdater.ConfirmUpdate(pkgName, current, latest: String): Boolean;
+var
+  action, versionText: String;
+begin
+  if (current <> '') and (current = latest) then
+    action := 'Re-install'
+  else
+    action := 'Update';
+
+  if current = '' then
+    versionText := 'Install version ' + latest + '.'
+  else if current = latest then
+    versionText := 'Re-install version ' + latest + '.'
+  else
+    versionText := 'Version ' + current + ' -> ' + latest + '.';
+
+  Result := MessageDlg(
+    'B.A.S.H - ' + action + ' ' + pkgName,
+    action + ' ' + pkgName + '?' + LineEnding +
+    versionText + LineEnding + LineEnding +
+    'Before continuing:' + LineEnding +
+    '  - Stop any running scripts.' + LineEnding +
+    '  - Close RuneLite (it keeps the RemoteInput plugin files open).' + LineEnding + LineEnding +
+    'If a file is still in use you will be asked before anything is closed.' + LineEnding +
+    'The old library is only removed after the new one is fully in place.',
+    TMsgDlgType.mtConfirmation,
+    [mbYes, mbNo]
+  ) = mrYes;
+
+  if not Result then
+    WriteLn('[B.A.S.H updater] ', pkgName, ' update cancelled.');
+end;
+
+(*
+  Preferred path: hand the whole update to BASH.exe (the bootstrapper behind
+  the desktop shortcut). It runs outside Simba, so it can close Simba, swap
+  the libraries safely and reopen the launcher when done.
+  Returns False when BASH.exe is not installed (old installs) or the user
+  declined, in which case the in-script updater is used instead.
+*)
+function TWaspUpdater.UpdateViaBootstrapper(pkgName: String): Boolean;
+var
+  exe: String;
+  proc: TProcess;
+  win: TOSWindow;
+  simbas: TOSWindowArray;
+begin
+  exe := AppPath + 'BASH.exe';
+  if not FileExists(exe) then
+    Exit(False);
+
+  if MessageDlg(
+       'B.A.S.H - Update ' + pkgName,
+       'B.A.S.H will close Simba, update ' + pkgName + ' and reopen this launcher.' + LineEnding + LineEnding +
+       'Stop any running scripts first. If RuneLite is holding library files' + LineEnding +
+       'open you will be asked before it is closed.' + LineEnding + LineEnding +
+       'Continue?',
+       TMsgDlgType.mtConfirmation,
+       [mbYes, mbNo]
+     ) <> mrYes then
+    Exit(True);
+
+  WriteLn('[B.A.S.H updater] Handing over to BASH.exe --update');
+  try
+    proc.Init(nil);
+    proc.SetCommandLine('"' + exe + '" --update');
+    proc.Execute();
+    proc.Free();
+  except
+    WriteLn('[B.A.S.H updater] Could not start BASH.exe: ', GetExceptionMessage());
+    Exit(False);
+  end;
+
+  Wait(500);
+  simbas := GetWindows();
+  simbas := simbas.GetByTitleAndClass('Output,File Browser,Editor,Function List', 'Window');
+  for win in simbas do
+    win.Kill();
+  TerminateScript();
+  Result := True;
+end;
+
 procedure TWaspUpdater.Update(pkg: String; caption, button: TComponent);
 begin
   case pkg of
-    'srlb', 'srl-b':    Self.MonitorSRLB.RunMonitor(caption, button);
-    'bashlib', 'bl':    Self.MonitorBashLib.RunMonitor(caption, button);
+    'srlb', 'srl-b':
+      if not Self.UpdateViaBootstrapper(SRLB_INSTALL_DIR) then
+        if Self.ConfirmUpdate(SRLB_INSTALL_DIR, GitHubClient.Packages.Current.SRLB, GitHubClient.Packages.Latest.SRLB) then
+          Self.MonitorSRLB.RunMonitor(caption, button);
+    'bashlib', 'bl':
+      if not Self.UpdateViaBootstrapper(BASHLIB_INSTALL_DIR) then
+        if Self.ConfirmUpdate(BASHLIB_INSTALL_DIR, GitHubClient.Packages.Current.BashLib, GitHubClient.Packages.Latest.BashLib) then
+          Self.MonitorBashLib.RunMonitor(caption, button);
   end;
 end;
 
@@ -5984,15 +6220,18 @@ begin
   end;
 end;
 
-procedure TWaspForm._OpenScript(sender: TObject);
+(*
+  Open the selected script in a new tab. With `run` the script is started
+  straight away (its own setup form appears), otherwise it is only opened in
+  the editor.
+*)
+procedure TWaspForm.LaunchSelectedScript(list: TListBox; run: Boolean);
 var
-  list: TListBox;
   script: TScriptData;
   scriptFile: TScriptFile;
   path: String;
 begin
-  list := sender;
-  if list.getItemIndex() < 0 then Exit;
+  if (list = nil) or (list.getItemIndex() < 0) then Exit;
   if not Self.GetSelectedScript(script) then Exit;
 
   if BashScriptClient.IsLocalSource() then
@@ -6001,25 +6240,33 @@ begin
     path := script.LocalPath;
     if path = '' then
       path := script.URL;
-    if (path = '') or (not FileExists(path)) then Exit;
-    MigrateLegacyLibIncludes(path);
-    {$IFNDEF WINDOWS}
-    UngateScriptGUI(path);
-    {$ENDIF}
-    SimbaOpenInTab(path);
-    Self.Form.Close();
-    Exit;
+  end
+  else
+  begin
+    LauncherConfig.Put('last_script', script.ID);
+    scriptFile := WaspUpdater.GetScriptFile(script.ID);
+    path := scriptFile.Path;
   end;
 
-  LauncherConfig.Put('last_script', script.ID);
-  scriptFile := WaspUpdater.GetScriptFile(script.ID);
-  if (scriptFile.Path = '') or (not FileExists(scriptFile.Path)) then Exit;
-  MigrateLegacyLibIncludes(scriptFile.Path);
+  if (path = '') or (not FileExists(path)) then Exit;
+  MigrateLegacyLibIncludes(path);
   {$IFNDEF WINDOWS}
-  UngateScriptGUI(scriptFile.Path);
+  UngateScriptGUI(path);
   {$ENDIF}
-  SimbaOpenInTab(scriptFile.Path);
+
+  if run then
+  begin
+    WriteLn('[B.A.S.H] Running ', ExtractFileName(path));
+    SimbaRunInTab(path);
+  end
+  else
+    SimbaOpenInTab(path);
   Self.Form.Close();
+end;
+
+procedure TWaspForm._OpenScript(sender: TObject);
+begin
+  Self.LaunchSelectedScript(sender, True);
 end;
 
 procedure TWaspForm._OpenScriptEx(sender: TObject);
@@ -6027,7 +6274,15 @@ var
   panel: TPanel;
 begin
   panel := TButton(sender).getOwner();
-  Self._OpenScript(panel.GetChild('scripts_listbox'));
+  Self.LaunchSelectedScript(panel.GetChild('scripts_listbox'), True);
+end;
+
+procedure TWaspForm._OpenScriptInEditorEx(sender: TObject);
+var
+  panel: TPanel;
+begin
+  panel := TButton(sender).getOwner();
+  Self.LaunchSelectedScript(panel.GetChild('scripts_listbox'), False);
 end;
 
 
@@ -6633,8 +6888,9 @@ procedure TWaspForm.SetupVersionsPanel(parent: TPanel; top: Int32);
     procedure TWaspForm._UpdateButton(sender: TObject);
     begin
       case TButton(sender).getName() of
-        'update_srlb_button':    {$IFNDEF DEVELOPER_MODE}Sync(@Self._UpdateSRLB){$ENDIF};
-        'update_bashlib_button': {$IFNDEF DEVELOPER_MODE}Sync(@Self._UpdateBashLib){$ENDIF};
+        // Git checkouts (developer installs) are detected and skipped by the mover.
+        'update_srlb_button':    Sync(@Self._UpdateSRLB);
+        'update_bashlib_button': Sync(@Self._UpdateBashLib);
         'update_script_button':  Self._UpdateScript();
       end;
     end;
@@ -7248,12 +7504,14 @@ begin
 
   button.Create(panel);
   button.setName('script_open_button');
-  button.SetCaption('Open script');
+  button.SetCaption('Run script');
   button.SetOnClick(@Self._OpenScriptEx);
   button.setWidth(TControl.AdjustToDPI(150));
   button.setHeight(TControl.AdjustToDPI(25));
   button.SetTop(footerTop + TControl.AdjustToDPI(45));
   button.SetLeft(panel.getWidth() - TControl.AdjustToDPI(16) - button.getWidth());
+  button.setHint('Start the selected script in a new tab');
+  button.setShowHint(True);
 
   button.Create(panel);
   button.setName('changelog_button');
@@ -7267,6 +7525,21 @@ begin
     TControl.AdjustToDPI(8) - button.getWidth()
   );
   button.setHint('View changelog for the selected script');
+  button.setShowHint(True);
+
+  button.Create(panel);
+  button.setName('script_edit_button');
+  button.SetCaption('Open in editor');
+  button.SetOnClick(@Self._OpenScriptInEditorEx);
+  button.setWidth(TControl.AdjustToDPI(110));
+  button.setHeight(TControl.AdjustToDPI(25));
+  button.SetTop(footerTop + TControl.AdjustToDPI(45));
+  button.SetLeft(
+    panel.getWidth() - TControl.AdjustToDPI(16) - TControl.AdjustToDPI(150) -
+    TControl.AdjustToDPI(8) - TControl.AdjustToDPI(100) -
+    TControl.AdjustToDPI(8) - button.getWidth()
+  );
+  button.setHint('Open the selected script in the editor without running it');
   button.setShowHint(True);
 
   button.Create(panel);
@@ -7642,12 +7915,28 @@ begin
   end;
 end;
 
+(*
+  Start the freshly installed launcher in a new tab so the user never has to
+  press play again. Simba reuses an already open tab when the path matches
+  exactly (and would then just click Run on this running script), so when this
+  script *is* bash-launcher.simba the file name case is varied to force a new
+  tab that loads the new file from disk.
+*)
 procedure FinishBashLauncherRestart();
+var
+  dest, runPath: String;
 begin
-  WriteLn('[B.A.S.H] Launcher ready at bash-launcher.simba. Press New / play to open it');
+  dest := BashLauncherPath();
+  runPath := dest;
+  if SameText(ExpandFileName(ScriptFile), ExpandFileName(dest)) then
+    runPath := ExtractFilePath(dest) + UpperCase(ExtractFileName(dest));
+
+  WriteLn('[B.A.S.H] Launcher updated. Starting the new launcher...');
   try
-    SimbaCloseCurrentTab();
+    SimbaRunInTab(runPath);
   except
+    WriteLn('[B.A.S.H] Could not auto-start the launcher: ', GetExceptionMessage());
+    WriteLn('[B.A.S.H] Open ', dest, ' and press play.');
   end;
   TerminateScript();
 end;
@@ -7822,6 +8111,7 @@ begin
     except
     end;
 
+    {$IFDEF WINDOWS}
     SetHTTPHeader(http, 'Accept', 'application/json');
     try
       response := GetHTTPPage(http, BASH_PREMIUM_API + '/v1/launcher');
@@ -7842,6 +8132,10 @@ begin
     except
       apiRev := 0;
     end;
+    {$ELSE}
+    // The premium API serves the current Windows build. On Linux it would replace
+    // the patched launcher with one that cannot run here, so ignore it entirely.
+    {$ENDIF}
 
     SetHTTPHeader(http, 'Accept', '*/*');
     try
