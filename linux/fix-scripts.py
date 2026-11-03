@@ -894,6 +894,72 @@ end;""",
         '  Self.BankItemsFailCount := 0;\n  XPBar.Read();',
         'TD: reset BankItemsFailCount on setup',
     ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  DEBUGMODE: Boolean         = False;
+""",
+        """  DEBUGMODE: Boolean         = False;
+  CameraRotationsSinceOverhead: Int32 = 0;
+  CameraRotationCooldownUntil: UInt64 = 0;
+""",
+        'TD: camera rotation cap state',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """procedure TormentedDemonSlayer.RotateCombatCameraForUnknownOverhead();
+begin
+  if not Navigation.IsInDemonLair() or not Self.HasReachedDemonRoom() then
+    Exit;
+""",
+        """procedure TormentedDemonSlayer.RotateCombatCameraForUnknownOverhead();
+begin
+  if not Navigation.IsInDemonLair() or not Self.HasReachedDemonRoom() then
+    Exit;
+
+  if GetTickCount() < CameraRotationCooldownUntil then
+    Exit;
+
+  if CameraRotationsSinceOverhead >= 3 then
+  begin
+    CameraRotationCooldownUntil := GetTickCount() + 60000;
+    WriteLn('[TD] camera rotate: 3 attempts without reading an overhead - pausing rotations for 60s.');
+    Exit;
+  end;
+
+  Inc(CameraRotationsSinceOverhead);
+  WriteLn('[TD] camera rotate: attempt ', CameraRotationsSinceOverhead,
+    ' found=', Self.Tracker.Found, ' combat=', Self.InCombat,
+    ' oh=', ToStr(Self.Tracker.Overhead), ' style=', ToStr(Self.Tracker.AttackStyle));
+""",
+        'TD: cap camera rotations while the overhead is unknown',
+    ),
+    (
+        'bigaussie/Tormented Demons.simba',
+        """  Self.Tracker.Overhead := newOverhead;
+  Self.DebugMsg('Demon overhead changed to: Protect from ' + StyleToString(newOverhead) + '.');
+""",
+        """  Self.Tracker.Overhead := newOverhead;
+  CameraRotationsSinceOverhead := 0;
+  CameraRotationCooldownUntil := 0;
+  Self.DebugMsg('Demon overhead changed to: Protect from ' + StyleToString(newOverhead) + '.');
+""",
+        'TD: reset the camera rotation cap when an overhead is read',
+    ),
+    (
+        # The installed copy may still be at the old 0.6-0.9s spacing from the
+        # earlier "drink every boost" patch; move it to 3s without needing the
+        # full-loop replacement to match.
+        'bigaussie/Tormented Demons.simba',
+        """    if found then
+      Wait(600, 900);
+""",
+        """    if found then
+      // The client ignores a second drink click while the first is still
+      // animating, so separate drinks by a full 3s instead of 0.6-0.9s.
+      Wait(3000);
+""",
+        'TD: 3s between boost drinks (from the old 0.6-0.9s spacing)',
+    ),
 ]
 
 
