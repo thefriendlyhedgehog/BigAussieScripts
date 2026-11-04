@@ -61,8 +61,8 @@ RENAMES = [
 #    retries the walk every 15s and gives up after 2min so the caller can recover.
 # Bump this whenever a patch in this file changes. It is stamped into the TD
 # script header and printed at startup so the running build is identifiable.
-LINUX_FIXES_TAG = '2026-11-03.15'
-LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 20-30, cave/gear/tracker, approach fallback, Arclight spec'
+LINUX_FIXES_TAG = '2026-11-03.16'
+LINUX_FIXES_NOTE = '3s boosts, camera cap, zoom 20-30, cave/gear/tracker, approach fallback, Arclight spec, supply-read guards'
 LINUX_HEADER_MARK = '// Linux fixes:'
 LINUX_CONSOLE_MARK = "[TD] Linux fixes:"
 # Slider levels: 0 = fully zoomed out, 100 = fully zoomed in.
@@ -1214,6 +1214,308 @@ begin
 """,
         'TD: approach the demon when no combat starts',
     ),
+    (
+        # TD: loot a pile whose Take is behind "Walk here"
+        'bigaussie/Tormented Demons.simba',
+        """  if Self.WantTake and Self.UpTextShowsTake(upText) then
+    Exit(True);
+""",
+        """  if Self.WantTake and Self.UpTextShowsTake(upText) then
+    Exit(True);
+  // A pile that sits under the player (or behind the player model) hovers as
+  // "Walk here / N more options": walk is primary and the Take is the hidden
+  // option. TryGroundLootAction already right-clicks and picks it from the
+  // menu, so accept the hover instead of ending the fight without looting.
+  if Self.WantTake and (Pos('Walk here', upText) > 0) and
+     (Pos('more', upText) > 0) then
+    Exit(True);
+""",
+        'TD: loot a pile whose Take is behind "Walk here"',
+    ),
+
+    (
+        # TD: never trust one all-zero supply read
+        'bigaussie/Tormented Demons.simba',
+        """procedure TormentedDemonSlayer.UpdateSupplyCache();
+begin
+  if Self.BeliefGameTab <> ERSGameTab.INVENTORY then
+    if not Self.OpenInventoryFast() then
+      Exit;
+
+  Self.CachedFoodCount := Inventory.CountConsumable(ERSConsumable.FOOD);
+  Self.CachedFoodHealing := Inventory.CountPoints(ERSConsumable.FOOD);
+  Self.CachedPrayerCount := Inventory.CountConsumable(ERSConsumable.PRAYER);
+  Self.CachedPrayerPoints := Inventory.CountPoints(ERSConsumable.PRAYER);
+  Self.SupplyCacheValid := True;
+""",
+        """procedure TormentedDemonSlayer.UpdateSupplyCache();
+var
+  foodCount, foodHealing, prayerCount, prayerPoints: Int32;
+begin
+  // Item counts are bitmap slot matches, so a panel that has not finished
+  // rendering (or whose cached slot boxes went stale) matches nothing and reads
+  // exactly like an empty inventory. Open the tab for real, give it a frame, and
+  // never demote a stocked cache to "no supplies" on one all-zero read.
+  if not Inventory.IsOpen() then
+  begin
+    Self.OpenInventoryFast();
+    if not Inventory.IsOpen() then
+      Inventory.Open();
+    Wait(150, 300);
+  end;
+
+  foodCount := Inventory.CountConsumable(ERSConsumable.FOOD);
+  foodHealing := Inventory.CountPoints(ERSConsumable.FOOD);
+  prayerCount := Inventory.CountConsumable(ERSConsumable.PRAYER);
+  prayerPoints := Inventory.CountPoints(ERSConsumable.PRAYER);
+
+  if (foodCount = 0) and (prayerCount = 0) and
+     (Self.CachedFoodCount > 0) and (Self.CachedPrayerCount > 0) then
+  begin
+    Self.SupplyCacheValid := False;
+    Self.DebugMsg('[SUPPLY CACHE] all-zero read discarded (was ' +
+      ToStr(Self.CachedFoodCount) + ' food / ' + ToStr(Self.CachedPrayerCount) +
+      ' prayer, invOpen=' + ToStr(Inventory.IsOpen()) + ', items=' +
+      ToStr(Inventory.Count()) + ') - cache invalidated.');
+    Exit;
+  end;
+
+  Self.CachedFoodCount := foodCount;
+  Self.CachedFoodHealing := foodHealing;
+  Self.CachedPrayerCount := prayerCount;
+  Self.CachedPrayerPoints := prayerPoints;
+  Self.SupplyCacheValid := True;
+""",
+        'TD: never trust one all-zero supply read',
+    ),
+
+    (
+        # TD: never trust one all-zero supply read after consuming
+        'bigaussie/Tormented Demons.simba',
+        """procedure TormentedDemonSlayer.UpdateCacheAfterConsume(consumableType: ERSConsumable);
+begin
+  if not Self.SupplyCacheValid then
+    Exit;
+
+  if Self.BeliefGameTab = ERSGameTab.INVENTORY then
+  begin
+    Self.CachedFoodCount := Inventory.CountConsumable(ERSConsumable.FOOD);
+    Self.CachedFoodHealing := Inventory.CountPoints(ERSConsumable.FOOD);
+    Self.CachedPrayerCount := Inventory.CountConsumable(ERSConsumable.PRAYER);
+    Self.CachedPrayerPoints := Inventory.CountPoints(ERSConsumable.PRAYER);
+""",
+        """procedure TormentedDemonSlayer.UpdateCacheAfterConsume(consumableType: ERSConsumable);
+var
+  foodCount, foodHealing, prayerCount, prayerPoints: Int32;
+begin
+  if not Self.SupplyCacheValid then
+    Exit;
+
+  if Self.BeliefGameTab = ERSGameTab.INVENTORY then
+  begin
+    if not Inventory.IsOpen() then
+    begin
+      Inventory.Open();
+      Wait(150, 300);
+    end;
+
+    foodCount := Inventory.CountConsumable(ERSConsumable.FOOD);
+    foodHealing := Inventory.CountPoints(ERSConsumable.FOOD);
+    prayerCount := Inventory.CountConsumable(ERSConsumable.PRAYER);
+    prayerPoints := Inventory.CountPoints(ERSConsumable.PRAYER);
+
+    if (foodCount = 0) and (prayerCount = 0) and
+       (Self.CachedFoodCount > 0) and (Self.CachedPrayerCount > 0) then
+    begin
+      Self.SupplyCacheValid := False;
+      Self.DebugMsg('[SUPPLY CACHE] all-zero read after consume discarded (was ' +
+        ToStr(Self.CachedFoodCount) + ' food / ' + ToStr(Self.CachedPrayerCount) +
+        ' prayer, invOpen=' + ToStr(Inventory.IsOpen()) + ', items=' +
+        ToStr(Inventory.Count()) + ') - cache invalidated.');
+      Exit;
+    end;
+
+    Self.CachedFoodCount := foodCount;
+    Self.CachedFoodHealing := foodHealing;
+    Self.CachedPrayerCount := prayerCount;
+    Self.CachedPrayerPoints := prayerPoints;
+""",
+        'TD: never trust one all-zero supply read after consuming',
+    ),
+
+    (
+        # TD: no out-of-supplies verdict from an unreadable inventory
+        'bigaussie/Tormented Demons.simba',
+        """  if (maxHP = -1) or (maxPrayer = -1) then
+    Exit(False);
+
+  if Self.SupplyCacheValid then
+  begin
+    totalFoodPoints := Self.GetCachedSupplyPoints(ERSConsumable.FOOD);
+    totalPrayerPoints := Self.GetCachedSupplyPoints(ERSConsumable.PRAYER);
+  end
+  else
+  begin
+    totalFoodPoints := Inventory.CountPoints(ERSConsumable.FOOD);
+    totalPrayerPoints := Inventory.CountPoints(ERSConsumable.PRAYER);
+  end;
+""",
+        """  if (maxHP = -1) or (maxPrayer = -1) then
+    Exit(False);
+
+  if Self.SupplyCacheValid then
+  begin
+    totalFoodPoints := Self.GetCachedSupplyPoints(ERSConsumable.FOOD);
+    totalPrayerPoints := Self.GetCachedSupplyPoints(ERSConsumable.PRAYER);
+  end
+  else
+  begin
+    // A live read here returns the same zeros a failed bitmap read returns, and
+    // that false shortage is what sent the bot on a bank trip it could not
+    // start. The EMERGENCY checks still see no food / no pots and teleport out,
+    // so fail open instead of banking on an unreadable inventory.
+    if Self.LastSuppliesVerdict <> 1 then
+    begin
+      Self.LastSuppliesVerdict := 1;
+      Self.DebugMsg('Supplies unreadable - assuming carried supplies are intact.');
+    end;
+    Result := True;
+    Exit;
+  end;
+""",
+        'TD: no out-of-supplies verdict from an unreadable inventory',
+    ),
+
+    (
+        # TD: retry a missed teleport-item read before declaring it missing
+        'bigaussie/Tormented Demons.simba',
+        """  Result := False;
+  if not Inventory.Open() then
+  begin
+    WriteLn('[NAV] UseTeleportItem: could not open inventory');
+    Exit;
+  end;
+
+  if not Inventory.FindItems(items, slots) then
+  begin
+    WriteLn('[NAV] UseTeleportItem: item not found (', items[0], ')');
+    if Equipment.FindItems(items, slots) then
+    begin
+      WriteLn('[NAV] UseTeleportItem: using equipped ', items[0]);
+      Result := Equipment.ClickSlot(slots[0], option);
+    end
+    else
+      Exit;
+  end
+  else
+  begin
+    WriteLn('[NAV] UseTeleportItem: clicking ', items[0], ' -> ', option);
+    Result := Inventory.ClickSlot(slots[0], option);
+  end;
+""",
+        """  Result := False;
+  if not Inventory.Open() then
+  begin
+    WriteLn('[NAV] UseTeleportItem: could not open inventory');
+    Exit;
+  end;
+
+  if not Inventory.FindItems(items, slots) then
+  begin
+    // A missed bitmap slot match is not proof the item is gone: the panel has to
+    // be rendered for the template match to hit. Re-open, wait a frame, retry.
+    Inventory.Open();
+    Wait(300, 500);
+    if not Inventory.FindItems(items, slots) then
+      WriteLn('[NAV] UseTeleportItem: item not found (', items[0],
+        ') - inventory holds ', Inventory.Count(), ' item(s).');
+  end;
+
+  if Length(slots) > 0 then
+  begin
+    WriteLn('[NAV] UseTeleportItem: clicking ', items[0], ' -> ', option);
+    Result := Inventory.ClickSlot(slots[0], option);
+  end
+  else if Equipment.FindItems(items, slots) then
+  begin
+    WriteLn('[NAV] UseTeleportItem: using equipped ', items[0]);
+    Result := Equipment.ClickSlot(slots[0], option);
+  end;
+""",
+        'TD: retry a missed teleport-item read before declaring it missing',
+    ),
+
+    (
+        # TD: bank-nav failure retries instead of killing the run
+        'bigaussie/Tormented Demons.simba',
+        """      else
+      begin
+        WriteLn('[TD] Bank navigation failed after max attempts - terminating.');
+        Logout.ClickLogout();
+        TerminateScript('Bank navigation failed after max attempts.');
+      end;
+""",
+        """      else
+      begin
+        Inc(Self.BankSupplyFailCount);
+        WriteLn('[TD] Bank navigation failed after max attempts (attempt ',
+          Self.BankSupplyFailCount, ') - inventory reads ', Inventory.Count(),
+          ' item(s), invOpen=', Inventory.IsOpen(), '.');
+        Self.NeedBankTrip := True;
+        Wait(4000, 7000);
+        if Self.BankSupplyFailCount >= 3 then
+        begin
+          WriteLn('[TD] Bank navigation failed 3 times - terminating.');
+          Logout.ClickLogout();
+          TerminateScript('Bank navigation failed after max attempts.');
+        end;
+      end;
+""",
+        'TD: bank-nav failure retries instead of killing the run',
+    ),
+
+    (
+        # TD: verify the inventory tab after the hotkey
+        'bigaussie/Tormented Demons.simba',
+        """function TormentedDemonSlayer.OpenInventoryFast(): Boolean;
+begin
+  if Self.BeliefGameTab = ERSGameTab.INVENTORY then
+    Exit(True);
+
+  Keyboard.PressKey(INVENTORYHOTKEY);
+  Self.NoteGameTab(ERSGameTab.INVENTORY);
+  Result := True;
+end;
+""",
+        """function TormentedDemonSlayer.OpenInventoryFast(): Boolean;
+begin
+  if Self.BeliefGameTab = ERSGameTab.INVENTORY then
+  begin
+    // The belief comes from an unverified hotkey press. Confirm the panel is
+    // really up: an unverified belief makes item reads screenshot the wrong
+    // panel, which reads as an empty inventory.
+    if Inventory.IsOpen() then
+      Exit(True);
+    Self.BeliefGameTab := ERSGameTab.UNKNOWN;
+  end;
+
+  Keyboard.PressKey(INVENTORYHOTKEY);
+  if WaitUntil(Inventory.IsOpen(), 60, 800) then
+  begin
+    Self.NoteGameTab(ERSGameTab.INVENTORY);
+    Exit(True);
+  end;
+
+  Result := Inventory.Open();
+  if Result then
+    Self.NoteGameTab(ERSGameTab.INVENTORY)
+  else
+    Self.BeliefGameTab := ERSGameTab.UNKNOWN;
+end;
+""",
+        'TD: verify the inventory tab after the hotkey',
+    ),
+
 ]
 
 
